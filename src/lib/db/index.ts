@@ -5,7 +5,7 @@ import { mkdirSync } from 'fs';
 const DATA_DIR = path.join(process.cwd(), 'data');
 mkdirSync(DATA_DIR, { recursive: true });
 
-const DB_PATH = path.join(DATA_DIR, 'eidos.db');
+const DB_PATH = path.join(DATA_DIR, 'struct.db');
 
 let _db: Database.Database | null = null;
 

@@ -16,7 +16,7 @@ function Sidebar() {
       {/* ロゴ */}
       <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
         <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--accent-light)' }}>
-          Eidos
+          Struct
         </span>
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>マーケティング資産エンジン</p>
       </div>
@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <head>
-        <title>Eidos — マーケティング資産エンジン</title>
+        <title>Struct — マーケティング資産エンジン</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="flex h-screen overflow-hidden">

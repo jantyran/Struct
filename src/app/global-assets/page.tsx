@@ -25,7 +25,7 @@ function ProductCard({ product, onChange, onRemove }: {
       </div>
       <div>
         <label className="field-label">名称</label>
-        <input className="field-input" value={product.name} onChange={e => onChange({ ...product, name: e.target.value })} placeholder="例: Eidos Pro" />
+        <input className="field-input" value={product.name} onChange={e => onChange({ ...product, name: e.target.value })} placeholder="例: Struct Pro" />
       </div>
       <div>
         <label className="field-label">概要</label>

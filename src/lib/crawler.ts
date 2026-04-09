@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 export async function crawlUrl(url: string): Promise<string> {
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Eidos/1.0 Marketing Asset Generator (research bot)',
+      'User-Agent': 'Struct/1.0 Marketing Asset Generator (research bot)',
       'Accept': 'text/html,application/xhtml+xml',
     },
     signal: AbortSignal.timeout(15000),
