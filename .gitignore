@@ -35,6 +35,4 @@ yarn-error.log*
 next-env.d.ts
 
 # data
-/data/eidos.db
-/data/eidos.db-shm
-/data/eidos.db-wal
+/data/struct.json
