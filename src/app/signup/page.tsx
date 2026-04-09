@@ -1,18 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/components/AuthContext';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { checkSession } = useAuth();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,10 +24,21 @@ export default function SignupPage() {
     setLoading(true);
     setError('');
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      router.push('/');
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        await checkSession();
+        router.push('/');
+      } else {
+        setError(data.error || 'アカウントの作成に失敗しました。');
+      }
     } catch (err: any) {
-      setError('アカウントの作成に失敗しました。' + (err.message || ''));
+      setError('接続エラーが発生しました。');
       console.error(err);
     } finally {
       setLoading(false);
@@ -39,6 +51,16 @@ export default function SignupPage() {
         <h1 className="text-2xl font-bold mb-6 text-center text-violet-300">Struct アカウント作成</h1>
         
         <form onSubmit={handleSignup} className="space-y-4">
+          <div>
+            <label className="field-label">お名前</label>
+            <input 
+              type="text" 
+              className="field-input" 
+              value={name} 
+              onChange={(e) => setName(e.target.value)}
+              placeholder="例: 山田 太郎"
+            />
+          </div>
           <div>
             <label className="field-label">メールアドレス</label>
             <input 

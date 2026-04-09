@@ -1,10 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/components/AuthContext';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,16 +11,28 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { checkSession } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push('/');
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        await checkSession();
+        router.push('/');
+      } else {
+        setError(data.error || 'ログインに失敗しました。');
+      }
     } catch (err: any) {
-      setError('ログインに失敗しました。メールアドレスとパスワードを確認してください。');
+      setError('接続エラーが発生しました。');
       console.error(err);
     } finally {
       setLoading(false);

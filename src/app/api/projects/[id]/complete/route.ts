@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db/prisma';
+import { getDb } from '@/lib/db';
 import { generateText } from '@/lib/ai/client';
 import {
   buildProjectContext,
@@ -8,60 +8,59 @@ import {
   SYSTEM_PROMPT,
 } from '@/lib/ai/prompt-builder';
 import { requireSession } from '@/lib/auth';
-import type { ProjectWithFields, GlobalAssets, CustomField } from '@/types';
+import type { ProjectWithFields, GlobalAssets } from '@/types';
 
 interface Params { params: { id: string } }
 
 export async function POST(_req: Request, { params }: Params) {
   try {
     const user = await requireSession();
-    const project = await prisma.project.findFirst({
-      where: {
-        id: params.id,
-        OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
-      },
-      include: { customFields: { orderBy: { sortOrder: 'asc' } } }
-    });
+    const db = getDb();
+
+    const project = db.prepare(`
+      SELECT p.* FROM projects p
+      LEFT JOIN project_members m ON p.id = m.project_id
+      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.id, user.id) as any;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const globalAssets = await prisma.globalAssets.findUnique({
-      where: { userId: user.id }
-    });
+    const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
-    if (!globalAssets) return NextResponse.json({ error: 'Global assets missing' }, { status: 500 });
+    const globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+    if (!globalAssetsRow) return NextResponse.json({ error: 'Global assets missing' }, { status: 500 });
 
     const typedProject: ProjectWithFields = {
       ...project,
-      custom_fields: project.customFields.map(f => ({
+      custom_fields: fields.map(f => ({
         ...f,
-        project_id: f.projectId,
-        inherited_from: f.inheritedFrom,
-        crawled_content: f.crawledContent,
-        sort_order: f.sortOrder,
+        project_id: f.project_id,
+        inherited_from: f.inherited_from,
+        crawled_content: f.crawled_content,
+        sort_order: f.sort_order,
         options: f.options || '[]',
         value: f.value || '',
       })),
       channels: project.channels || '[]',
       target: project.target || '',
-      start_date: project.startDate || '',
-      end_date: project.endDate || '',
+      start_date: project.start_date || '',
+      end_date: project.end_date || '',
       budget: project.budget || '',
       description: project.description || '',
-      cloned_from: project.clonedFrom,
-      created_at: project.createdAt.toISOString(),
-      updated_at: project.updatedAt.toISOString(),
-      status: project.status as any,
-      type: project.type as any,
+      cloned_from: project.cloned_from,
+      created_at: project.created_at,
+      updated_at: project.updated_at,
+      status: project.status,
+      type: project.type,
     };
 
     const typedGlobal: GlobalAssets = {
-      company_name: globalAssets.companyName || '',
-      company_description: globalAssets.companyDescription || '',
-      brand_voice: globalAssets.brandVoice || '',
-      brand_guidelines: globalAssets.brandGuidelines || '',
-      products: JSON.parse(globalAssets.products || '[]'),
-      updated_at: globalAssets.updatedAt.toISOString(),
+      company_name: globalAssetsRow.company_name || '',
+      company_description: globalAssetsRow.company_description || '',
+      brand_voice: globalAssetsRow.brand_voice || '',
+      brand_guidelines: globalAssetsRow.brand_guidelines || '',
+      products: JSON.parse(globalAssetsRow.products || '[]'),
+      updated_at: globalAssetsRow.updated_at,
     };
 
     const emptyFields = typedProject.custom_fields.filter(f => !f.value?.trim());
