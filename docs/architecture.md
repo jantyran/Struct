@@ -1,23 +1,25 @@
 # Struct アーキテクチャメモ
 
-## 1. プロジェクト概要
+## 1. 概要
 
-Struct は、マーケティング施策の情報を構造化して保存し、過去案件の複製と AI 生成を支えるアプリです。
+Struct は、マーケティング施策に必要な情報を構造化し、AI 生成と再利用を支える Next.js アプリです。
 
-中心コンセプトは README にもある 3 層構造です。
+アプリは次の 2 系統の情報を扱います。
 
-- Global Assets
-  - 会社全体で共有するブランド情報、会社説明、製品情報
-- Project Core
-  - 各案件の基本メタ情報
-- Project Custom
-  - 案件固有の追加項目。入力自由度が高く、URL クロールにも対応
+- ユーザー単位の Global Assets
+  - 会社情報
+  - ブランドボイス
+  - ブランドガイドライン
+  - 製品 / サービス情報
+- プロジェクト単位の情報
+  - Project Core
+  - Custom Fields
+  - 生成済みアセット
+  - メンバーと招待情報
 
-この設計により、施策を単発の文章ではなく「再利用可能な構造」として保持し、複製や AI 再生成に流用できるようにしている。
+プロジェクトはオーナーとメンバーで共有でき、蓄積済みのブランド情報と案件情報を AI に渡してマーケティング成果物を生成します。
 
 ## 2. 技術スタック
-
-実装から確認できた構成は以下です。
 
 - フレームワーク
   - Next.js 14 App Router
@@ -26,157 +28,184 @@ Struct は、マーケティング施策の情報を構造化して保存し、�
 - UI
   - React 18
   - Tailwind CSS
+- 永続化
+  - SQLite
+  - `better-sqlite3`
+- 認証
+  - JWT
+  - `jose`
+  - `httpOnly` Cookie
+- パスワードハッシュ
+  - `bcryptjs`
 - AI
   - Anthropic SDK
-  - モデル指定: `claude-haiku-4-5-20251001`
+  - モデル: `claude-haiku-4-5-20251001`
 - HTML 抽出
   - `cheerio`
 - ID 生成
   - `uuid`
-- 永続化
-  - JSON ファイルベース
-  - 実体は `data/struct.json`
 
-注意:
+## 3. 環境変数
 
-- README には SQLite と `better-sqlite3` の記載があるが、現行実装は SQLite ではない
-- `package.json` にも `better-sqlite3` は存在しない
-- `src/lib/db/index.ts` は SQL 風 API を持つ JSON ストアのラッパーになっている
+実装上、重要なのは以下です。
 
-## 3. ディレクトリ構成
+- `ANTHROPIC_API_KEY`
+  - AI 生成と AI 補完に使用
+- `JWT_SECRET`
+  - セッション署名用
+  - 未設定時はローカル向けの固定値へフォールバック
+- `NEXT_PUBLIC_BASE_URL`
+  - 招待 URL 生成に使用
+  - 未設定時は `http://localhost:3002`
+
+## 4. ディレクトリ構成
 
 主要構成は以下です。
 
 ```text
 .
 ├── README.md
-├── next.config.mjs
-├── package.json
-├── postcss.config.mjs
-├── tailwind.config.ts
-├── tsconfig.json
 ├── docs/
 │   ├── README.md
 │   └── architecture.md
+├── data/
+│   └── struct.db
 └── src/
     ├── app/
     │   ├── api/
+    │   │   ├── auth/
+    │   │   │   ├── login/route.ts
+    │   │   │   ├── logout/route.ts
+    │   │   │   ├── me/route.ts
+    │   │   │   └── signup/route.ts
     │   │   ├── global-assets/route.ts
-    │   │   ├── projects/route.ts
-    │   │   └── projects/[id]/
+    │   │   ├── invites/[token]/
+    │   │   │   ├── route.ts
+    │   │   │   └── accept/route.ts
+    │   │   └── projects/
     │   │       ├── route.ts
-    │   │       ├── assets/route.ts
-    │   │       ├── clone/route.ts
-    │   │       ├── complete/route.ts
-    │   │       ├── crawl/route.ts
-    │   │       └── generate/route.ts
+    │   │       └── [id]/
+    │   │           ├── route.ts
+    │   │           ├── assets/route.ts
+    │   │           ├── clone/route.ts
+    │   │           ├── complete/route.ts
+    │   │           ├── crawl/route.ts
+    │   │           ├── generate/route.ts
+    │   │           └── invite/route.ts
     │   ├── global-assets/page.tsx
+    │   ├── invites/[token]/page.tsx
+    │   ├── login/page.tsx
+    │   ├── signup/page.tsx
+    │   ├── projects/[id]/page.tsx
     │   ├── layout.tsx
-    │   ├── page.tsx
-    │   └── projects/[id]/page.tsx
+    │   └── page.tsx
+    ├── components/
+    │   └── AuthContext.tsx
     ├── lib/
     │   ├── ai/
     │   │   ├── client.ts
     │   │   └── prompt-builder.ts
+    │   ├── auth.ts
     │   ├── crawler.ts
     │   └── db/index.ts
     └── types/index.ts
 ```
 
-責務の切り分けは比較的明快です。
+## 5. 画面構成
 
-- `src/app`
-  - 画面と API ルート
-- `src/lib/db`
-  - 永続化
-- `src/lib/ai`
-  - AI クライアントとプロンプト生成
-- `src/lib/crawler.ts`
-  - URL からの本文抽出
-- `src/types`
-  - ドメイン型とラベル定義
-
-## 4. 画面構成
-
-### 4.1 ルートレイアウト
+### 5.1 共通レイアウト
 
 `src/app/layout.tsx`
 
-- 左サイドバー固定
-- ナビは `ダッシュボード` と `Global Assets`
-- 右側が各ページ本体
+- 左サイドバーに `ダッシュボード` と `Global Assets`
+- 未ログイン時はログイン、サインアップ画面以外で実質的にナビを出さない
+- `AuthProvider` が全画面を包む
 
-### 4.2 ダッシュボード
+### 5.2 認証画面
+
+- `src/app/login/page.tsx`
+  - `/api/auth/login` を呼ぶ
+- `src/app/signup/page.tsx`
+  - `/api/auth/signup` を呼ぶ
+
+### 5.3 ダッシュボード
 
 `src/app/page.tsx`
 
-役割:
+- アクセス可能なプロジェクト一覧を表示
+- 新規作成モーダル
+- クローンモーダル
+- ステータス / 種別フィルタ
+- 総数、実施中、下書きの集計
 
-- プロジェクト一覧表示
-- 新規作成
-- クローン開始
-- フィルタリング
-
-主要 UI:
-
-- `NewProjectModal`
-  - プロジェクト名と種別を入力して `POST /api/projects`
-- `CloneModal`
-  - 複製元と `include_values` を指定して `POST /api/projects/:id/clone`
-- `ProjectCard`
-  - 一覧上の概要表示と遷移
-
-### 4.3 Global Assets 編集画面
+### 5.4 Global Assets
 
 `src/app/global-assets/page.tsx`
-
-役割:
 
 - 会社情報編集
 - ブランドボイス編集
 - ブランドガイドライン編集
-- 製品情報の追加、削除、編集
+- 製品 / サービスの追加、更新、削除
+- 保存先は `/api/global-assets`
 
-保存先:
-
-- `PUT /api/global-assets`
-
-### 4.4 プロジェクト詳細画面
+### 5.5 プロジェクト詳細
 
 `src/app/projects/[id]/page.tsx`
 
-役割:
+- プロジェクト名、ステータス、基本情報の編集
+- Custom Fields の追加、削除、更新
+- URL 型フィールドのクロール
+- AI 補完提案の取得と適用
+- AI 生成対象の選択と生成実行
+- 生成済みアセットの表示、コピー、削除
+- 継承フィールドの警告表示
 
-- Project Core 編集
-- Custom Field の追加、削除、更新
-- URL 型フィールドのクロール実行
-- AI 補完の提案取得
-- AI によるアセット生成
-- 生成済みアセット確認と削除
+### 5.6 招待画面
 
-画面は大きく 3 つに分かれる。
+`src/app/invites/[token]/page.tsx`
 
-- 上部ヘッダー
-  - プロジェクト名、状態保存、削除
-- 左ペイン
-  - フィールド編集または生成済みアセット一覧
-- 右ペイン
-  - AI 生成パネル
+- 招待トークンの内容確認
+- ログイン誘導
+- 招待受諾後に対象プロジェクトへ遷移
 
-## 5. データモデル
+## 6. 認証と権限制御
 
-型定義は `src/types/index.ts` にまとまっている。
+### 6.1 セッション
 
-### 5.1 Project
+`src/lib/auth.ts`
 
-案件本体。
+- `createSession(userId)` で JWT を発行
+- Cookie 名は `session`
+- 有効期限は 5 日
+- `getSession()` で Cookie を検証し、`users` テーブルから現在ユーザーを取得
+- `requireSession()` は未認証時に例外を投げる
 
-主な項目:
+### 6.2 権限モデル
+
+- プロジェクトには `owner_id` がある
+- `project_members` に参加ユーザーを保持する
+- 一覧取得、詳細取得、更新、AI 生成、クロール、アセット取得はオーナーまたはメンバーが可能
+- 招待発行と削除はオーナーのみ可能
+
+## 7. データモデル
+
+型定義は `src/types/index.ts`、実体スキーマは `src/lib/db/index.ts` にあります。
+
+### 7.1 users
+
+- `id`
+- `email`
+- `password_hash`
+- `name`
+- `created_at`
+
+### 7.2 projects
 
 - `id`
 - `name`
 - `type`
 - `status`
+- `owner_id`
 - `cloned_from`
 - `target`
 - `start_date`
@@ -184,17 +213,52 @@ Struct は、マーケティング施策の情報を構造化して保存し、�
 - `budget`
 - `channels`
 - `description`
+- `created_at`
+- `updated_at`
 
-注意:
+補足:
 
-- `channels` は配列ではなく JSON 文字列で保持している
+- `channels` は配列ではなく JSON 文字列で保存される
 
-### 5.2 CustomField
+### 7.3 project_members
 
-案件ごとの追加フィールド。
+- `id`
+- `project_id`
+- `user_id`
+- `role`
+- `created_at`
 
-主な項目:
+### 7.4 invitations
 
+- `id`
+- `project_id`
+- `email`
+- `token`
+- `role`
+- `status`
+- `expires_at`
+- `created_at`
+
+### 7.5 global_assets
+
+- `id`
+- `user_id`
+- `company_name`
+- `company_description`
+- `brand_voice`
+- `brand_guidelines`
+- `products`
+- `updated_at`
+
+補足:
+
+- `products` は JSON 文字列で保存される
+- 1 ユーザー 1 レコード前提
+
+### 7.6 custom_fields
+
+- `id`
+- `project_id`
 - `key`
 - `label`
 - `type`
@@ -205,323 +269,137 @@ Struct は、マーケティング施策の情報を構造化して保存し、�
 - `crawled_content`
 - `sort_order`
 
-特徴:
+補足:
 
 - `type` は `text | textarea | url | date | select`
-- `url` 型はクロール可能
-- クローン時に値を引き継いだ項目は `inherited = 1` で警告対象になる
+- `options` は JSON 文字列
+- 値付きクローン時は `inherited = 1`
 
-### 5.3 GlobalAssets
+### 7.7 generated_assets
 
-全案件共通情報。
-
-主な項目:
-
-- `company_name`
-- `company_description`
-- `brand_voice`
-- `brand_guidelines`
-- `products`
-
-### 5.4 GeneratedAsset
-
-AI の生成結果。
-
-主な項目:
-
+- `id`
+- `project_id`
 - `asset_type`
 - `title`
 - `content`
 - `warnings`
 - `created_at`
 
-## 6. 永続化の仕組み
+補足:
 
-実装ファイル: `src/lib/db/index.ts`
+- `warnings` は JSON 文字列
+- `asset_type` は `lp | dm | sns_twitter | sns_linkedin | ad_copy | email | report`
 
-現行の永続化は JSON ファイル 1 つで完結する。
+## 8. 永続化
 
-- 保存先: `data/struct.json`
-- 管理対象:
-  - `global_assets`
-  - `projects`
-  - `custom_fields`
-  - `generated_assets`
+`src/lib/db/index.ts`
 
-特徴:
+- DB ファイルは `data/struct.db`
+- 初回アクセス時に DB 接続を初期化
+- `journal_mode = WAL`
+- `foreign_keys = ON`
+- `CREATE TABLE IF NOT EXISTS` で起動時にスキーマを保証
 
-- 起動時ではなくアクセス時に `read()` される
-- DB ファイルが存在しなければ初期 JSON を自動作成
-- API 側からは `prepare().get() / all() / run()` を通して使う
-- SQL 文はパーサではなく、文字列パターンで分岐している
+この層は SQL 風 API のラッパーではなく、`better-sqlite3` を直接使う構成です。
 
-設計上の含意:
+## 9. API 構成
 
-- SQLite ライクな API を先に定義しているため、将来的な本物の DB 置換は比較的しやすい
-- 一方で、現在の実装は SQL の自由度がなく、想定外のクエリには対応できない
-- 同時更新やトランザクション制御は実質ない
+### 9.1 認証
 
-## 7. API 構成
+- `POST /api/auth/signup`
+  - ユーザー作成
+  - パスワードをハッシュ化
+  - セッションを作成
+- `POST /api/auth/login`
+  - 資格情報を検証してセッション作成
+- `POST /api/auth/logout`
+  - `session` Cookie を削除
+- `GET /api/auth/me`
+  - 現在ユーザーを返す
 
-### 7.1 Global Assets
-
-`src/app/api/global-assets/route.ts`
+### 9.2 Global Assets
 
 - `GET /api/global-assets`
-  - 共通ブランド情報取得
+  - 現在ユーザーの Global Assets を返す
 - `PUT /api/global-assets`
-  - 共通ブランド情報更新
+  - 現在ユーザーの Global Assets を更新
 
-### 7.2 Projects 一覧
-
-`src/app/api/projects/route.ts`
+### 9.3 プロジェクト
 
 - `GET /api/projects`
-  - 一覧取得
+  - オーナーまたはメンバーとして参照可能なプロジェクト一覧
 - `POST /api/projects`
   - 新規作成
+- `GET /api/projects/[id]`
+  - プロジェクト本体、Custom Fields、Members、Pending Invitations を返す
+- `PUT /api/projects/[id]`
+  - 基本情報と Custom Fields をまとめて更新
+- `DELETE /api/projects/[id]`
+  - オーナーのみ削除可
 
-### 7.3 Project 詳細
+### 9.4 補助 API
 
-`src/app/api/projects/[id]/route.ts`
-
-- `GET /api/projects/:id`
-  - Project 本体と Custom Fields を返す
-- `PUT /api/projects/:id`
-  - Project 更新
-  - Custom Fields の同期
-- `DELETE /api/projects/:id`
-  - Project、関連 Field、GeneratedAsset を削除
-
-注意:
-
-- `PUT` 時に `custom_fields` 全体を同期する実装なので、部分更新ではなく実質フル置換に近い
-
-### 7.4 Project Clone
-
-`src/app/api/projects/[id]/clone/route.ts`
-
-- `POST /api/projects/:id/clone`
-
-役割:
-
-- 元案件をコピーして新規案件を作成
-- `include_values` によって以下を切り替える
-  - `false`: 定義のみ複製
-  - `true`: 値も複製
-
-クローン時の特徴:
-
-- 値を引き継いだ Custom Field は `inherited = 1`
-- 生成前にユーザーが再確認すべき情報として UI に出る
-
-### 7.5 Crawl
-
-`src/app/api/projects/[id]/crawl/route.ts`
-
-- `POST /api/projects/:id/crawl`
-
-役割:
-
-- `url` 型フィールドの URL 先本文を抽出し `crawled_content` に保存
-
-### 7.6 Completion
-
-`src/app/api/projects/[id]/complete/route.ts`
-
-- `POST /api/projects/:id/complete`
-
-役割:
-
-- 未入力の Custom Field に対して AI 補完候補を出す
-- 実保存はしない
-- UI 側でユーザーが提案を適用してから保存する
-
-### 7.7 Generate
-
-`src/app/api/projects/[id]/generate/route.ts`
-
-- `POST /api/projects/:id/generate`
-
-役割:
-
-- 指定アセット種別ごとに AI 生成
-- 生成結果を `generated_assets` に保存
-
-### 7.8 Assets
-
-`src/app/api/projects/[id]/assets/route.ts`
-
-- `GET /api/projects/:id/assets`
+- `POST /api/projects/[id]/clone`
+  - プロジェクト複製
+- `POST /api/projects/[id]/crawl`
+  - URL 型フィールドの本文抽出
+- `POST /api/projects/[id]/complete`
+  - 未入力フィールド向け AI 補完提案
+- `POST /api/projects/[id]/generate`
+  - マーケティングアセット生成
+- `GET /api/projects/[id]/assets`
   - 生成済みアセット一覧
-- `DELETE /api/projects/:id/assets?assetId=...`
-  - 単体削除
-- `DELETE /api/projects/:id/assets`
-  - 全削除
+- `DELETE /api/projects/[id]/assets`
+  - 生成済みアセット削除
+- `POST /api/projects/[id]/invite`
+  - オーナーが招待 URL を発行
 
-## 8. AI 生成フロー
+### 9.5 招待
 
-AI 関連の中核は以下。
+- `GET /api/invites/[token]`
+  - 招待トークンの妥当性確認
+- `POST /api/invites/[token]/accept`
+  - 招待受諾
+  - `project_members` に登録
+  - 招待状態を `ACCEPTED` に更新
 
-- `src/lib/ai/client.ts`
-- `src/lib/ai/prompt-builder.ts`
+## 10. AI フロー
 
-### 8.1 基本フロー
+### 10.1 参照情報の組み立て
 
-1. Global Assets と Project 情報を取得
-2. `buildProjectContext()` で共通コンテキスト文字列を組み立てる
-3. 用途別に `buildAssetPrompt()` または `buildCompletionPrompt()` を作る
-4. `generateText()` で Anthropic API を呼ぶ
-5. 必要に応じてレスポンスを保存またはパースする
+`src/lib/ai/prompt-builder.ts`
 
-### 8.2 システムプロンプトの意図
+AI には次の情報を渡します。
 
-`SYSTEM_PROMPT` では以下を厳守させている。
+- Global Assets
+- Project Core
+- Custom Fields
+- URL 取得済み本文
 
-- 提供データにない数字や実績を捏造しない
-- 継承フィールドを使う場合は警告を出す
-- ブランドボイスとガイドラインに従う
-- 日本語で出力する
+継承フィールドが残っている場合は、プロンプト上でも要確認として扱います。
 
-### 8.3 生成できるアセット種別
+### 10.2 生成対象
 
-- `lp`
-- `dm`
-- `sns_twitter`
-- `sns_linkedin`
-- `ad_copy`
-- `email`
-- `report`
+- LP 構成案
+- ダイレクトメール
+- X 投稿 3 パターン
+- LinkedIn 投稿
+- 広告コピー 3 パターン
+- メールマガジン
+- 社内向け施策報告書
 
-### 8.4 整合性チェック
+### 10.3 整合性チェック
 
-各生成テンプレートは末尾に `[⚠️ 整合性チェック]` セクションを要求している。
+各生成テンプレートは末尾に `[⚠️ 整合性チェック]` セクションを要求します。`extractWarnings()` がこの部分を抽出して `generated_assets.warnings` に保存します。
 
-その後 `extractWarnings()` が以下を行う。
+### 10.4 AI 補完
 
-- 該当セクションを抽出
-- `-` で始まる行のみ warnings として保存
+未入力フィールドのみを対象に JSON 配列形式で提案を返させ、画面側で個別適用します。
 
-このため、AI 出力が想定フォーマットから外れると warnings が空になる可能性がある。
+## 11. 実装上の注意
 
-### 8.5 補完フロー
-
-未入力フィールドに対しては JSON 配列を返すように AI に要求している。
-
-返却後は `parseCompletionResponse()` が以下を行う。
-
-- ```json fenced block を抽出
-- JSON.parse
-- パース失敗時は空配列
-
-つまり、補完機能は出力フォーマット依存が強い。
-
-## 9. URL クロールの仕組み
-
-実装ファイル: `src/lib/crawler.ts`
-
-流れ:
-
-1. 指定 URL を `fetch`
-2. `cheerio` で HTML をロード
-3. ナビ、広告、モーダルなどを除去
-4. `main`, `article`, `body` などから本文を抽出
-5. 4000 文字までに切り詰めて保存
-
-特徴:
-
-- ページ本文の要約ではなく、生テキスト寄りの抽出
-- クロール結果は Custom Field の `crawled_content` に保存
-- AI コンテキストへ最大 800 文字分だけ埋め込まれる
-
-## 10. UI とバックエンドの主なデータフロー
-
-### 10.1 プロジェクト作成
-
-1. ダッシュボードで新規作成
-2. `POST /api/projects`
-3. 作成後に `/projects/:id` へ遷移
-
-### 10.2 プロジェクト保存
-
-1. 詳細画面で入力
-2. `PUT /api/projects/:id`
-3. Project と Custom Fields をまとめて同期
-
-### 10.3 補完提案
-
-1. 詳細画面で `AI補完を実行`
-2. `POST /api/projects/:id/complete`
-3. 提案を UI に表示
-4. ユーザーが適用
-5. 保存時に永続化
-
-### 10.4 コンテンツ生成
-
-1. 生成対象アセットを選択
-2. 事前に保存
-3. `POST /api/projects/:id/generate`
-4. AI 出力を保存
-5. `assets` タブへ移動
-
-## 11. 実装上の注意点と改善候補
-
-現状コードから見える注意点です。
-
-### 11.1 README と実装の差分
-
-- README は SQLite 前提だが、実装は JSON ファイルストア
-- セットアップ説明と実装実態に差がある
-
-### 11.2 DB ラッパーの制約
-
-- SQL 文字列の解釈がパターン一致ベース
-- 想定外クエリに弱い
-- 排他制御がない
-- データ量増加時の性能は限定的
-
-### 11.3 API 型と実データのズレ
-
-- `GeneratedAsset` 型では `warnings` は `string`
-- ただし `GET /api/projects/:id/assets` は `warnings` を配列に変換して返している
-- フロント側では JSON 文字列として再パースしている箇所があり、実ランタイムの整合性を一度見直した方がよい
-
-### 11.4 `PUT /api/projects/:id` の更新方式
-
-- Custom Fields は全件同期
-- 同時編集や部分更新には弱い
-
-### 11.5 AI 出力フォーマット依存
-
-- warnings 抽出も補完 JSON 抽出も、AI が所定フォーマットを守る前提
-- フォーマット逸脱時の回復処理は薄い
-
-## 12. 今後ドキュメント化するとよいもの
-
-次に必要になりやすいのは以下。
-
-- `data/struct.json` の実データスキーマ例
-- API リクエストとレスポンスの具体例
-- AI プロンプト改善ルール
-- JSON ストアから SQLite へ戻す場合の移行方針
-
-## 13. 関連ファイル
-
-- `README.md`
-- `src/app/page.tsx`
-- `src/app/projects/[id]/page.tsx`
-- `src/app/global-assets/page.tsx`
-- `src/app/api/projects/route.ts`
-- `src/app/api/projects/[id]/route.ts`
-- `src/app/api/projects/[id]/clone/route.ts`
-- `src/app/api/projects/[id]/complete/route.ts`
-- `src/app/api/projects/[id]/generate/route.ts`
-- `src/app/api/projects/[id]/crawl/route.ts`
-- `src/app/api/projects/[id]/assets/route.ts`
-- `src/app/api/global-assets/route.ts`
-- `src/lib/db/index.ts`
-- `src/lib/ai/client.ts`
-- `src/lib/ai/prompt-builder.ts`
-- `src/lib/crawler.ts`
-- `src/types/index.ts`
-
+- `channels`、`options`、`products`、`warnings` は JSON 文字列で保存される
+- クライアント側で配列として扱う前に毎回 `JSON.parse` が必要
+- 招待 URL は `NEXT_PUBLIC_BASE_URL` に依存する
+- `JWT_SECRET` 未設定でも動くが、本番では必ず明示設定すべき
+- `.env.example` に現行未使用の設定が残っている場合は、実装に合わせて整理する
