@@ -1,51 +1,97 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
+import { prisma } from '@/lib/db/prisma';
 import { generateText } from '@/lib/ai/client';
 import { buildProjectContext, buildAssetPrompt, extractWarnings, SYSTEM_PROMPT } from '@/lib/ai/prompt-builder';
-import type { AssetType, ProjectWithFields, GlobalAssets, CustomField } from '@/types';
+import { requireSession } from '@/lib/auth';
+import type { AssetType, ProjectWithFields, GlobalAssets } from '@/types';
 import { ASSET_TYPE_LABELS } from '@/types';
 
 interface Params { params: { id: string } }
 
 export async function POST(request: Request, { params }: Params) {
-  const db = getDb();
-  const body = await request.json() as { asset_types: AssetType[] };
+  try {
+    const user = await requireSession();
+    const body = await request.json() as { asset_types: AssetType[] };
 
-  if (!body.asset_types?.length) {
-    return NextResponse.json({ error: 'asset_types が必要です' }, { status: 400 });
+    if (!body.asset_types?.length) {
+      return NextResponse.json({ error: 'asset_types が必要です' }, { status: 400 });
+    }
+
+    const project = await prisma.project.findFirst({
+      where: {
+        id: params.id,
+        OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
+      },
+      include: { customFields: { orderBy: { sortOrder: 'asc' } } }
+    });
+
+    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    const globalAssetsRow = await prisma.globalAssets.findUnique({
+      where: { userId: user.id }
+    });
+
+    if (!globalAssetsRow) return NextResponse.json({ error: 'Global assets missing' }, { status: 500 });
+
+    const typedProject: ProjectWithFields = {
+      ...project,
+      custom_fields: project.customFields.map(f => ({
+        ...f,
+        project_id: f.projectId,
+        inherited_from: f.inheritedFrom,
+        crawled_content: f.crawledContent,
+        sort_order: f.sortOrder,
+        options: f.options || '[]',
+        value: f.value || '',
+      })),
+      channels: project.channels || '[]',
+      target: project.target || '',
+      start_date: project.startDate || '',
+      end_date: project.endDate || '',
+      budget: project.budget || '',
+      description: project.description || '',
+      cloned_from: project.clonedFrom,
+      created_at: project.createdAt.toISOString(),
+      updated_at: project.updatedAt.toISOString(),
+      status: project.status as any,
+      type: project.type as any,
+    };
+
+    const typedGlobal: GlobalAssets = {
+      company_name: globalAssetsRow.companyName || '',
+      company_description: globalAssetsRow.companyDescription || '',
+      brand_voice: globalAssetsRow.brandVoice || '',
+      brand_guidelines: globalAssetsRow.brandGuidelines || '',
+      products: JSON.parse(globalAssetsRow.products || '[]'),
+      updated_at: globalAssetsRow.updatedAt.toISOString(),
+    };
+
+    const context = buildProjectContext(typedProject, typedGlobal);
+    const results = [];
+
+    for (const assetType of body.asset_types) {
+      const prompt = buildAssetPrompt(assetType, context);
+      const content = await generateText(prompt, SYSTEM_PROMPT, 4096);
+      const warnings = extractWarnings(content);
+
+      const title = `${ASSET_TYPE_LABELS[assetType]} — ${new Date().toLocaleDateString('ja-JP')}`;
+
+      const asset = await prisma.generatedAsset.create({
+        data: {
+          projectId: params.id,
+          assetType,
+          title,
+          content,
+          warnings: JSON.stringify(warnings),
+        }
+      });
+
+      results.push({ ...asset, asset_type: asset.assetType, warnings });
+    }
+
+    return NextResponse.json({ results });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id) as ProjectWithFields | undefined;
-  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-  const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order').all(params.id) as CustomField[];
-  project.custom_fields = fields;
-
-  const globalRow = db.prepare('SELECT * FROM global_assets WHERE id = ?').get('main') as Record<string, unknown>;
-  const globalAssets: GlobalAssets = {
-    ...(globalRow as Omit<GlobalAssets, 'products'>),
-    products: JSON.parse((globalRow.products as string) || '[]'),
-  };
-
-  const context = buildProjectContext(project, globalAssets);
-  const results: { asset_type: AssetType; asset_id: string; title: string; content: string; warnings: string[] }[] = [];
-
-  for (const assetType of body.asset_types) {
-    const prompt = buildAssetPrompt(assetType, context);
-    const content = await generateText(prompt, SYSTEM_PROMPT, 4096);
-    const warnings = extractWarnings(content);
-
-    const assetId = uuidv4();
-    const title = `${ASSET_TYPE_LABELS[assetType]} — ${new Date().toLocaleDateString('ja-JP')}`;
-
-    db.prepare(`
-      INSERT INTO generated_assets (id, project_id, asset_type, title, content, warnings)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(assetId, params.id, assetType, title, content, JSON.stringify(warnings));
-
-    results.push({ asset_type: assetType, asset_id: assetId, title, content, warnings });
-  }
-
-  return NextResponse.json({ results });
 }

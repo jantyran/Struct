@@ -34,6 +34,9 @@ export interface Project {
   description: string;
   created_at: string;
   updated_at: string;
+  ownerId: string;
+  members?: Array<{ user: { email: string, name: string | null }, role: string }>;
+  invitations?: Array<{ email: string, role: string, status: string }>;
 }
 
 export interface CustomField {

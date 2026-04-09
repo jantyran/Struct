@@ -1,44 +1,50 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { prisma } from '@/lib/db/prisma';
+import { requireSession } from '@/lib/auth';
 
 export async function GET() {
-  const db = getDb();
-  const row = db.prepare('SELECT * FROM global_assets WHERE id = ?').get('main');
-  if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  try {
+    const user = await requireSession();
+    let assets = await prisma.globalAssets.findUnique({
+      where: { userId: user.id },
+    });
 
-  const assets = row as Record<string, unknown>;
-  assets.products = JSON.parse((assets.products as string) || '[]');
-  return NextResponse.json(assets);
+    if (!assets) {
+      assets = await prisma.globalAssets.create({
+        data: { userId: user.id },
+      });
+    }
+
+    return NextResponse.json(assets);
+  } catch (err) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 }
 
 export async function PUT(request: Request) {
-  const db = getDb();
-  const body = await request.json() as {
-    company_name?: string;
-    company_description?: string;
-    brand_voice?: string;
-    brand_guidelines?: string;
-    products?: unknown[];
-  };
+  try {
+    const user = await requireSession();
+    const body = await request.json() as {
+      company_name?: string;
+      company_description?: string;
+      brand_voice?: string;
+      brand_guidelines?: string;
+      products?: any[];
+    };
 
-  db.prepare(`
-    UPDATE global_assets SET
-      company_name = ?,
-      company_description = ?,
-      brand_voice = ?,
-      brand_guidelines = ?,
-      products = ?,
-      updated_at = datetime('now')
-    WHERE id = 'main'
-  `).run(
-    body.company_name ?? '',
-    body.company_description ?? '',
-    body.brand_voice ?? '',
-    body.brand_guidelines ?? '',
-    JSON.stringify(body.products ?? []),
-  );
+    const updated = await prisma.globalAssets.update({
+      where: { userId: user.id },
+      data: {
+        companyName: body.company_name,
+        companyDescription: body.company_description,
+        brandVoice: body.brand_voice,
+        brandGuidelines: body.brand_guidelines,
+        products: body.products ? JSON.stringify(body.products) : undefined,
+      },
+    });
 
-  const updated = db.prepare('SELECT * FROM global_assets WHERE id = ?').get('main') as Record<string, unknown>;
-  updated.products = JSON.parse((updated.products as string) || '[]');
-  return NextResponse.json(updated);
+    return NextResponse.json(updated);
+  } catch (err) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 }

@@ -2,14 +2,20 @@
 import './globals.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { AuthProvider, useAuth } from '@/components/AuthContext';
 
 function Sidebar() {
   const path = usePathname();
+  const { logout, user } = useAuth();
 
   const navItems = [
     { href: '/', label: 'ダッシュボード', icon: '⬡' },
     { href: '/global-assets', label: 'Global Assets', icon: '◈' },
   ];
+
+  if (!user && path !== '/login' && path !== '/signup') {
+    return null;
+  }
 
   return (
     <aside className="w-56 shrink-0 flex flex-col border-r" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-surface)' }}>
@@ -42,6 +48,18 @@ function Sidebar() {
         </ul>
       </nav>
 
+      {user && (
+        <div className="p-4 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
+          <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{user.email}</div>
+          <button 
+            onClick={logout}
+            className="text-xs w-full text-left text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            ログアウト
+          </button>
+        </div>
+      )}
+
       <div className="p-4 border-t text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
         v0.1.0
       </div>
@@ -57,10 +75,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="flex h-screen overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        <AuthProvider>
+          <div className="flex h-full w-full">
+            <Sidebar />
+            <main className="flex-1 overflow-y-auto">
+              {children}
+            </main>
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );
