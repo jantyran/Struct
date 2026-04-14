@@ -26,6 +26,10 @@ export interface ProjectFieldTemplate {
   type: FieldType;
   options: string;
   layout?: FieldLayout;
+  /** true = 組み込みフィールド（元コアフィールド）。UIで削除不可 */
+  is_builtin?: boolean;
+  /** セクション名。同じ名前のフィールドをグループ表示する */
+  section?: string;
 }
 
 export interface ProjectContentTemplate {
@@ -41,32 +45,15 @@ export interface ProjectContentTemplate {
   instruction: string;
 }
 
-export type CoreFieldKey = 'target' | 'start_date' | 'end_date' | 'budget' | 'channels' | 'description';
-
-export interface CoreFieldConfig {
-  key: CoreFieldKey;
-  label: string;
-  enabled: boolean;
-}
-
-export const DEFAULT_CORE_FIELDS: CoreFieldConfig[] = [
-  { key: 'target',      label: 'ターゲット',          enabled: true },
-  { key: 'start_date',  label: '開始日',               enabled: true },
-  { key: 'end_date',    label: '終了日',               enabled: true },
-  { key: 'budget',      label: '予算',                 enabled: true },
-  { key: 'channels',    label: 'チャネル',             enabled: true },
-  { key: 'description', label: '概要',                 enabled: true },
-];
-
 export interface ProjectTypeDefinition {
   id: string;
   key: string;
   name: string;
   description: string;
   phases: ProjectPhase[];
+  /** 組み込み + カスタムフィールドテンプレートを統合管理 */
   field_templates: ProjectFieldTemplate[];
   content_template_ids: string[];
-  core_fields_config: CoreFieldConfig[];
   is_default?: boolean;
 }
 
@@ -107,12 +94,13 @@ export interface Project {
   phase_key: string;
   status: ProjectStatus;
   cloned_from: string | null;
-  target: string;
-  start_date: string;
-  end_date: string;
-  budget: string;
-  channels: string; // JSON string
-  description: string;
+  /** @deprecated コアフィールドは custom_fields に移行済み。後方互換のため残存 */
+  target?: string;
+  start_date?: string;
+  end_date?: string;
+  budget?: string;
+  channels?: string;
+  description?: string;
   created_at: string;
   updated_at: string;
   ownerId: string;
@@ -128,12 +116,16 @@ export interface CustomField {
   label: string;
   type: FieldType;
   value: string;
-  options: string; // JSON string for select / reference config
+  options: string;
   layout?: FieldLayout;
   inherited: number; // 0 or 1
   inherited_from: string | null;
   crawled_content: string | null;
   sort_order: number;
+  /** 1 = 組み込みフィールド（元コアフィールド） */
+  is_builtin: number;
+  /** セクション名 */
+  section: string;
 }
 
 export interface ProjectWithFields extends Project {
@@ -152,7 +144,7 @@ export interface GeneratedAsset {
 
 export interface CloneOptions {
   new_name: string;
-  include_values: boolean; // false = フィールド定義のみ, true = 定義+値
+  include_values: boolean;
 }
 
 export interface GenerateRequest {

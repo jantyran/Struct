@@ -10,8 +10,7 @@ export async function GET() {
   try {
     const user = await requireSession();
     const db = getDb();
-    
-    // 自身がオーナーまたはメンバーであるプロジェクトを抽出
+
     const projects = db.prepare(`
       SELECT DISTINCT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
@@ -33,12 +32,6 @@ export async function POST(request: Request) {
       name: string;
       type?: string;
       phase_key?: string;
-      target?: string;
-      start_date?: string;
-      end_date?: string;
-      budget?: string;
-      channels?: string[];
-      description?: string;
       custom_fields?: Array<{
         id?: string;
         template_id?: string;
@@ -51,6 +44,8 @@ export async function POST(request: Request) {
         inherited?: number;
         inherited_from?: string | null;
         sort_order?: number;
+        is_builtin?: number;
+        section?: string;
       }>;
     };
 
@@ -65,19 +60,13 @@ export async function POST(request: Request) {
       const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? 'campaign'));
 
       db.prepare(`
-        INSERT INTO projects (id, name, type, phase_key, target, start_date, end_date, budget, channels, description, owner_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (id, name, type, phase_key, owner_id)
+        VALUES (?, ?, ?, ?, ?)
       `).run(
         id,
         body.name.trim(),
         body.type ?? 'campaign',
         body.phase_key ?? '',
-        body.target ?? '',
-        body.start_date ?? '',
-        body.end_date ?? '',
-        body.budget ?? '',
-        JSON.stringify(body.channels ?? []),
-        body.description ?? '',
         user.id
       );
 
@@ -95,6 +84,8 @@ export async function POST(request: Request) {
         inherited_from: field.inherited_from ?? null,
         crawled_content: null,
         sort_order: field.sort_order ?? index,
+        is_builtin: field.is_builtin ?? 0,
+        section: field.section ?? '',
       })) as CustomField[];
 
       const syncedFields = syncCustomFieldsWithDefinition(id, incomingFields, currentDefinition);

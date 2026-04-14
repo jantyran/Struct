@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { mkdirSync } from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { BUILTIN_FIELD_TEMPLATES } from '@/lib/project-types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 mkdirSync(DATA_DIR, { recursive: true });
@@ -99,7 +101,7 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    -- カスタムフィールド
+    -- カスタムフィールド（組み込み + ユーザー定義を統合管理）
     CREATE TABLE IF NOT EXISTS custom_fields (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -108,12 +110,14 @@ function initSchema(db: Database.Database) {
       label TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'text',
       value TEXT DEFAULT '',
-      options TEXT DEFAULT '[]',
+      options TEXT DEFAULT '{}',
       layout TEXT DEFAULT 'half',
       inherited INTEGER DEFAULT 0,
       inherited_from TEXT,
       crawled_content TEXT,
       sort_order INTEGER DEFAULT 0,
+      is_builtin INTEGER DEFAULT 0,
+      section TEXT DEFAULT '',
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
@@ -137,4 +141,85 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
   ensureColumn(db, 'custom_fields', 'template_id', `TEXT`);
   ensureColumn(db, 'custom_fields', 'layout', `TEXT DEFAULT 'half'`);
+  ensureColumn(db, 'custom_fields', 'is_builtin', `INTEGER DEFAULT 0`);
+  ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
+
+  // 既存プロジェクトのコアカラム値を custom_fields に移行
+  migrateProjectCoreFields(db);
+}
+
+/**
+ * projects テーブルの旧コアカラム（target, start_date, end_date, budget, channels, description）を
+ * custom_fields 行として移行する。既に移行済みのプロジェクトはスキップ。
+ */
+function migrateProjectCoreFields(db: Database.Database) {
+  const projects = db.prepare(`
+    SELECT id, target, start_date, end_date, budget, channels, description
+    FROM projects
+  `).all() as Array<{
+    id: string;
+    target: string;
+    start_date: string;
+    end_date: string;
+    budget: string;
+    channels: string;
+    description: string;
+  }>;
+
+  for (const project of projects) {
+    // 既に組み込みフィールドが存在するプロジェクトはスキップ
+    const existingBuiltins = db.prepare(
+      'SELECT COUNT(*) as cnt FROM custom_fields WHERE project_id = ? AND is_builtin = 1'
+    ).get(project.id) as { cnt: number };
+
+    if (existingBuiltins.cnt > 0) continue;
+
+    // コアカラムの値が全て空の場合もスキップしない（空値で組み込みフィールドを初期化する）
+    const migrations = [
+      { def: BUILTIN_FIELD_TEMPLATES[0], value: project.target || '' },
+      { def: BUILTIN_FIELD_TEMPLATES[1], value: project.start_date || '' },
+      { def: BUILTIN_FIELD_TEMPLATES[2], value: project.end_date || '' },
+      { def: BUILTIN_FIELD_TEMPLATES[3], value: project.budget || '' },
+      { def: BUILTIN_FIELD_TEMPLATES[4], value: normalizeChannelsValue(project.channels) },
+      { def: BUILTIN_FIELD_TEMPLATES[5], value: project.description || '' },
+    ];
+
+    const tx = db.transaction(() => {
+      // 既存のカスタムフィールドの sort_order を後ろにずらす
+      const existingCount = (db.prepare(
+        'SELECT COUNT(*) as cnt FROM custom_fields WHERE project_id = ?'
+      ).get(project.id) as { cnt: number }).cnt;
+
+      migrations.forEach(({ def, value }, i) => {
+        db.prepare(`
+          INSERT INTO custom_fields
+            (id, project_id, template_id, key, label, type, value, options, layout,
+             inherited, inherited_from, crawled_content, sort_order, is_builtin, section)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, 1, ?)
+        `).run(
+          uuidv4(),
+          project.id,
+          def.id,
+          def.key,
+          def.label,
+          def.type,
+          value,
+          def.options,
+          def.layout ?? 'half',
+          existingCount + i,
+          def.section ?? '基本情報',
+        );
+      });
+    });
+    tx();
+  }
+}
+
+/** channels の JSON 配列文字列をカンマ区切りに変換 */
+function normalizeChannelsValue(channels: string): string {
+  try {
+    const arr = JSON.parse(channels || '[]');
+    if (Array.isArray(arr)) return arr.join(', ');
+  } catch { /* ignore */ }
+  return channels || '';
 }

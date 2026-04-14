@@ -40,6 +40,8 @@ function NewProjectModal({
       inherited_from: null,
       crawled_content: null,
       sort_order: index,
+      is_builtin: field.is_builtin ? 1 : 0,
+      section: field.section ?? '',
     }));
     const res = await fetch(withBasePath('/api/projects'), {
       method: 'POST',
@@ -158,7 +160,7 @@ function ProjectCard({
   typeLabel: string;
   onClone: (p: Project) => void;
 }) {
-  const channels = (() => { try { return JSON.parse(project.channels) as string[]; } catch { return []; } })();
+  const channels = (() => { try { return JSON.parse(project.channels ?? '[]') as string[]; } catch { return []; } })();
   const statusColors: Record<string, string> = { draft: 'text-slate-600 bg-slate-100', active: 'text-emerald-700 bg-emerald-50', archived: 'text-slate-500 bg-slate-100' };
   const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', archived: 'アーカイブ' };
   const typeColors: Record<string, string> = { event: 'text-sky-700', campaign: 'text-cyan-700', content: 'text-amber-700', other: 'text-slate-500' };

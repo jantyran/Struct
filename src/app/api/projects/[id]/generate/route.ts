@@ -49,24 +49,12 @@ export async function POST(request: Request, { params }: Params) {
       ...project,
       custom_fields: fields.map(f => ({
         ...f,
-        project_id: f.project_id,
-        inherited_from: f.inherited_from,
-        crawled_content: f.crawled_content,
-        sort_order: f.sort_order,
-        options: f.options || '[]',
+        options: f.options || '{}',
         value: f.value || '',
+        is_builtin: f.is_builtin ?? 0,
+        section: f.section ?? '',
       })),
-      channels: project.channels || '[]',
-      target: project.target || '',
-      start_date: project.start_date || '',
-      end_date: project.end_date || '',
-      budget: project.budget || '',
-      description: project.description || '',
       cloned_from: project.cloned_from,
-      created_at: project.created_at,
-      updated_at: project.updated_at,
-      status: project.status,
-      type: project.type,
     };
 
     const typedGlobal: GlobalAssets = normalizeGlobalAssetsRow(globalAssetsRow);

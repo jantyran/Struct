@@ -10,28 +10,30 @@ const SYSTEM_PROMPT = `あなたはプロフェッショナルなマーケティ
 4. 日本語で出力すること（指定がない限り）`;
 
 export function buildProjectContext(project: ProjectWithFields, globalAssets: GlobalAssets): string {
-  const channels = safeJson<string[]>(project.channels, []);
-
   const inheritedFields = project.custom_fields.filter(f => f.inherited && f.value);
   const inheritedWarning = inheritedFields.length > 0
     ? `\n⚠️ 継承フィールド（要確認）: ${inheritedFields.map(f => f.label).join('、')}`
     : '';
 
-  const coreFields = [
-    `種別: ${projectTypeLabel(project.type)}`,
-    `ターゲット: ${project.target || '（未設定）'}`,
-    `期間: ${project.start_date || '未定'} 〜 ${project.end_date || '未定'}`,
-    `予算: ${project.budget || '（未設定）'}`,
-    `チャネル: ${channels.length > 0 ? channels.join('、') : '（未設定）'}`,
-    `概要: ${project.description || '（未設定）'}`,
-  ].join('\n');
+  // 全フィールド（組み込み + カスタム）を section でグループ化してプロンプトに展開
+  const sectionMap = new Map<string, typeof project.custom_fields>();
+  for (const f of project.custom_fields) {
+    const sec = f.section || '詳細';
+    if (!sectionMap.has(sec)) sectionMap.set(sec, []);
+    sectionMap.get(sec)!.push(f);
+  }
 
-  const customFieldsText = project.custom_fields.length > 0
-    ? '\n\n【カスタムフィールド】\n' + project.custom_fields.map(f => {
-        const flag = f.inherited ? ' [継承・要確認]' : '';
-        const content = formatCustomFieldValue(f);
-        return `- ${f.label}${flag}: ${content}`;
-      }).join('\n')
+  const coreFields = `種別: ${projectTypeLabel(project.type)}`;
+
+  const customFieldsText = sectionMap.size > 0
+    ? '\n\n' + Array.from(sectionMap.entries()).map(([sec, fields]) => {
+        const lines = fields.map(f => {
+          const flag = f.inherited ? ' [継承・要確認]' : '';
+          const content = formatCustomFieldValue(f);
+          return `- ${f.label}${flag}: ${content}`;
+        }).join('\n');
+        return `【${sec}】\n${lines}`;
+      }).join('\n\n')
     : '';
 
   const companyRecord = globalAssets.objects.find(object => object.key === 'company-profile')?.records[0];
@@ -148,7 +150,8 @@ export function extractWarnings(content: string): string[] {
 
 export { SYSTEM_PROMPT };
 
-function safeJson<T>(str: string, fallback: T): T {
+function safeJson<T>(str: string | undefined | null, fallback: T): T {
+  if (!str) return fallback;
   try { return JSON.parse(str) as T; } catch { return fallback; }
 }
 

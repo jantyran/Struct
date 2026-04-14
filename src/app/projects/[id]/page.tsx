@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate } from '@/types';
-import { DEFAULT_CORE_FIELDS, FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
+import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 
@@ -71,6 +71,8 @@ function buildChildField(childTemplate: ProjectFieldTemplate, state: GroupChildS
     inherited_from: null,
     crawled_content: null,
     sort_order: 0,
+    is_builtin: childTemplate.is_builtin ? 1 : 0,
+    section: childTemplate.section ?? '',
   };
 }
 
@@ -672,11 +674,16 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
   async function save(p: ProjectWithFields) {
     setSaving(true);
-    const channels = (() => { try { return JSON.parse(p.channels) as string[]; } catch { return []; } })();
     await fetch(withBasePath(`/api/projects/${id}`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...p, channels, custom_fields: p.custom_fields }),
+      body: JSON.stringify({
+        name: p.name,
+        type: p.type,
+        phase_key: p.phase_key,
+        status: p.status,
+        custom_fields: p.custom_fields,
+      }),
     });
     setSaving(false);
     setSavingMsg('保存済み');
@@ -775,16 +782,23 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     </div>
   );
 
-  const channels = (() => { try { return JSON.parse(project.channels) as string[]; } catch { return []; } })();
-  const customFields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
-  const inheritedCount = customFields.filter(f => f.inherited === 1).length;
+  const allFields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
+  const inheritedCount = allFields.filter(f => f.inherited === 1).length;
   const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
   const currentContentTemplates = contentTemplates.filter((template) => currentProjectType?.content_template_ids.includes(template.id));
   const typeLabel = currentProjectType?.name || PROJECT_TYPE_LABELS[project.type as ProjectType] || project.type;
   const currentPhases = currentProjectType?.phases || [];
   const currentPhaseIndex = currentPhases.findIndex((phase) => phase.key === project.phase_key);
-  const coreFieldsConfig = currentProjectType?.core_fields_config ?? DEFAULT_CORE_FIELDS;
-  const coreField = (key: string) => coreFieldsConfig.find(f => f.key === key);
+
+  // フィールドをセクション別にグループ化
+  const fieldsBySection = allFields.reduce<Record<string, typeof allFields>>((acc, f) => {
+    const sec = f.section?.trim() || '詳細';
+    if (!acc[sec]) acc[sec] = [];
+    acc[sec].push(f);
+    return acc;
+  }, {});
+  // セクション表示順：組み込みフィールドのセクションを先に、その後カスタム
+  const sectionOrder = Array.from(new Set(allFields.map(f => f.section?.trim() || '詳細')));
 
   return (
     <div className="h-full flex flex-col">
@@ -1007,93 +1021,56 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
           {tab === 'fields' ? (
             <>
-              {/* コアフィールド */}
+              {/* 種別セレクター（常に最上部） */}
               <section>
-                <h2 className="section-title mb-3">基本情報</h2>
-                <div className="card p-5 grid grid-cols-2 gap-4">
-                  {/* 種別は常に表示 */}
-                  <div>
-                    <label className="field-label">種別</label>
-                    <select
-                      className="field-input"
-                      value={project.type}
-                      onChange={e => {
-                        const nextType = e.target.value as typeof project.type;
-                        const nextDefinition = projectTypes.find((definition) => definition.key === nextType);
-                        const nextPhaseKey = nextDefinition?.phases.find((phase) => phase.key === project.phase_key)
-                          ? project.phase_key
-                          : (nextDefinition?.phases[0]?.key || '');
-                        setProject({ ...project, type: nextType, phase_key: nextPhaseKey });
-                      }}
-                    >
-                      {projectTypes.map((definition) => <option key={definition.id} value={definition.key}>{definition.name}</option>)}
-                    </select>
-                  </div>
-                  {coreField('target')?.enabled && (
-                    <div>
-                      <label className="field-label">{coreField('target')!.label}</label>
-                      <input className="field-input" value={project.target} onChange={e => setProject({ ...project, target: e.target.value })} placeholder="例: 30代 BtoB マーケター" />
-                    </div>
-                  )}
-                  {coreField('start_date')?.enabled && (
-                    <div>
-                      <label className="field-label">{coreField('start_date')!.label}</label>
-                      <input className="field-input" type="date" value={project.start_date} onChange={e => setProject({ ...project, start_date: e.target.value })} />
-                    </div>
-                  )}
-                  {coreField('end_date')?.enabled && (
-                    <div>
-                      <label className="field-label">{coreField('end_date')!.label}</label>
-                      <input className="field-input" type="date" value={project.end_date} onChange={e => setProject({ ...project, end_date: e.target.value })} />
-                    </div>
-                  )}
-                  {coreField('budget')?.enabled && (
-                    <div>
-                      <label className="field-label">{coreField('budget')!.label}</label>
-                      <input className="field-input" value={project.budget} onChange={e => setProject({ ...project, budget: e.target.value })} placeholder="例: ¥500,000" />
-                    </div>
-                  )}
-                  {coreField('channels')?.enabled && (
-                    <div>
-                      <label className="field-label">{coreField('channels')!.label}（カンマ区切り）</label>
-                      <input className="field-input" value={channels.join(', ')} onChange={e => setProject({ ...project, channels: JSON.stringify(e.target.value.split(',').map(s => s.trim()).filter(Boolean)) })} placeholder="Web, SNS, メール" />
-                    </div>
-                  )}
-                  {coreField('description')?.enabled && (
-                    <div className="col-span-2">
-                      <label className="field-label">{coreField('description')!.label}</label>
-                      <textarea className="field-input" rows={3} value={project.description} onChange={e => setProject({ ...project, description: e.target.value })} placeholder="施策の目的・背景・概要を記述" />
-                    </div>
-                  )}
+                <h2 className="section-title mb-3">プロジェクト種別</h2>
+                <div className="card p-4">
+                  <select
+                    className="field-input"
+                    value={project.type}
+                    onChange={e => {
+                      const nextType = e.target.value as typeof project.type;
+                      const nextDefinition = projectTypes.find((definition) => definition.key === nextType);
+                      const nextPhaseKey = nextDefinition?.phases.find((phase) => phase.key === project.phase_key)
+                        ? project.phase_key
+                        : (nextDefinition?.phases[0]?.key || '');
+                      setProject({ ...project, type: nextType, phase_key: nextPhaseKey });
+                    }}
+                  >
+                    {projectTypes.map((definition) => <option key={definition.id} value={definition.key}>{definition.name}</option>)}
+                  </select>
                 </div>
               </section>
 
-              {/* フィールド */}
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="section-title">フィールド</h2>
+              {/* セクション別フィールド表示 */}
+              {allFields.length === 0 ? (
+                <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
+                  <p className="text-sm">このプロジェクト種別にはフィールドがありません</p>
+                  <p className="text-xs mt-1">プロジェクト種別設定でフィールドを追加してください</p>
                 </div>
-                {customFields.length === 0 ? (
-                  <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-                    <p className="text-sm">このプロジェクト種別には追加フィールドがありません</p>
-                    <p className="text-xs mt-1">フィールド定義の追加や変更はプロジェクト設定から行ってください</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                    {customFields.map((f, i) => (
-                      <div key={f.id} className={f.layout === 'full' ? 'xl:col-span-2' : ''}>
-                        <CustomFieldRow
-                          field={f}
-                          globalAssetObjects={globalAssetObjects}
-                          onChange={nf => updateField(i, nf)}
-                          onCrawl={() => crawlField(f.id)}
-                          crawling={crawlingFieldId === f.id}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+              ) : (
+                sectionOrder.map(sec => (
+                  <section key={sec}>
+                    <h2 className="section-title mb-3">{sec}</h2>
+                    <div className="card p-5 grid grid-cols-2 gap-4">
+                      {(fieldsBySection[sec] ?? []).map((f) => {
+                        const globalIdx = allFields.findIndex(af => af.id === f.id);
+                        return (
+                          <div key={f.id} className={f.layout === 'full' ? 'col-span-2' : ''}>
+                            <CustomFieldRow
+                              field={f}
+                              globalAssetObjects={globalAssetObjects}
+                              onChange={nf => updateField(globalIdx, nf)}
+                              onCrawl={() => crawlField(f.id)}
+                              crawling={crawlingFieldId === f.id}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))
+              )}
 
               {/* AI補完サジェスト */}
               {suggestions.length > 0 && (

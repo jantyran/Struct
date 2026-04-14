@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   try {
     const db = getDb();
-    
+
     const project = db.prepare(`
       SELECT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
@@ -49,8 +49,8 @@ export async function GET(_req: Request, { params }: Params) {
     `).all(params.id);
     const invitations = db.prepare("SELECT * FROM invitations WHERE project_id = ? AND status = 'PENDING'").all(params.id);
 
-    return NextResponse.json({ 
-      ...project, 
+    return NextResponse.json({
+      ...project,
       custom_fields: syncedFields,
       members: members.map((m: any) => ({ user: { email: m.email, name: m.name }, role: m.role })),
       invitations
@@ -73,12 +73,6 @@ export async function PUT(request: Request, { params }: Params) {
       type?: string;
       phase_key?: string;
       status?: string;
-      target?: string;
-      start_date?: string;
-      end_date?: string;
-      budget?: string;
-      channels?: string[];
-      description?: string;
       custom_fields?: Array<{
         id?: string;
         template_id?: string;
@@ -92,6 +86,8 @@ export async function PUT(request: Request, { params }: Params) {
         inherited_from?: string | null;
         crawled_content?: string | null;
         sort_order?: number;
+        is_builtin?: number;
+        section?: string;
       }>;
     };
 
@@ -102,12 +98,6 @@ export async function PUT(request: Request, { params }: Params) {
           type = COALESCE(?, type),
           phase_key = COALESCE(?, phase_key),
           status = COALESCE(?, status),
-          target = COALESCE(?, target),
-          start_date = COALESCE(?, start_date),
-          end_date = COALESCE(?, end_date),
-          budget = COALESCE(?, budget),
-          channels = COALESCE(?, channels),
-          description = COALESCE(?, description),
           updated_at = datetime('now')
         WHERE id = ?
       `).run(
@@ -115,12 +105,6 @@ export async function PUT(request: Request, { params }: Params) {
         body.type ?? null,
         body.phase_key ?? null,
         body.status ?? null,
-        body.target ?? null,
-        body.start_date ?? null,
-        body.end_date ?? null,
-        body.budget ?? null,
-        body.channels ? JSON.stringify(body.channels) : null,
-        body.description ?? null,
         params.id
       );
 
@@ -142,6 +126,8 @@ export async function PUT(request: Request, { params }: Params) {
           inherited_from: f.inherited_from ?? null,
           crawled_content: f.crawled_content ?? null,
           sort_order: f.sort_order ?? idx,
+          is_builtin: f.is_builtin ?? 0,
+          section: f.section ?? '',
         })) as CustomField[];
         const syncedFields = syncCustomFieldsWithDefinition(params.id, incomingFields, currentDefinition);
         persistProjectCustomFields(db, params.id, syncedFields);

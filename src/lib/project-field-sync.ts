@@ -74,6 +74,8 @@ function toCustomFieldRecord(projectId: string, template: ProjectFieldTemplate, 
     inherited_from: valueSeed?.inherited_from ?? null,
     crawled_content: valueSeed?.crawled_content ?? null,
     sort_order: sortOrder,
+    is_builtin: template.is_builtin ? 1 : 0,
+    section: typeof template.section === 'string' ? template.section : '',
   };
 }
 
@@ -93,6 +95,8 @@ export function syncCustomFieldsWithDefinition(projectId: string, existingFields
         project_id: projectId,
         layout: normalizeLayout(field.layout),
         sort_order: field.sort_order ?? index,
+        is_builtin: field.is_builtin ?? 0,
+        section: field.section ?? '',
       }))
       .sort((a, b) => a.sort_order - b.sort_order);
   }
@@ -108,8 +112,8 @@ export function persistProjectCustomFields(db: Database.Database, projectId: str
 
   for (const field of fields) {
     db.prepare(`
-      INSERT INTO custom_fields (id, project_id, template_id, key, label, type, value, options, layout, inherited, inherited_from, crawled_content, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO custom_fields (id, project_id, template_id, key, label, type, value, options, layout, inherited, inherited_from, crawled_content, sort_order, is_builtin, section)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       field.id,
       projectId,
@@ -123,7 +127,9 @@ export function persistProjectCustomFields(db: Database.Database, projectId: str
       field.inherited ?? 0,
       field.inherited_from ?? null,
       field.crawled_content ?? null,
-      field.sort_order ?? 0
+      field.sort_order ?? 0,
+      field.is_builtin ?? 0,
+      field.section ?? ''
     );
   }
 }

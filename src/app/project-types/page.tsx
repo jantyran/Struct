@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { CoreFieldConfig, GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
-import { DEFAULT_CORE_FIELDS, FIELD_TYPE_LABELS } from '@/types';
+import type { GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
+import { FIELD_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { createProjectTypeDefinition, defaultProjectTypeDefinitions } from '@/lib/project-types';
@@ -200,21 +200,46 @@ function FieldTemplateRow({
       className={`rounded-md border p-3 space-y-3 ${dragging ? 'opacity-60' : ''}`}
       style={{ borderColor: 'var(--border)' }}
     >
-      <div className="grid grid-cols-[28px_1.2fr_1fr_160px_120px_80px] gap-2 items-end">
+      <div className="grid grid-cols-[28px_1.2fr_0.8fr_1fr_140px_100px_80px] gap-2 items-end">
         <div className="text-sm text-center cursor-grab select-none" style={{ color: 'var(--text-muted)' }}>⋮⋮</div>
         <div>
           <label className="field-label">項目名</label>
-          <input className="field-input text-sm" value={field.label} onChange={(e) => onChange({ ...field, label: e.target.value })} />
+          <div className="flex items-center gap-1.5">
+            {field.is_builtin && (
+              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.2)' }}>
+                組込
+              </span>
+            )}
+            <input className="field-input text-sm" value={field.label} onChange={(e) => onChange({ ...field, label: e.target.value })} />
+          </div>
+        </div>
+        <div>
+          <label className="field-label">セクション</label>
+          <input
+            className="field-input text-sm"
+            value={field.section ?? ''}
+            onChange={(e) => onChange({ ...field, section: e.target.value })}
+            placeholder="基本情報 / 詳細 …"
+          />
         </div>
         <div>
           <label className="field-label">キー</label>
-          <input className="field-input text-sm" value={field.key} onChange={(e) => onChange({ ...field, key: e.target.value.replace(/\s+/g, '_') })} />
+          <input
+            className="field-input text-sm"
+            value={field.key}
+            disabled={field.is_builtin}
+            onChange={(e) => onChange({ ...field, key: e.target.value.replace(/\s+/g, '_') })}
+            style={{ opacity: field.is_builtin ? 0.55 : 1 }}
+          />
         </div>
         <div>
           <label className="field-label">種別</label>
           <select
             className="field-input text-sm"
             value={field.type}
+            disabled={field.is_builtin}
+            style={{ opacity: field.is_builtin ? 0.55 : 1 }}
             onChange={(e) => {
               const nextType = e.target.value as ProjectFieldTemplate['type'];
               const nextOptions = nextType === 'select'
@@ -239,7 +264,10 @@ function FieldTemplateRow({
             <option value="full">1列</option>
           </select>
         </div>
-        <button onClick={onRemove} className="btn-danger">削除</button>
+        {field.is_builtin
+          ? <div className="flex items-end pb-0.5"><span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>削除不可</span></div>
+          : <button onClick={onRemove} className="btn-danger">削除</button>
+        }
       </div>
 
       {field.type === 'select' && (
@@ -565,64 +593,17 @@ export default function ProjectTypesPage() {
                 </div>
 
                 <div className="rounded-md border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
-                  <div>
-                    <h2 className="section-title">基本情報フィールド設定</h2>
-                    <p className="text-xs mt-1 mb-3" style={{ color: 'var(--text-muted)' }}>
-                      プロジェクトの基本情報に表示するフィールドをカスタマイズできます。ラベル名の変更・非表示の設定が可能です。
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    {(definition.core_fields_config ?? DEFAULT_CORE_FIELDS).map((field: CoreFieldConfig) => (
-                      <div
-                        key={field.key}
-                        className="flex items-center gap-3 rounded-xl border px-3 py-2"
-                        style={{ borderColor: 'var(--border)', backgroundColor: field.enabled ? 'rgba(255,255,255,0.72)' : 'rgba(241,250,252,0.5)' }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={field.enabled}
-                          onChange={(e) => {
-                            const next = (definition.core_fields_config ?? DEFAULT_CORE_FIELDS).map((f: CoreFieldConfig) =>
-                              f.key === field.key ? { ...f, enabled: e.target.checked } : f
-                            );
-                            updateDefinition(index, { ...definition, core_fields_config: next });
-                          }}
-                          className="w-4 h-4 rounded accent-cyan-600"
-                        />
-                        <span className="text-xs w-24 shrink-0" style={{ color: 'var(--text-muted)' }}>{field.key}</span>
-                        <input
-                          className="field-input text-sm flex-1"
-                          value={field.label}
-                          disabled={!field.enabled}
-                          placeholder="ラベル名"
-                          onChange={(e) => {
-                            const next = (definition.core_fields_config ?? DEFAULT_CORE_FIELDS).map((f: CoreFieldConfig) =>
-                              f.key === field.key ? { ...f, label: e.target.value } : f
-                            );
-                            updateDefinition(index, { ...definition, core_fields_config: next });
-                          }}
-                          style={{ opacity: field.enabled ? 1 : 0.45 }}
-                        />
-                        {!field.enabled && (
-                          <span className="text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>非表示</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-md border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="section-title">項目設定</h2>
+                      <h2 className="section-title">フィールド設定</h2>
                       <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                        プロジェクト作成時に自動で入る項目定義です。参照型では Global Assets のオブジェクトを指定できます。
+                        「組込」は全プロジェクト共通の基本フィールドです。ラベル・セクション・表示幅を変更できます。カスタムフィールドは自由に追加・削除できます。
                       </p>
                     </div>
                     <button
                       onClick={() => updateDefinition(index, {
                         ...definition,
-                        field_templates: [...definition.field_templates, { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}', layout: 'half' }],
+                        field_templates: [...definition.field_templates, { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}', layout: 'half', section: '' }],
                       })}
                       className="btn-secondary text-xs py-1 px-3"
                     >

@@ -1,7 +1,16 @@
-import type { CoreFieldConfig, CoreFieldKey, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
-import { DEFAULT_CORE_FIELDS } from '@/types';
+import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
 
-const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'core_fields_config'>[] = [
+/** 組み込みフィールドテンプレートのデフォルト定義（全プロジェクト種別共通） */
+export const BUILTIN_FIELD_TEMPLATES: ProjectFieldTemplate[] = [
+  { id: '_builtin_target',      key: 'target',      label: 'ターゲット', type: 'text',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
+  { id: '_builtin_start_date',  key: 'start_date',  label: '開始日',    type: 'date',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
+  { id: '_builtin_end_date',    key: 'end_date',    label: '終了日',    type: 'date',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
+  { id: '_builtin_budget',      key: 'budget',      label: '予算',      type: 'text',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
+  { id: '_builtin_channels',    key: 'channels',    label: 'チャネル',  type: 'text',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
+  { id: '_builtin_description', key: 'description', label: '概要',      type: 'textarea', options: '{}', layout: 'full', is_builtin: true, section: '基本情報' },
+];
+
+const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'field_templates'>[] = [
   {
     id: 'project-type-event',
     key: 'event',
@@ -13,10 +22,6 @@ const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'core_fields_config'>[]
       { id: 'event-phase-preparation', key: 'preparation', name: '準備' },
       { id: 'event-phase-execution', key: 'execution', name: '実施' },
       { id: 'event-phase-followup', key: 'followup', name: '振り返り' },
-    ],
-    field_templates: [
-      { id: 'event-field-theme', key: 'theme', label: 'イベントテーマ', type: 'text', options: '{}', layout: 'half' },
-      { id: 'event-field-venue', key: 'venue', label: '会場', type: 'text', options: '{}', layout: 'half' },
     ],
     content_template_ids: ['content-template-sns-post', 'content-template-lp', 'content-template-email', 'content-template-report'],
   },
@@ -32,10 +37,6 @@ const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'core_fields_config'>[]
       { id: 'campaign-phase-launch', key: 'launch', name: '公開' },
       { id: 'campaign-phase-optimization', key: 'optimization', name: '改善' },
     ],
-    field_templates: [
-      { id: 'campaign-field-message', key: 'core_message', label: '訴求メッセージ', type: 'textarea', options: '{}', layout: 'full' },
-      { id: 'campaign-field-kpi', key: 'kpi', label: '主要KPI', type: 'text', options: '{}', layout: 'half' },
-    ],
     content_template_ids: ['content-template-sns-post', 'content-template-lp', 'content-template-email', 'content-template-ad-copy', 'content-template-report'],
   },
   {
@@ -50,13 +51,25 @@ const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'core_fields_config'>[]
       { id: 'content-phase-review', key: 'review', name: 'レビュー' },
       { id: 'content-phase-publish', key: 'publish', name: '公開' },
     ],
-    field_templates: [
-      { id: 'content-field-format', key: 'content_format', label: 'フォーマット', type: 'text', options: '{}', layout: 'half' },
-      { id: 'content-field-source', key: 'source_reference', label: '参照元URL', type: 'url', options: '{}', layout: 'full' },
-    ],
     content_template_ids: ['content-template-outline', 'content-template-first-draft'],
   },
 ];
+
+// カスタムフィールドテンプレートのデフォルト（組み込み以外）
+const DEFAULT_CUSTOM_TEMPLATES: Record<string, ProjectFieldTemplate[]> = {
+  event: [
+    { id: 'event-field-theme', key: 'theme', label: 'イベントテーマ', type: 'text', options: '{}', layout: 'half', section: '詳細' },
+    { id: 'event-field-venue', key: 'venue', label: '会場', type: 'text', options: '{}', layout: 'half', section: '詳細' },
+  ],
+  campaign: [
+    { id: 'campaign-field-message', key: 'core_message', label: '訴求メッセージ', type: 'textarea', options: '{}', layout: 'full', section: '詳細' },
+    { id: 'campaign-field-kpi', key: 'kpi', label: '主要KPI', type: 'text', options: '{}', layout: 'half', section: '詳細' },
+  ],
+  content: [
+    { id: 'content-field-format', key: 'content_format', label: 'フォーマット', type: 'text', options: '{}', layout: 'half', section: '詳細' },
+    { id: 'content-field-source', key: 'source_reference', label: '参照元URL', type: 'url', options: '{}', layout: 'full', section: '詳細' },
+  ],
+};
 
 function safeArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
@@ -87,26 +100,35 @@ function normalizeFieldTemplate(field: Partial<ProjectFieldTemplate>, index: num
     type: field.type || 'text',
     options: typeof field.options === 'string' && field.options ? field.options : '{}',
     layout: field.layout === 'full' ? 'full' : 'half',
+    is_builtin: field.is_builtin === true,
+    section: typeof field.section === 'string' ? field.section : (field.is_builtin ? '基本情報' : ''),
   };
 }
 
-const VALID_CORE_KEYS: CoreFieldKey[] = ['target', 'start_date', 'end_date', 'budget', 'channels', 'description'];
+/**
+ * stored field_templates から組み込みフィールドのカスタマイズを抽出し、
+ * デフォルト定義にマージして返す。
+ * stored に組み込みフィールドが存在しなければデフォルトを使う。
+ */
+function mergeBuiltinTemplates(storedTemplates: Partial<ProjectFieldTemplate>[]): ProjectFieldTemplate[] {
+  const storedBuiltins = storedTemplates.filter((t) => t.is_builtin === true || String(t.id ?? '').startsWith('_builtin_'));
 
-function normalizeCoreFieldsConfig(raw: unknown): CoreFieldConfig[] {
-  const defaults = DEFAULT_CORE_FIELDS;
-  if (!Array.isArray(raw)) return defaults;
-  return defaults.map((def) => {
-    const found = (raw as Partial<CoreFieldConfig>[]).find((item) => item?.key === def.key);
-    if (!found || !VALID_CORE_KEYS.includes(found.key as CoreFieldKey)) return def;
+  return BUILTIN_FIELD_TEMPLATES.map((def) => {
+    const stored = storedBuiltins.find((t) => t.id === def.id || t.key === def.key);
+    if (!stored) return def;
     return {
-      key: def.key,
-      label: typeof found.label === 'string' && found.label.trim() ? found.label.trim() : def.label,
-      enabled: typeof found.enabled === 'boolean' ? found.enabled : def.enabled,
+      ...def,
+      label: stored.label?.trim() || def.label,
+      layout: stored.layout === 'full' ? 'full' : def.layout,
+      section: typeof stored.section === 'string' ? stored.section : def.section,
     };
   });
 }
 
-function normalizeTypeDefinition(definition: Partial<ProjectTypeDefinition>, index: number): ProjectTypeDefinition {
+function normalizeTypeDefinition(
+  definition: Partial<ProjectTypeDefinition> & { field_templates?: Partial<ProjectFieldTemplate>[] },
+  index: number
+): ProjectTypeDefinition {
   const legacyContentTemplates = safeArray<{ id?: string }>((definition as any).content_templates);
   const contentTemplateIds = safeArray<string>(definition.content_template_ids).filter(Boolean);
   const fallbackContentTemplateIds =
@@ -118,6 +140,17 @@ function normalizeTypeDefinition(definition: Partial<ProjectTypeDefinition>, ind
           ? ['content-template-outline', 'content-template-first-draft']
           : [];
 
+  const storedTemplates = safeArray<Partial<ProjectFieldTemplate>>(definition.field_templates);
+  // 組み込みフィールド（カスタマイズ反映済み）
+  const builtins = mergeBuiltinTemplates(storedTemplates);
+  // カスタムフィールド（is_builtin でないもの）
+  const customs = storedTemplates
+    .filter((t) => !t.is_builtin && !String(t.id ?? '').startsWith('_builtin_'))
+    .map(normalizeFieldTemplate);
+
+  // 初回（storedが空）かつデフォルト種別の場合、カスタム初期値を補完
+  const defaultCustoms = customs.length === 0 ? (DEFAULT_CUSTOM_TEMPLATES[definition.key ?? ''] ?? []) : customs;
+
   return {
     id: definition.id || `project-type-${index + 1}`,
     key: (definition.key || `project_type_${index + 1}`).trim() || `project_type_${index + 1}`,
@@ -125,18 +158,19 @@ function normalizeTypeDefinition(definition: Partial<ProjectTypeDefinition>, ind
     description: definition.description ?? '',
     is_default: definition.is_default === true,
     phases: safeArray<Partial<ProjectPhase>>(definition.phases).map(normalizePhase),
-    field_templates: safeArray<Partial<ProjectFieldTemplate>>(definition.field_templates).map(normalizeFieldTemplate),
-    core_fields_config: normalizeCoreFieldsConfig((definition as any).core_fields_config),
+    field_templates: [...builtins, ...defaultCustoms],
     content_template_ids: contentTemplateIds.length > 0
       ? contentTemplateIds
       : legacyContentTemplates.length > 0
-        ? legacyContentTemplates.map((template, contentIndex) => template.id || `content-template-${contentIndex + 1}`)
+        ? legacyContentTemplates.map((template, i) => template.id || `content-template-${i + 1}`)
         : fallbackContentTemplateIds,
   };
 }
 
 export function defaultProjectTypeDefinitions(): ProjectTypeDefinition[] {
-  return DEFAULT_PROJECT_TYPES.map((definition, index) => normalizeTypeDefinition(definition, index));
+  return DEFAULT_PROJECT_TYPES.map((definition, index) =>
+    normalizeTypeDefinition({ ...definition, field_templates: [] }, index)
+  );
 }
 
 export function normalizeProjectTypeDefinitions(data: Partial<ProjectTypeDefinition>[] | null | undefined): ProjectTypeDefinition[] {
