@@ -787,132 +787,199 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   return (
     <div className="h-full flex flex-col">
       {/* ヘッダー */}
-      <div className="px-6 py-5 border-b space-y-4" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.92) 100%)' }}>
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-          <button onClick={() => router.push(withBasePath('/'))} className="text-sm w-fit transition-colors" style={{ color: 'var(--text-muted)' }}>← 戻る</button>
-          <div className="flex-1 min-w-0">
-            <input
-              className="bg-transparent text-xl font-bold w-full focus:outline-none border-b border-transparent transition-colors"
-              style={{ color: 'var(--text-primary)' }}
-              value={project.name}
-              onChange={e => setProject({ ...project, name: e.target.value })}
-            />
-            <div className="flex flex-wrap items-center gap-2 mt-1">
-              <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{typeLabel}</span>
-              {project.cloned_from && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>• クローン</span>}
-              {inheritedCount > 0 && <span className="text-xs" style={{ color: '#b66a10' }}>• 要確認フィールド {inheritedCount}件</span>}
-            </div>
+      <div className="border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, #ffffff 0%, rgba(241,250,252,0.95) 100%)' }}>
+        {/* 1行: 戻る | タイトル + バッジ類 | ステータス + 保存 + 削除 */}
+        <div className="px-6 py-3 flex items-center gap-3">
+          {/* 戻るボタン */}
+          <button
+            onClick={() => router.push(withBasePath('/'))}
+            className="inline-flex items-center gap-1 text-xs font-medium shrink-0 transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            一覧
+          </button>
+
+          <span style={{ color: 'var(--border)', fontSize: 18, lineHeight: 1 }}>|</span>
+
+          {/* タイトル */}
+          <input
+            className="bg-transparent text-lg font-bold focus:outline-none transition-colors leading-tight flex-1 min-w-0"
+            style={{ color: 'var(--text-primary)', borderBottom: '2px solid transparent' }}
+            onFocus={e => (e.target.style.borderBottomColor = 'var(--accent)')}
+            onBlur={e => (e.target.style.borderBottomColor = 'transparent')}
+            value={project.name}
+            onChange={e => setProject({ ...project, name: e.target.value })}
+          />
+
+          {/* バッジ群（種別・クローン・要確認） */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
+              style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.2)' }}
+            >
+              {typeLabel}
+            </span>
+            {project.cloned_from && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px]" style={{ backgroundColor: 'rgba(111,135,148,0.08)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                クローン
+              </span>
+            )}
+            {inheritedCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ backgroundColor: 'rgba(215,138,29,0.1)', color: '#b66a10', border: '1px solid rgba(215,138,29,0.22)' }}>
+                ⚠ {inheritedCount}件
+              </span>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {savingMsg && <span className="text-xs" style={{ color: 'var(--success)' }}>{savingMsg}</span>}
-            <select className="field-input text-xs w-auto" value={project.status} onChange={e => setProject({ ...project, status: e.target.value as typeof project.status })}>
-              <option value="draft">下書き</option>
-              <option value="active">実施中</option>
-              <option value="archived">アーカイブ</option>
-            </select>
-            <button onClick={() => save(project)} disabled={saving} className="btn-primary text-sm">
-              {saving ? '保存中...' : '保存'}
-            </button>
-            <button onClick={deleteProject} className="btn-danger text-xs">削除</button>
+
+          {/* 区切り */}
+          <span style={{ color: 'var(--border)', fontSize: 18, lineHeight: 1 }}>|</span>
+
+          {/* ステータス・ピルセレクター */}
+          <div className="flex items-center rounded-xl overflow-hidden border shrink-0" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}>
+            {([
+              { value: 'draft',    label: '下書き',   dot: '#9fb8c4' },
+              { value: 'active',   label: 'アクティブ', dot: '#1f9d72' },
+              { value: 'archived', label: 'アーカイブ', dot: '#9fb8c4' },
+            ] as { value: typeof project.status; label: string; dot: string }[]).map((opt, i) => {
+              const isSelected = project.status === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setProject({ ...project, status: opt.value })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all"
+                  style={{
+                    borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
+                    background: isSelected
+                      ? opt.value === 'active'
+                        ? 'linear-gradient(135deg, rgba(31,157,114,0.15) 0%, rgba(183,244,216,0.4) 100%)'
+                        : opt.value === 'draft'
+                          ? 'linear-gradient(135deg, rgba(15,154,177,0.1) 0%, rgba(126,215,222,0.2) 100%)'
+                          : 'rgba(159,184,196,0.12)'
+                      : 'transparent',
+                    color: isSelected
+                      ? opt.value === 'active' ? 'var(--success)' : opt.value === 'draft' ? 'var(--accent)' : 'var(--text-secondary)'
+                      : 'var(--text-muted)',
+                  }}
+                >
+                  <span
+                    className="inline-block rounded-full shrink-0"
+                    style={{
+                      width: 7, height: 7,
+                      backgroundColor: isSelected ? opt.dot : 'var(--border)',
+                      boxShadow: isSelected ? `0 0 0 2px ${opt.dot}44` : 'none',
+                    }}
+                  />
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
+
+          {/* 保存・削除 */}
+          {savingMsg && (
+            <span className="inline-flex items-center gap-1 text-xs shrink-0" style={{ color: 'var(--success)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              {savingMsg}
+            </span>
+          )}
+          <button onClick={() => save(project)} disabled={saving} className="btn-primary text-sm shrink-0">
+            {saving ? (
+              <span className="flex items-center gap-1.5">
+                <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+                保存中...
+              </span>
+            ) : '保存'}
+          </button>
+          <button onClick={deleteProject} className="btn-danger text-xs shrink-0">削除</button>
         </div>
 
-        {currentPhases.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>進行パス</p>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  全体の流れと現在地を表示しています。クリックで現在フェーズを切り替えられます。
-                </p>
-              </div>
-              <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                現在地: {currentPhases[currentPhaseIndex]?.name || '未設定'}
-              </div>
-            </div>
-            <div className="overflow-x-auto pb-1">
-              <div className="flex min-w-max items-stretch">
+        {/* 進行パス（Salesforce Path スタイル・全幅均等） */}
+        {currentPhases.length > 0 ? (
+          <div>
+            {/* パス本体: flex で全幅均等分割 */}
+            <div className="flex w-full overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
               {currentPhases.map((phase, phaseIndex) => {
                 const isCurrent = phase.key === project.phase_key;
                 const isCompleted = currentPhaseIndex >= 0 && phaseIndex < currentPhaseIndex;
-                const isUpcoming = !isCurrent && !isCompleted;
+                const isFirst = phaseIndex === 0;
                 const isLast = phaseIndex === currentPhases.length - 1;
+
+                const bgColor = isCurrent
+                  ? '#0f9ab1'
+                  : isCompleted
+                    ? '#1f9d72'
+                    : 'rgba(241,250,252,0.9)';
+                const textColor = isCurrent || isCompleted ? '#ffffff' : 'var(--text-secondary)';
+
                 return (
                   <button
                     key={phase.id}
                     type="button"
                     onClick={() => setProject({ ...project, phase_key: phase.key })}
-                    className="relative flex min-w-[140px] items-center justify-between px-4 py-3 text-sm font-medium transition-colors border-y border-l first:rounded-l-2xl last:rounded-r-2xl"
+                    title={`フェーズを「${phase.name}」に切り替え`}
+                    className="group relative flex flex-1 h-10 items-center justify-center transition-all focus:outline-none"
                     style={{
-                      marginRight: isLast ? 0 : 18,
-                      borderColor: isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)',
-                      borderRightColor: isLast ? (isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)') : 'transparent',
-                      background: isCurrent
-                        ? 'linear-gradient(135deg, rgba(15,154,177,0.2) 0%, rgba(126,215,222,0.34) 100%)'
-                        : isCompleted
-                          ? 'linear-gradient(135deg, rgba(31,157,114,0.16) 0%, rgba(183,244,216,0.6) 100%)'
-                          : 'linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(241,250,252,0.86) 100%)',
-                      color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-secondary)',
-                      boxShadow: isCurrent ? '0 10px 24px rgba(15,154,177,0.14)' : 'none',
+                      minWidth: 80,
+                      paddingLeft: isFirst ? 16 : 24,
+                      paddingRight: isLast ? 16 : 8,
+                      background: bgColor,
+                      color: textColor,
+                      clipPath: isFirst
+                        ? isLast
+                          ? 'inset(0)'
+                          : 'polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)'
+                        : isLast
+                          ? 'polygon(0 0, 14px 50%, 0 100%, 100% 100%, 100% 0)'
+                          : 'polygon(0 0, 14px 50%, 0 100%, calc(100% - 14px) 100%, 100% 50%, calc(100% - 14px) 0)',
+                      filter: isCurrent ? 'drop-shadow(0 3px 8px rgba(15,154,177,0.3))' : 'none',
+                      zIndex: currentPhases.length - phaseIndex,
+                      marginLeft: isFirst ? 0 : -2,
+                      border: 'none',
+                      outline: 'none',
                     }}
                   >
-                    {!isLast && (
-                      <>
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-[-1px] right-[-19px] z-20 h-[calc(100%+2px)] w-5"
-                          style={{
-                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
-                            background: isCurrent
-                              ? 'linear-gradient(135deg, rgba(15,154,177,0.2) 0%, rgba(126,215,222,0.34) 100%)'
-                              : isCompleted
-                                ? 'linear-gradient(135deg, rgba(31,157,114,0.16) 0%, rgba(183,244,216,0.6) 100%)'
-                                : 'linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(241,250,252,0.86) 100%)',
-                          }}
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-[-1px] right-[-20px] h-[calc(100%+2px)] w-5"
-                          style={{
-                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
-                            background: isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)',
-                            zIndex: 10,
-                          }}
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-[1px] right-[-16px] z-30 h-[calc(100%-2px)] w-4"
-                          style={{
-                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
-                            background: 'var(--bg-base)',
-                          }}
-                        />
-                      </>
-                    )}
-                    <span className="relative z-40 flex items-center gap-2">
-                      <span
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold"
-                        style={{
-                          backgroundColor: isCurrent ? 'rgba(255,255,255,0.78)' : isCompleted ? 'rgba(255,255,255,0.72)' : 'rgba(237,245,248,0.95)',
-                          color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-muted)',
-                        }}
-                      >
-                        {phaseIndex + 1}
-                      </span>
-                      <span>{phase.name}</span>
+                    <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(255,255,255,0.12)' }} />
+                    {/* アイコン */}
+                    <span
+                      className="relative z-10 inline-flex shrink-0 items-center justify-center rounded-full mr-1.5"
+                      style={{
+                        width: 18, height: 18,
+                        backgroundColor: isCurrent || isCompleted ? 'rgba(255,255,255,0.22)' : 'rgba(15,154,177,0.1)',
+                        color: isCurrent || isCompleted ? '#fff' : 'var(--text-muted)',
+                        fontSize: 10, fontWeight: 700,
+                      }}
+                    >
+                      {isCompleted ? (
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      ) : (
+                        phaseIndex + 1
+                      )}
                     </span>
-                    <span className="relative z-40 text-xs" style={{ color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-muted)' }}>
-                      {isCurrent ? 'Now' : isCompleted ? 'Done' : isUpcoming ? 'Next' : ''}
-                    </span>
+                    {/* 名前 */}
+                    <span className="relative z-10 text-[12px] font-semibold truncate" style={{ color: textColor }}>{phase.name}</span>
                   </button>
                 );
               })}
-              </div>
+            </div>
+            {/* プログレスバー: パスと同じ幅で確実に揃う */}
+            <div className="w-full h-[3px]" style={{ background: 'var(--border)' }}>
+              <div
+                className="h-full transition-all duration-500"
+                style={{
+                  background: 'linear-gradient(90deg, #1f9d72 0%, #0f9ab1 100%)',
+                  width: currentPhaseIndex >= 0
+                    ? `${Math.round(((currentPhaseIndex + 1) / currentPhases.length) * 100)}%`
+                    : '0%',
+                }}
+              />
             </div>
           </div>
-        )}
-        {currentPhases.length === 0 && (
-          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        ) : (
+          <div className="px-6 pb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
             この種別にはまだフェーズ定義がありません。プロジェクト種別設定で追加してください。
           </div>
         )}

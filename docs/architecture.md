@@ -2,22 +2,25 @@
 
 ## 1. 概要
 
-Struct は、マーケティング施策に必要な情報を構造化し、AI 生成と再利用を支える Next.js アプリです。
+Struct は `MKTキャンペーン運用デスク` として使う、認証付きのキャンペーン管理アプリです。  
+キャンペーンやイベントの進行、構造化データ、生成コンテンツ、AI 利用設定をユーザー単位またはプロジェクト単位で管理します。
 
-アプリは次の 2 系統の情報を扱います。
+アプリは次の 3 系統の情報を扱います。
 
-- ユーザー単位の Global Assets
-  - 会社情報
-  - ブランドボイス
-  - ブランドガイドライン
-  - 製品 / サービス情報
-- プロジェクト単位の情報
+- ユーザー単位の設定とマスターデータ
+  - Global Assets
+  - プロジェクト種別定義
+  - 生成コンテンツ定義
+  - AI 設定
+- プロジェクト単位の運用データ
   - Project Core
-  - Custom Fields
-  - 生成済みアセット
+  - フィールド値
+  - フェーズ進行
+  - 生成済みコンテンツ
   - メンバーと招待情報
-
-プロジェクトはオーナーとメンバーで共有でき、蓄積済みのブランド情報と案件情報を AI に渡してマーケティング成果物を生成します。
+- 公開向け情報
+  - About
+  - Guide
 
 ## 2. 技術スタック
 
@@ -38,8 +41,9 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 - パスワードハッシュ
   - `bcryptjs`
 - AI
-  - Anthropic SDK
-  - モデル: `claude-haiku-4-5-20251001`
+  - Google Gemini
+  - OpenAI API
+  - Anthropic API
 - HTML 抽出
   - `cheerio`
 - ID 生成
@@ -49,14 +53,18 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 
 実装上、重要なのは以下です。
 
-- `ANTHROPIC_API_KEY`
-  - AI 生成と AI 補完に使用
 - `JWT_SECRET`
   - セッション署名用
-  - 未設定時はローカル向けの固定値へフォールバック
 - `NEXT_PUBLIC_BASE_URL`
   - 招待 URL 生成に使用
-  - 未設定時は `http://localhost:3002`
+  - 外部アクセス URL に合わせる
+- `NEXT_PUBLIC_BASE_PATH`
+  - 既定は空
+  - サブパス配備時のみ使用
+
+補足:
+
+- AI API キーとモデル設定は `.env` ではなく `設定 > AI設定` に保存する
 
 ## 4. ディレクトリ構成
 
@@ -72,42 +80,38 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 │   └── struct.db
 └── src/
     ├── app/
+    │   ├── about/page.tsx
     │   ├── api/
+    │   │   ├── ai-settings/route.ts
     │   │   ├── auth/
-    │   │   │   ├── login/route.ts
-    │   │   │   ├── logout/route.ts
-    │   │   │   ├── me/route.ts
-    │   │   │   └── signup/route.ts
+    │   │   ├── content-templates/route.ts
     │   │   ├── global-assets/route.ts
     │   │   ├── invites/[token]/
-    │   │   │   ├── route.ts
-    │   │   │   └── accept/route.ts
+    │   │   ├── project-types/route.ts
     │   │   └── projects/
-    │   │       ├── route.ts
-    │   │       └── [id]/
-    │   │           ├── route.ts
-    │   │           ├── assets/route.ts
-    │   │           ├── clone/route.ts
-    │   │           ├── complete/route.ts
-    │   │           ├── crawl/route.ts
-    │   │           ├── generate/route.ts
-    │   │           └── invite/route.ts
     │   ├── global-assets/page.tsx
-    │   ├── invites/[token]/page.tsx
-    │   ├── login/page.tsx
-    │   ├── signup/page.tsx
-    │   ├── projects/[id]/page.tsx
+    │   ├── global-assets/[objectId]/page.tsx
+    │   ├── guide/page.tsx
     │   ├── layout.tsx
-    │   └── page.tsx
+    │   ├── login/page.tsx
+    │   ├── page.tsx
+    │   ├── project-types/page.tsx
+    │   ├── projects/[id]/page.tsx
+    │   ├── settings/page.tsx
+    │   ├── settings/ai/page.tsx
+    │   ├── settings/content-templates/page.tsx
+    │   └── signup/page.tsx
     ├── components/
     │   └── AuthContext.tsx
     ├── lib/
     │   ├── ai/
-    │   │   ├── client.ts
-    │   │   └── prompt-builder.ts
     │   ├── auth.ts
+    │   ├── content-templates.ts
     │   ├── crawler.ts
-    │   └── db/index.ts
+    │   ├── db/index.ts
+    │   ├── global-assets.ts
+    │   ├── project-field-sync.ts
+    │   └── project-types.ts
     └── types/index.ts
 ```
 
@@ -117,56 +121,107 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 
 `src/app/layout.tsx`
 
-- 左サイドバーに `ダッシュボード` と `Global Assets`
-- 未ログイン時はログイン、サインアップ画面以外で実質的にナビを出さない
-- `AuthProvider` が全画面を包む
+- 左サイドバー上部に主要ナビ
+- 下部に `設定`、メールアドレス、ログアウトを配置
+- タイトル表記は `Struct` / `MKTキャンペーン運用デスク`
+- 未ログイン時は公開向けリンクのみ表示
 
-### 5.2 認証画面
+### 5.2 公開ページ
+
+- `src/app/about/page.tsx`
+  - サービス概要
+- `src/app/guide/page.tsx`
+  - 使い方
+
+### 5.3 認証画面
 
 - `src/app/login/page.tsx`
-  - `/api/auth/login` を呼ぶ
 - `src/app/signup/page.tsx`
-  - `/api/auth/signup` を呼ぶ
 
-### 5.3 ダッシュボード
+### 5.4 ダッシュボード
 
 `src/app/page.tsx`
 
-- アクセス可能なプロジェクト一覧を表示
+- 参照可能なプロジェクト一覧
 - 新規作成モーダル
-- クローンモーダル
+- 種別ごとの初期フェーズ表示
 - ステータス / 種別フィルタ
-- 総数、実施中、下書きの集計
 
-### 5.4 Global Assets
+### 5.5 Global Assets 一覧
 
 `src/app/global-assets/page.tsx`
 
-- 会社情報編集
-- ブランドボイス編集
-- ブランドガイドライン編集
-- 製品 / サービスの追加、更新、削除
-- 保存先は `/api/global-assets`
+- オブジェクト一覧と追加
+- 各オブジェクト詳細への導線
 
-### 5.5 プロジェクト詳細
+### 5.6 Global Assets 詳細
+
+`src/app/global-assets/[objectId]/page.tsx`
+
+- オブジェクト設定
+- 項目設定
+- レコード一覧と編集
+- `参照` / `複数参照` による他オブジェクト参照
+
+### 5.7 設定ハブ
+
+`src/app/settings/page.tsx`
+
+- AI 設定
+- 生成コンテンツ設定
+- プロジェクト設定
+
+### 5.8 AI 設定
+
+`src/app/settings/ai/page.tsx`
+
+- プロバイダ選択
+- モデル入力
+- Base URL 入力
+- API キー入力
+
+### 5.9 生成コンテンツ設定
+
+`src/app/settings/content-templates/page.tsx`
+
+- アコーディオン形式
+- 順番入れ替え
+- チャネル選択
+- テキスト形式選択
+- トーン、必須要素、構成例、指示の管理
+
+### 5.10 プロジェクト設定
+
+`src/app/project-types/page.tsx`
+
+- 種別ごとのアコーディオン UI
+- 種別設定
+- フェーズ設定
+- フィールド設定
+- 利用する生成コンテンツの複数選択
+- 順番入れ替えと列幅設定
+- `group` / `group_list` の子項目設定
+
+### 5.11 プロジェクト詳細
 
 `src/app/projects/[id]/page.tsx`
 
-- プロジェクト名、ステータス、基本情報の編集
-- Custom Fields の追加、削除、更新
-- URL 型フィールドのクロール
-- AI 補完提案の取得と適用
-- AI 生成対象の選択と生成実行
-- 生成済みアセットの表示、コピー、削除
-- 継承フィールドの警告表示
+- 基本情報編集
+- フェーズ Path UI
+- 設定由来フィールドの値入力
+- Global Assets 参照
+- `group` / `group_list` 入力
+- 生成コンテンツの選択、追加指示付き生成
+- 生成済みコンテンツの直接編集
+- 招待管理
 
-### 5.6 招待画面
+### 5.12 招待画面
 
 `src/app/invites/[token]/page.tsx`
 
-- 招待トークンの内容確認
+- 招待トークン確認
 - ログイン誘導
-- 招待受諾後に対象プロジェクトへ遷移
+- 招待受諾後のプロジェクト参加
 
 ## 6. 認証と権限制御
 
@@ -176,16 +231,16 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 
 - `createSession(userId)` で JWT を発行
 - Cookie 名は `session`
-- 有効期限は 5 日
-- `getSession()` で Cookie を検証し、`users` テーブルから現在ユーザーを取得
+- `getSession()` で Cookie を検証し、現在ユーザーを返す
 - `requireSession()` は未認証時に例外を投げる
 
 ### 6.2 権限モデル
 
-- プロジェクトには `owner_id` がある
-- `project_members` に参加ユーザーを保持する
-- 一覧取得、詳細取得、更新、AI 生成、クロール、アセット取得はオーナーまたはメンバーが可能
-- 招待発行と削除はオーナーのみ可能
+- `global_assets` はユーザー単位で保持
+- プロジェクトは `owner_id` を持つ
+- `project_members` で共同編集対象を保持
+- 招待発行と削除はオーナーのみ
+- プロジェクト詳細、生成、クロール、アセット取得はオーナーまたはメンバーが可能
 
 ## 7. データモデル
 
@@ -199,11 +254,49 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 - `name`
 - `created_at`
 
-### 7.2 projects
+### 7.2 global_assets
+
+- `id`
+- `user_id`
+- `objects`
+- `project_types`
+- `content_templates`
+- `ai_settings`
+- `updated_at`
+
+補足:
+
+- `objects` は Global Assets オブジェクト定義とレコードの JSON
+- `project_types` はプロジェクト種別定義の JSON
+- `content_templates` は生成コンテンツ定義の JSON
+- `ai_settings` は AI 設定の JSON
+- 1 ユーザー 1 レコード前提
+
+### 7.3 GlobalAssetObject
+
+- `id`
+- `key`
+- `name`
+- `description`
+- `fields`
+- `records`
+
+項目型:
+
+- `text`
+- `textarea`
+- `url`
+- `number`
+- `date`
+- `reference`
+- `reference_multi`
+
+### 7.4 projects
 
 - `id`
 - `name`
 - `type`
+- `phase_key`
 - `status`
 - `owner_id`
 - `cloned_from`
@@ -218,9 +311,10 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 
 補足:
 
-- `channels` は配列ではなく JSON 文字列で保存される
+- `channels` は JSON 文字列で保存
+- `phase_key` は現在フェーズを表す
 
-### 7.3 project_members
+### 7.5 project_members
 
 - `id`
 - `project_id`
@@ -228,7 +322,7 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 - `role`
 - `created_at`
 
-### 7.4 invitations
+### 7.6 invitations
 
 - `id`
 - `project_id`
@@ -239,31 +333,17 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 - `expires_at`
 - `created_at`
 
-### 7.5 global_assets
-
-- `id`
-- `user_id`
-- `company_name`
-- `company_description`
-- `brand_voice`
-- `brand_guidelines`
-- `products`
-- `updated_at`
-
-補足:
-
-- `products` は JSON 文字列で保存される
-- 1 ユーザー 1 レコード前提
-
-### 7.6 custom_fields
+### 7.7 custom_fields
 
 - `id`
 - `project_id`
+- `template_id`
 - `key`
 - `label`
 - `type`
 - `value`
 - `options`
+- `layout`
 - `inherited`
 - `inherited_from`
 - `crawled_content`
@@ -271,11 +351,13 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 
 補足:
 
-- `type` は `text | textarea | url | date | select`
-- `options` は JSON 文字列
-- 値付きクローン時は `inherited = 1`
+- `type` は `text | textarea | url | date | select | reference | reference_multi | group | group_list`
+- `layout` は `half | full`
+- `options` は型ごとの設定 JSON
+- `group` / `group_list` は子項目定義を `options.children` に持つ
+- `group` / `group_list` の値は `value` に JSON 文字列で保存する
 
-### 7.7 generated_assets
+### 7.8 generated_assets
 
 - `id`
 - `project_id`
@@ -287,81 +369,83 @@ Struct は、マーケティング施策に必要な情報を構造化し、AI �
 
 補足:
 
+- `asset_type` は固定列挙ではなく、生成コンテンツ定義の `key` ベース
 - `warnings` は JSON 文字列
-- `asset_type` は `lp | dm | sns_twitter | sns_linkedin | ad_copy | email | report`
 
-## 8. 永続化
+## 8. 設計方針
 
-`src/lib/db/index.ts`
+### 8.1 Global Assets とプロジェクト項目の役割分担
 
-- DB ファイルは `data/struct.db`
-- 初回アクセス時に DB 接続を初期化
-- `journal_mode = WAL`
-- `foreign_keys = ON`
-- `CREATE TABLE IF NOT EXISTS` で起動時にスキーマを保証
+- 再利用・横断管理したいもの
+  - Global Assets のオブジェクトで管理
+- その案件だけで完結するまとまり
+  - `group`
+- その案件内で複数件持つまとまり
+  - `group_list`
 
-この層は SQL 風 API のラッパーではなく、`better-sqlite3` を直接使う構成です。
+このため、Salesforce 的な参照モデルと、案件内だけで閉じるグループ入力を併用する設計にしている。
+
+### 8.2 プロジェクト設定の反映
+
+- プロジェクト種別の変更は既存プロジェクトにも反映する
+- 反映対象
+  - 順番
+  - レイアウト
+  - ラベル
+  - キー
+  - 型
+  - 選択肢
+  - 参照設定
+- 値はプロジェクト側の入力値を保持する
+
+同期は `src/lib/project-field-sync.ts` で扱う。
+
+### 8.3 読み取り時の自動再保存はしない
+
+- `GET /api/projects/[id]` では同期結果を返すが、表示だけで DB 再保存はしない
+- 実保存は `プロジェクト設定` 保存時またはプロジェクト保存時に行う
+- これにより、詳細表示時の不要な書き込みを避けている
 
 ## 9. API 構成
 
 ### 9.1 認証
 
 - `POST /api/auth/signup`
-  - ユーザー作成
-  - パスワードをハッシュ化
-  - セッションを作成
 - `POST /api/auth/login`
-  - 資格情報を検証してセッション作成
 - `POST /api/auth/logout`
-  - `session` Cookie を削除
 - `GET /api/auth/me`
-  - 現在ユーザーを返す
 
-### 9.2 Global Assets
+### 9.2 設定 / マスターデータ
 
 - `GET /api/global-assets`
-  - 現在ユーザーの Global Assets を返す
 - `PUT /api/global-assets`
-  - 現在ユーザーの Global Assets を更新
+- `GET /api/project-types`
+- `PUT /api/project-types`
+- `GET /api/content-templates`
+- `PUT /api/content-templates`
+- `GET /api/ai-settings`
+- `PUT /api/ai-settings`
 
 ### 9.3 プロジェクト
 
 - `GET /api/projects`
-  - オーナーまたはメンバーとして参照可能なプロジェクト一覧
 - `POST /api/projects`
-  - 新規作成
 - `GET /api/projects/[id]`
-  - プロジェクト本体、Custom Fields、Members、Pending Invitations を返す
 - `PUT /api/projects/[id]`
-  - 基本情報と Custom Fields をまとめて更新
 - `DELETE /api/projects/[id]`
-  - オーナーのみ削除可
-
-### 9.4 補助 API
-
 - `POST /api/projects/[id]/clone`
-  - プロジェクト複製
 - `POST /api/projects/[id]/crawl`
-  - URL 型フィールドの本文抽出
 - `POST /api/projects/[id]/complete`
-  - 未入力フィールド向け AI 補完提案
 - `POST /api/projects/[id]/generate`
-  - マーケティングアセット生成
 - `GET /api/projects/[id]/assets`
-  - 生成済みアセット一覧
+- `PATCH /api/projects/[id]/assets`
 - `DELETE /api/projects/[id]/assets`
-  - 生成済みアセット削除
 - `POST /api/projects/[id]/invite`
-  - オーナーが招待 URL を発行
 
-### 9.5 招待
+### 9.4 招待
 
 - `GET /api/invites/[token]`
-  - 招待トークンの妥当性確認
 - `POST /api/invites/[token]/accept`
-  - 招待受諾
-  - `project_members` に登録
-  - 招待状態を `ACCEPTED` に更新
 
 ## 10. AI フロー
 
@@ -373,33 +457,72 @@ AI には次の情報を渡します。
 
 - Global Assets
 - Project Core
-- Custom Fields
+- フィールド値
+- `group` / `group_list` の展開内容
 - URL 取得済み本文
+- 生成コンテンツ定義
+- ユーザーが入力した追加指示
 
-継承フィールドが残っている場合は、プロンプト上でも要確認として扱います。
+### 10.2 実行設定
 
-### 10.2 生成対象
+`src/lib/ai/client.ts`
 
-- LP 構成案
-- ダイレクトメール
-- X 投稿 3 パターン
-- LinkedIn 投稿
-- 広告コピー 3 パターン
-- メールマガジン
-- 社内向け施策報告書
+- `Gemini`
+- `OpenAI`
+- `Anthropic`
 
-### 10.3 整合性チェック
+を設定に応じて切り替える。
 
-各生成テンプレートは末尾に `[⚠️ 整合性チェック]` セクションを要求します。`extractWarnings()` がこの部分を抽出して `generated_assets.warnings` に保存します。
+### 10.3 生成対象
+
+固定のアセット種別ではなく、`生成コンテンツ設定` で定義したテンプレートを対象とする。
+
+生成コンテンツ定義の主要項目:
+
+- `channel`
+- `channel_other`
+- `text_format`
+- `tone`
+- `mandatory_elements`
+- `example_structure`
+- `instruction`
 
 ### 10.4 AI 補完
 
-未入力フィールドのみを対象に JSON 配列形式で提案を返させ、画面側で個別適用します。
+未入力フィールド向けの補完提案 API は維持している。  
+補完対象は現在のフィールド構造を前提に組み立てる。
 
-## 11. 実装上の注意
+## 11. 今後の実装予定
 
-- `channels`、`options`、`products`、`warnings` は JSON 文字列で保存される
-- クライアント側で配列として扱う前に毎回 `JSON.parse` が必要
+### 11.1 プロジェクト ToDo
+
+目的:
+
+- プロジェクトごとの日常タスク管理
+- フェーズ進行と連動した実務の可視化
+
+想定:
+
+- プロジェクト詳細内で管理
+- チェック状態、期限、担当メモなどを持てる構成を検討
+
+### 11.2 プロジェクト ノート
+
+目的:
+
+- 打ち合わせメモ
+- 意思決定の記録
+- 補足情報の蓄積
+
+想定:
+
+- プロジェクト詳細内で管理
+- 時系列または自由記述の運用を想定
+
+## 12. 実装上の注意
+
+- `channels`、`options`、`warnings` は JSON 文字列で保存される
+- `group` / `group_list` の `value` も JSON 文字列で保持する
 - 招待 URL は `NEXT_PUBLIC_BASE_URL` に依存する
-- `JWT_SECRET` 未設定でも動くが、本番では必ず明示設定すべき
-- `.env.example` に現行未使用の設定が残っている場合は、実装に合わせて整理する
+- `JWT_SECRET` は本番では必ず明示設定する
+- AI 設定はユーザー単位で保存するため、サーバー全体の共通 API キー前提ではない

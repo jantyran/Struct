@@ -160,7 +160,7 @@ function ProjectCard({
 }) {
   const channels = (() => { try { return JSON.parse(project.channels) as string[]; } catch { return []; } })();
   const statusColors: Record<string, string> = { draft: 'text-slate-600 bg-slate-100', active: 'text-emerald-700 bg-emerald-50', archived: 'text-slate-500 bg-slate-100' };
-  const statusLabels: Record<string, string> = { draft: '下書き', active: '実施中', archived: 'アーカイブ' };
+  const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', archived: 'アーカイブ' };
   const typeColors: Record<string, string> = { event: 'text-sky-700', campaign: 'text-cyan-700', content: 'text-amber-700', other: 'text-slate-500' };
 
   return (
@@ -256,7 +256,7 @@ export default function Dashboard() {
   const typeLabelMap = Object.fromEntries(projectTypes.map((definition) => [definition.key, definition.name]));
   const filterChips = [
     { v: 'all', l: 'すべて' },
-    { v: 'active', l: '実施中' },
+    { v: 'active', l: 'アクティブ' },
     { v: 'draft', l: '下書き' },
     ...projectTypes.map((definition) => ({ v: definition.key, l: definition.name })),
   ];
@@ -287,7 +287,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: '総プロジェクト', value: stats.total, color: 'text-cyan-700' },
-          { label: '実施中', value: stats.active, color: 'text-emerald-700' },
+          { label: 'アクティブ', value: stats.active, color: 'text-emerald-700' },
           { label: '下書き', value: stats.draft, color: 'text-amber-700' },
         ].map(s => (
           <div key={s.label} className="card p-4">
