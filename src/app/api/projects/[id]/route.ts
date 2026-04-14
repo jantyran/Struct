@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
+import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
+import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
+import type { CustomField } from '@/types';
 
 interface Params { params: { id: string } }
 
@@ -33,7 +36,16 @@ export async function GET(_req: Request, { params }: Params) {
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id);
+    const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as CustomField[];
+    const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(project.owner_id) as any;
+    const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
+    const currentDefinition = definitions.find((definition) => definition.key === project.type);
+    const syncedFields = syncCustomFieldsWithDefinition(params.id, fields, currentDefinition);
+
+    if (JSON.stringify(fields) !== JSON.stringify(syncedFields)) {
+      persistProjectCustomFields(db, params.id, syncedFields);
+    }
+
     const members = db.prepare(`
       SELECT m.*, u.email, u.name FROM project_members m
       JOIN users u ON m.user_id = u.id
@@ -43,7 +55,7 @@ export async function GET(_req: Request, { params }: Params) {
 
     return NextResponse.json({ 
       ...project, 
-      custom_fields: fields,
+      custom_fields: syncedFields,
       members: members.map((m: any) => ({ user: { email: m.email, name: m.name }, role: m.role })),
       invitations
     });
@@ -73,11 +85,13 @@ export async function PUT(request: Request, { params }: Params) {
       description?: string;
       custom_fields?: Array<{
         id?: string;
+        template_id?: string;
         key: string;
         label: string;
         type: string;
         value?: string;
         options?: string;
+        layout?: 'half' | 'full';
         inherited?: number;
         inherited_from?: string | null;
         sort_order?: number;
@@ -114,29 +128,26 @@ export async function PUT(request: Request, { params }: Params) {
       );
 
       if (body.custom_fields) {
-        const incomingIds = body.custom_fields.filter(f => f.id).map(f => f.id!);
-        
-        if (incomingIds.length > 0) {
-          const placeholders = incomingIds.map(() => '?').join(',');
-          db.prepare(`DELETE FROM custom_fields WHERE project_id = ? AND id NOT IN (${placeholders})`).run(params.id, ...incomingIds);
-        } else {
-          db.prepare('DELETE FROM custom_fields WHERE project_id = ?').run(params.id);
-        }
-
-        body.custom_fields.forEach((f, idx) => {
-          if (f.id) {
-            db.prepare(`
-              UPDATE custom_fields SET
-                key = ?, label = ?, type = ?, value = ?, options = ?, inherited = ?, inherited_from = ?, sort_order = ?
-              WHERE id = ?
-            `).run(f.key, f.label, f.type, f.value ?? '', f.options ?? '{}', f.inherited ?? 0, f.inherited_from ?? null, f.sort_order ?? idx, f.id);
-          } else {
-            db.prepare(`
-              INSERT INTO custom_fields (id, project_id, key, label, type, value, options, inherited, inherited_from, sort_order)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(uuidv4(), params.id, f.key, f.label, f.type, f.value ?? '', f.options ?? '{}', f.inherited ?? 0, f.inherited_from ?? null, f.sort_order ?? idx);
-          }
-        });
+        const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get((projectAccess as any).owner_id) as any;
+        const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
+        const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? (projectAccess as any).type));
+        const incomingFields = body.custom_fields.map((f, idx) => ({
+          id: f.id ?? uuidv4(),
+          project_id: params.id,
+          template_id: f.template_id ?? undefined,
+          key: f.key,
+          label: f.label,
+          type: f.type as CustomField['type'],
+          value: f.value ?? '',
+          options: f.options ?? '{}',
+          layout: f.layout === 'full' ? 'full' : 'half',
+          inherited: f.inherited ?? 0,
+          inherited_from: f.inherited_from ?? null,
+          crawled_content: null,
+          sort_order: f.sort_order ?? idx,
+        })) as CustomField[];
+        const syncedFields = syncCustomFieldsWithDefinition(params.id, incomingFields, currentDefinition);
+        persistProjectCustomFields(db, params.id, syncedFields);
       }
     });
     tx();

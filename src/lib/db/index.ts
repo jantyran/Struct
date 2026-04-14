@@ -103,11 +103,13 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS custom_fields (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
+      template_id TEXT,
       key TEXT NOT NULL,
       label TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'text',
       value TEXT DEFAULT '',
       options TEXT DEFAULT '[]',
+      layout TEXT DEFAULT 'half',
       inherited INTEGER DEFAULT 0,
       inherited_from TEXT,
       crawled_content TEXT,
@@ -133,4 +135,6 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'global_assets', 'content_templates', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'global_assets', 'ai_settings', `TEXT DEFAULT '{}'`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'custom_fields', 'template_id', `TEXT`);
+  ensureColumn(db, 'custom_fields', 'layout', `TEXT DEFAULT 'half'`);
 }

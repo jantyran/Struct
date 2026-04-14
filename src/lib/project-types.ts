@@ -14,8 +14,8 @@ const DEFAULT_PROJECT_TYPES: ProjectTypeDefinition[] = [
       { id: 'event-phase-followup', key: 'followup', name: '振り返り' },
     ],
     field_templates: [
-      { id: 'event-field-theme', key: 'theme', label: 'イベントテーマ', type: 'text', options: '{}' },
-      { id: 'event-field-venue', key: 'venue', label: '会場', type: 'text', options: '{}' },
+      { id: 'event-field-theme', key: 'theme', label: 'イベントテーマ', type: 'text', options: '{}', layout: 'half' },
+      { id: 'event-field-venue', key: 'venue', label: '会場', type: 'text', options: '{}', layout: 'half' },
     ],
     content_template_ids: ['content-template-sns-post', 'content-template-lp', 'content-template-email', 'content-template-report'],
   },
@@ -32,8 +32,8 @@ const DEFAULT_PROJECT_TYPES: ProjectTypeDefinition[] = [
       { id: 'campaign-phase-optimization', key: 'optimization', name: '改善' },
     ],
     field_templates: [
-      { id: 'campaign-field-message', key: 'core_message', label: '訴求メッセージ', type: 'textarea', options: '{}' },
-      { id: 'campaign-field-kpi', key: 'kpi', label: '主要KPI', type: 'text', options: '{}' },
+      { id: 'campaign-field-message', key: 'core_message', label: '訴求メッセージ', type: 'textarea', options: '{}', layout: 'full' },
+      { id: 'campaign-field-kpi', key: 'kpi', label: '主要KPI', type: 'text', options: '{}', layout: 'half' },
     ],
     content_template_ids: ['content-template-sns-post', 'content-template-lp', 'content-template-email', 'content-template-ad-copy', 'content-template-report'],
   },
@@ -50,8 +50,8 @@ const DEFAULT_PROJECT_TYPES: ProjectTypeDefinition[] = [
       { id: 'content-phase-publish', key: 'publish', name: '公開' },
     ],
     field_templates: [
-      { id: 'content-field-format', key: 'content_format', label: 'フォーマット', type: 'text', options: '{}' },
-      { id: 'content-field-source', key: 'source_reference', label: '参照元URL', type: 'url', options: '{}' },
+      { id: 'content-field-format', key: 'content_format', label: 'フォーマット', type: 'text', options: '{}', layout: 'half' },
+      { id: 'content-field-source', key: 'source_reference', label: '参照元URL', type: 'url', options: '{}', layout: 'full' },
     ],
     content_template_ids: ['content-template-outline', 'content-template-first-draft'],
   },
@@ -85,6 +85,7 @@ function normalizeFieldTemplate(field: Partial<ProjectFieldTemplate>, index: num
     label: field.label?.trim() || `項目 ${index + 1}`,
     type: field.type || 'text',
     options: typeof field.options === 'string' && field.options ? field.options : '{}',
+    layout: field.layout === 'full' ? 'full' : 'half',
   };
 }
 

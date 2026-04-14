@@ -9,6 +9,13 @@ import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { createProjectTypeDefinition, defaultProjectTypeDefinitions } from '@/lib/project-types';
 
+function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 function parseFieldOptions(options: string) {
   try {
     const parsed = JSON.parse(options || '{}');
@@ -21,15 +28,29 @@ function parseFieldOptions(options: string) {
 
 function PhaseRow({
   phase,
+  dragging,
+  onDragStart,
+  onDrop,
   onChange,
   onRemove,
 }: {
   phase: ProjectPhase;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDrop: () => void;
   onChange: (phase: ProjectPhase) => void;
   onRemove: () => void;
 }) {
   return (
-    <div className="grid grid-cols-[1.2fr_1fr_80px] gap-2 items-end">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      className={`grid grid-cols-[28px_1.2fr_1fr_80px] gap-2 items-end rounded-xl border p-3 ${dragging ? 'opacity-60' : ''}`}
+      style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.68)' }}
+    >
+      <div className="text-sm text-center cursor-grab select-none" style={{ color: 'var(--text-muted)' }}>⋮⋮</div>
       <div>
         <label className="field-label">フェーズ名</label>
         <input className="field-input text-sm" value={phase.name} onChange={(e) => onChange({ ...phase, name: e.target.value })} />
@@ -46,19 +67,33 @@ function PhaseRow({
 function FieldTemplateRow({
   field,
   globalAssetObjects,
+  dragging,
+  onDragStart,
+  onDrop,
   onChange,
   onRemove,
 }: {
   field: ProjectFieldTemplate;
   globalAssetObjects: GlobalAssetObject[];
+  dragging: boolean;
+  onDragStart: () => void;
+  onDrop: () => void;
   onChange: (field: ProjectFieldTemplate) => void;
   onRemove: () => void;
 }) {
   const options = parseFieldOptions(field.options);
 
   return (
-    <div className="rounded-md border p-3 space-y-3" style={{ borderColor: 'var(--border)' }}>
-      <div className="grid grid-cols-[1.2fr_1fr_160px_80px] gap-2 items-end">
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      className={`rounded-md border p-3 space-y-3 ${dragging ? 'opacity-60' : ''}`}
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <div className="grid grid-cols-[28px_1.2fr_1fr_160px_120px_80px] gap-2 items-end">
+        <div className="text-sm text-center cursor-grab select-none" style={{ color: 'var(--text-muted)' }}>⋮⋮</div>
         <div>
           <label className="field-label">項目名</label>
           <input className="field-input text-sm" value={field.label} onChange={(e) => onChange({ ...field, label: e.target.value })} />
@@ -85,6 +120,13 @@ function FieldTemplateRow({
             {Object.entries(FIELD_TYPE_LABELS).map(([type, label]) => (
               <option key={type} value={type}>{label}</option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className="field-label">表示幅</label>
+          <select className="field-input text-sm" value={field.layout || 'half'} onChange={(e) => onChange({ ...field, layout: e.target.value as ProjectFieldTemplate['layout'] })}>
+            <option value="half">2列</option>
+            <option value="full">1列</option>
           </select>
         </div>
         <button onClick={onRemove} className="btn-danger">削除</button>
@@ -136,6 +178,8 @@ export default function ProjectTypesPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [openDefinitionIds, setOpenDefinitionIds] = useState<string[]>([]);
+  const [draggingPhase, setDraggingPhase] = useState<{ definitionId: string; index: number } | null>(null);
+  const [draggingField, setDraggingField] = useState<{ definitionId: string; index: number } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -346,6 +390,13 @@ export default function ProjectTypesPage() {
                     <PhaseRow
                       key={phase.id}
                       phase={phase}
+                      dragging={draggingPhase?.definitionId === definition.id && draggingPhase.index === phaseIndex}
+                      onDragStart={() => setDraggingPhase({ definitionId: definition.id, index: phaseIndex })}
+                      onDrop={() => {
+                        if (!draggingPhase || draggingPhase.definitionId !== definition.id || draggingPhase.index === phaseIndex) return;
+                        updateDefinition(index, { ...definition, phases: reorderList(definition.phases, draggingPhase.index, phaseIndex) });
+                        setDraggingPhase(null);
+                      }}
                       onChange={(nextPhase) => {
                         const phases = [...definition.phases];
                         phases[phaseIndex] = nextPhase;
@@ -367,7 +418,7 @@ export default function ProjectTypesPage() {
                     <button
                       onClick={() => updateDefinition(index, {
                         ...definition,
-                        field_templates: [...definition.field_templates, { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}' }],
+                        field_templates: [...definition.field_templates, { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}', layout: 'half' }],
                       })}
                       className="btn-secondary text-xs py-1 px-3"
                     >
@@ -382,6 +433,13 @@ export default function ProjectTypesPage() {
                         key={field.id}
                         field={field}
                         globalAssetObjects={globalAssetObjects}
+                        dragging={draggingField?.definitionId === definition.id && draggingField.index === fieldIndex}
+                        onDragStart={() => setDraggingField({ definitionId: definition.id, index: fieldIndex })}
+                        onDrop={() => {
+                          if (!draggingField || draggingField.definitionId !== definition.id || draggingField.index === fieldIndex) return;
+                          updateDefinition(index, { ...definition, field_templates: reorderList(definition.field_templates, draggingField.index, fieldIndex) });
+                          setDraggingField(null);
+                        }}
                         onChange={(nextField) => {
                           const fieldTemplates = [...definition.field_templates];
                           fieldTemplates[fieldIndex] = nextField;

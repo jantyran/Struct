@@ -8,21 +8,41 @@ import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { CONTENT_CHANNEL_OPTIONS, createContentTemplate } from '@/lib/content-templates';
 
+function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 function ContentTemplateRow({
   template,
   expanded,
+  dragging,
+  onDragStart,
+  onDrop,
   onToggle,
   onChange,
   onRemove,
 }: {
   template: ProjectContentTemplate;
   expanded: boolean;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDrop: () => void;
   onToggle: () => void;
   onChange: (template: ProjectContentTemplate) => void;
   onRemove: () => void;
 }) {
   return (
-    <div className="rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      className={`rounded-md border overflow-hidden ${dragging ? 'opacity-60' : ''}`}
+      style={{ borderColor: 'var(--border)' }}
+    >
       <button
         type="button"
         onClick={onToggle}
@@ -30,6 +50,7 @@ function ContentTemplateRow({
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            <span className="text-sm cursor-grab select-none" style={{ color: 'var(--text-muted)' }}>⋮⋮</span>
             <span className="text-sm font-semibold">{template.name || '未命名の生成コンテンツ'}</span>
             <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(99,102,241,0.14)', color: 'rgb(196,181,253)' }}>
               {template.channel === 'その他' ? (template.channel_other || 'その他') : template.channel || 'チャネル未設定'}
@@ -119,6 +140,7 @@ export default function ContentTemplatesPage() {
   const [openTemplateIds, setOpenTemplateIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -204,6 +226,13 @@ export default function ContentTemplatesPage() {
             key={template.id}
             template={template}
             expanded={openTemplateIds.includes(template.id)}
+            dragging={draggingIndex === index}
+            onDragStart={() => setDraggingIndex(index)}
+            onDrop={() => {
+              if (draggingIndex === null || draggingIndex === index) return;
+              setTemplates((current) => reorderList(current, draggingIndex, index));
+              setDraggingIndex(null);
+            }}
             onToggle={() => setOpenTemplateIds((current) => current.includes(template.id) ? current.filter((id) => id !== template.id) : [...current, template.id])}
             onChange={(nextTemplate) => {
               const nextTemplates = [...templates];

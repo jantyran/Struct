@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { v4 as uuidv4 } from 'uuid';
 import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
@@ -29,13 +28,12 @@ function parseFieldOptions(options: string) {
 }
 
 // ============================================================
-// カスタムフィールドエディター
+// プロジェクトフィールド入力
 // ============================================================
-function CustomFieldRow({ field, globalAssetObjects, onChange, onRemove, onCrawl, crawling }: {
+function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling }: {
   field: CustomField;
   globalAssetObjects: GlobalAssetObject[];
   onChange: (f: CustomField) => void;
-  onRemove: () => void;
   onCrawl: () => void;
   crawling: boolean;
 }) {
@@ -47,73 +45,33 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onRemove, onCrawl
   const availableReferenceChoices = referenceChoices.filter((record) => !(options.referenceRecordKeys ?? []).includes(record.key));
 
   return (
-    <div className={`rounded-md border p-3 space-y-2 ${isInherited ? 'inherited-field' : ''}`} style={{ borderColor: isInherited ? 'rgba(245,158,11,0.4)' : 'var(--border)' }}>
+    <div className={`rounded-xl border p-3 space-y-2 ${isInherited ? 'inherited-field' : ''}`} style={{ borderColor: isInherited ? 'rgba(245,158,11,0.4)' : 'var(--border)', backgroundColor: 'rgba(255,255,255,0.62)' }}>
       {isInherited && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-400">
+        <div className="flex items-center gap-1.5 text-xs" style={{ color: '#b66a10' }}>
           <span>⚠</span>
           <span>継承済み — 内容を確認・更新してください</span>
-          <button className="ml-auto text-gray-500 hover:text-gray-300" onClick={() => onChange({ ...field, inherited: 0 })}>✓ 確認済み</button>
+          <button className="ml-auto transition-colors" style={{ color: 'var(--text-muted)' }} onClick={() => onChange({ ...field, inherited: 0 })}>✓ 確認済み</button>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="field-label">ラベル</label>
-          <input className="field-input text-xs" value={field.label} onChange={e => onChange({ ...field, label: e.target.value })} placeholder="例: PRポイント" />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              {FIELD_TYPE_LABELS[field.type] || field.type}
+            </span>
+          </div>
         </div>
-        <div>
-          <label className="field-label">種別</label>
-          <select
-            className="field-input text-xs"
-            value={field.type}
-            onChange={e => {
-              const nextType = e.target.value as FieldType;
-              const nextOptions = nextType === 'select'
-                ? JSON.stringify({ choices: options.choices ?? [] })
-                : nextType === 'reference'
-                  ? JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: '' })
-                  : nextType === 'reference_multi'
-                    ? JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: [] })
-                  : '{}';
-              onChange({ ...field, type: nextType, value: '', options: nextOptions });
-            }}
-          >
-            {(Object.entries(FIELD_TYPE_LABELS) as [FieldType, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
-        <div className="flex items-end">
-          <button onClick={onRemove} className="btn-danger w-full justify-center">削除</button>
+        <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          キー: {field.key}
         </div>
       </div>
-
-      {field.type === 'select' && (
-        <div>
-          <label className="field-label">選択肢（カンマ区切り）</label>
-          <input className="field-input text-xs"
-            value={(options.choices ?? []).join(', ')}
-            onChange={e => onChange({ ...field, options: JSON.stringify({ choices: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }) })}
-            placeholder="選択肢A, 選択肢B, 選択肢C"
-          />
-        </div>
-      )}
 
       {field.type === 'reference' && (
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="field-label">参照オブジェクト</label>
-            <select
-              className="field-input text-xs"
-              value={options.referenceObjectId || ''}
-              onChange={(e) => onChange({
-                ...field,
-                value: '',
-                options: JSON.stringify({ referenceObjectId: e.target.value, referenceRecordKey: '' }),
-              })}
-            >
-              <option value="">（選択してください）</option>
-              {globalAssetObjects.map((object) => (
-                <option key={object.id} value={object.id}>{object.name}</option>
-              ))}
-            </select>
+            <p className="text-xs px-1 py-1" style={{ color: 'var(--text-muted)' }}>{referenceObject?.name || '未設定'}</p>
           </div>
           <div>
             <label className="field-label">参照レコード</label>
@@ -142,20 +100,7 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onRemove, onCrawl
         <div className="space-y-2">
           <div>
             <label className="field-label">参照オブジェクト</label>
-            <select
-              className="field-input text-xs"
-              value={options.referenceObjectId || ''}
-              onChange={(e) => onChange({
-                ...field,
-                value: '',
-                options: JSON.stringify({ referenceObjectId: e.target.value, referenceRecordKeys: [] }),
-              })}
-            >
-              <option value="">（選択してください）</option>
-              {globalAssetObjects.map((object) => (
-                <option key={object.id} value={object.id}>{object.name}</option>
-              ))}
-            </select>
+            <p className="text-xs px-1 py-1" style={{ color: 'var(--text-muted)' }}>{referenceObject?.name || '未設定'}</p>
           </div>
 
           <div>
@@ -187,11 +132,12 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onRemove, onCrawl
               <div className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ参照レコードは選択されていません。</div>
             ) : (
               selectedReferenceRecords.map((record) => (
-                <div key={record.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
+                <div key={record.id} className="flex items-center justify-between rounded-xl border px-3 py-2 text-xs bg-white/70" style={{ borderColor: 'var(--border)' }}>
                   <span>{record.name}</span>
                   <button
                     type="button"
-                    className="text-rose-300 hover:text-rose-200"
+                    className="transition-colors"
+                    style={{ color: '#cc5c6d' }}
                     onClick={() => {
                       const nextKeys = (options.referenceRecordKeys ?? []).filter((key) => key !== record.key);
                       const nextRecords = referenceChoices.filter((choice) => nextKeys.includes(choice.key));
@@ -211,33 +157,32 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onRemove, onCrawl
         </div>
       )}
 
-      <div>
-        <label className="field-label">値</label>
-        {field.type === 'textarea' ? (
-          <textarea className="field-input text-xs" rows={3} value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
-        ) : field.type === 'select' ? (
-          <select className="field-input text-xs" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })}>
-            <option value="">（選択してください）</option>
-            {(options.choices ?? []).map(opt => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
-        ) : field.type === 'reference' || field.type === 'reference_multi' ? (
-          <input className="field-input text-xs" value={field.value} readOnly placeholder="参照レコードを選択してください" />
-        ) : field.type === 'url' ? (
-          <div className="flex gap-2">
-            <input className="field-input text-xs flex-1" type="url" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} placeholder="https://" />
-            <button onClick={onCrawl} disabled={crawling || !field.value} className="btn-secondary text-xs px-3 shrink-0">
-              {crawling ? '取得中...' : 'クロール'}
-            </button>
-          </div>
-        ) : (
-          <input className="field-input text-xs" type={field.type === 'date' ? 'date' : 'text'} value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
-        )}
-        {field.crawled_content && (
-          <p className="text-xs mt-1 text-green-400">✓ URL内容取得済み ({field.crawled_content.length} 文字)</p>
-        )}
-      </div>
+      {field.type !== 'reference' && field.type !== 'reference_multi' && (
+        <div>
+          {field.type === 'textarea' ? (
+            <textarea className="field-input text-xs" rows={3} value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
+          ) : field.type === 'select' ? (
+            <select className="field-input text-xs" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })}>
+              <option value="">（選択してください）</option>
+              {(options.choices ?? []).map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          ) : field.type === 'url' ? (
+            <div className="flex gap-2">
+              <input className="field-input text-xs flex-1" type="url" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} placeholder="https://" />
+              <button onClick={onCrawl} disabled={crawling || !field.value} className="btn-secondary text-xs px-3 shrink-0">
+                {crawling ? '取得中...' : 'クロール'}
+              </button>
+            </div>
+          ) : (
+            <input className="field-input text-xs" type={field.type === 'date' ? 'date' : 'text'} value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
+          )}
+          {field.crawled_content && (
+            <p className="text-xs mt-1" style={{ color: 'var(--success)' }}>✓ URL内容取得済み ({field.crawled_content.length} 文字)</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -294,20 +239,20 @@ function AssetCard({
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b cursor-pointer" style={{ borderColor: 'var(--border)' }} onClick={() => setExpanded(e => !e)}>
         <div>
-          <span className="text-xs font-semibold text-violet-300">{asset.title}</span>
+          <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{asset.title}</span>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{new Date(asset.created_at).toLocaleString('ja-JP')}</p>
         </div>
         <div className="flex items-center gap-2">
-          {warnings.length > 0 && <span className="text-xs text-amber-400">⚠ {warnings.length}件</span>}
-          <span className="text-gray-500">{expanded ? '▲' : '▼'}</span>
+          {warnings.length > 0 && <span className="text-xs" style={{ color: '#b66a10' }}>⚠ {warnings.length}件</span>}
+          <span style={{ color: 'var(--text-muted)' }}>{expanded ? '▲' : '▼'}</span>
         </div>
       </div>
       {expanded && (
         <div className="p-4">
           {warnings.length > 0 && (
-            <div className="mb-3 p-3 rounded-md bg-amber-500/10 border border-amber-500/30">
-              <p className="text-xs font-semibold text-amber-400 mb-1">整合性チェック</p>
-              <ul className="text-xs text-amber-300 space-y-0.5">
+            <div className="mb-3 p-3 rounded-xl border" style={{ backgroundColor: 'rgba(255, 243, 224, 0.8)', borderColor: 'rgba(215,138,29,0.25)' }}>
+              <p className="text-xs font-semibold mb-1" style={{ color: '#b66a10' }}>整合性チェック</p>
+              <ul className="text-xs space-y-0.5" style={{ color: '#9a6213' }}>
                 {warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </div>
@@ -465,30 +410,6 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     setProject({ ...project, custom_fields: fields });
   }
 
-  function addField() {
-    if (!project) return;
-    const newField: CustomField = {
-      id: uuidv4(),
-      project_id: id,
-      key: `field_${Date.now()}`,
-      label: '',
-      type: 'text',
-      value: '',
-      options: '[]',
-      inherited: 0,
-      inherited_from: null,
-      crawled_content: null,
-      sort_order: project.custom_fields.length,
-    };
-    setProject({ ...project, custom_fields: [...project.custom_fields, newField] });
-  }
-
-  function removeField(idx: number) {
-    if (!project) return;
-    const fields = project.custom_fields.filter((_, i) => i !== idx);
-    setProject({ ...project, custom_fields: fields });
-  }
-
   async function crawlField(fieldId: string) {
     setCrawlingFieldId(fieldId);
     try {
@@ -586,23 +507,24 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   return (
     <div className="h-full flex flex-col">
       {/* ヘッダー */}
-      <div className="px-6 py-4 border-b space-y-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-surface)' }}>
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push(withBasePath('/'))} className="text-gray-500 hover:text-gray-300 text-sm">← 戻る</button>
+      <div className="px-6 py-5 border-b space-y-4" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.92) 100%)' }}>
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <button onClick={() => router.push(withBasePath('/'))} className="text-sm w-fit transition-colors" style={{ color: 'var(--text-muted)' }}>← 戻る</button>
           <div className="flex-1 min-w-0">
             <input
-              className="bg-transparent text-lg font-bold w-full focus:outline-none border-b border-transparent focus:border-gray-600 transition-colors"
+              className="bg-transparent text-xl font-bold w-full focus:outline-none border-b border-transparent transition-colors"
+              style={{ color: 'var(--text-primary)' }}
               value={project.name}
               onChange={e => setProject({ ...project, name: e.target.value })}
             />
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-xs text-violet-300">{typeLabel}</span>
-              {project.cloned_from && <span className="text-xs text-gray-500">• クローン</span>}
-              {inheritedCount > 0 && <span className="text-xs text-amber-400">• 要確認フィールド {inheritedCount}件</span>}
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{typeLabel}</span>
+              {project.cloned_from && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>• クローン</span>}
+              {inheritedCount > 0 && <span className="text-xs" style={{ color: '#b66a10' }}>• 要確認フィールド {inheritedCount}件</span>}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {savingMsg && <span className="text-xs text-green-400">{savingMsg}</span>}
+          <div className="flex flex-wrap items-center gap-3">
+            {savingMsg && <span className="text-xs" style={{ color: 'var(--success)' }}>{savingMsg}</span>}
             <select className="field-input text-xs w-auto" value={project.status} onChange={e => setProject({ ...project, status: e.target.value as typeof project.status })}>
               <option value="draft">下書き</option>
               <option value="active">実施中</option>
@@ -619,7 +541,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold text-cyan-300">進行パス</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>進行パス</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                   全体の流れと現在地を表示しています。クリックで現在フェーズを切り替えられます。
                 </p>
@@ -628,26 +550,84 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 現在地: {currentPhases[currentPhaseIndex]?.name || '未設定'}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="overflow-x-auto pb-1">
+              <div className="flex min-w-max items-stretch">
               {currentPhases.map((phase, phaseIndex) => {
                 const isCurrent = phase.key === project.phase_key;
                 const isCompleted = currentPhaseIndex >= 0 && phaseIndex < currentPhaseIndex;
+                const isUpcoming = !isCurrent && !isCompleted;
+                const isLast = phaseIndex === currentPhases.length - 1;
                 return (
                   <button
                     key={phase.id}
                     type="button"
                     onClick={() => setProject({ ...project, phase_key: phase.key })}
-                    className="px-4 py-2 rounded-md text-sm font-medium transition-colors border"
+                    className="relative flex min-w-[140px] items-center justify-between px-4 py-3 text-sm font-medium transition-colors border-y border-l first:rounded-l-2xl last:rounded-r-2xl"
                     style={{
-                      borderColor: isCurrent ? 'rgba(34,211,238,0.6)' : isCompleted ? 'rgba(16,185,129,0.45)' : 'var(--border)',
-                      backgroundColor: isCurrent ? 'rgba(34,211,238,0.12)' : isCompleted ? 'rgba(16,185,129,0.12)' : 'rgba(148,163,184,0.05)',
-                      color: isCurrent ? 'rgb(103,232,249)' : isCompleted ? 'rgb(110,231,183)' : 'var(--text-secondary)',
+                      marginRight: isLast ? 0 : 18,
+                      borderColor: isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)',
+                      borderRightColor: isLast ? (isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)') : 'transparent',
+                      background: isCurrent
+                        ? 'linear-gradient(135deg, rgba(15,154,177,0.2) 0%, rgba(126,215,222,0.34) 100%)'
+                        : isCompleted
+                          ? 'linear-gradient(135deg, rgba(31,157,114,0.16) 0%, rgba(183,244,216,0.6) 100%)'
+                          : 'linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(241,250,252,0.86) 100%)',
+                      color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-secondary)',
+                      boxShadow: isCurrent ? '0 10px 24px rgba(15,154,177,0.14)' : 'none',
                     }}
                   >
-                    {phaseIndex + 1}. {phase.name}
+                    {!isLast && (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute top-[-1px] right-[-19px] z-20 h-[calc(100%+2px)] w-5"
+                          style={{
+                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
+                            background: isCurrent
+                              ? 'linear-gradient(135deg, rgba(15,154,177,0.2) 0%, rgba(126,215,222,0.34) 100%)'
+                              : isCompleted
+                                ? 'linear-gradient(135deg, rgba(31,157,114,0.16) 0%, rgba(183,244,216,0.6) 100%)'
+                                : 'linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(241,250,252,0.86) 100%)',
+                          }}
+                        />
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute top-[-1px] right-[-20px] h-[calc(100%+2px)] w-5"
+                          style={{
+                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
+                            background: isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)',
+                            zIndex: 10,
+                          }}
+                        />
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute top-[1px] right-[-16px] z-30 h-[calc(100%-2px)] w-4"
+                          style={{
+                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
+                            background: 'var(--bg-base)',
+                          }}
+                        />
+                      </>
+                    )}
+                    <span className="relative z-40 flex items-center gap-2">
+                      <span
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold"
+                        style={{
+                          backgroundColor: isCurrent ? 'rgba(255,255,255,0.78)' : isCompleted ? 'rgba(255,255,255,0.72)' : 'rgba(237,245,248,0.95)',
+                          color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-muted)',
+                        }}
+                      >
+                        {phaseIndex + 1}
+                      </span>
+                      <span>{phase.name}</span>
+                    </span>
+                    <span className="relative z-40 text-xs" style={{ color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-muted)' }}>
+                      {isCurrent ? 'Now' : isCompleted ? 'Done' : isUpcoming ? 'Next' : ''}
+                    </span>
                   </button>
                 );
               })}
+              </div>
             </div>
           </div>
         )}
@@ -658,25 +638,19 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         )}
       </div>
       
-      <div className="px-6 pt-4">
-        <div className="card p-4">
-          <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
-            <span>種別: <span className="text-violet-300">{typeLabel}</span></span>
-            <span>現在フェーズ: <span className="text-cyan-300">{currentPhases[currentPhaseIndex]?.name || '未設定'}</span></span>
-            <span>総フェーズ数: {currentPhases.length}</span>
-          </div>
-        </div>
-      </div>
-
       {/* 本体 */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* 左: フィールド編集 */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* タブ切り替え */}
           <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
             {[{ k: 'fields' as const, l: 'プロジェクト情報' }, { k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }].map(t => (
               <button key={t.k} onClick={() => setTab(t.k)}
-                className={`text-sm px-3 py-1.5 rounded-md transition-colors ${tab === t.k ? 'bg-violet-700/20 text-violet-300' : 'text-gray-400 hover:text-gray-200'}`}>
+                className={`text-sm px-3 py-1.5 rounded-xl transition-colors ${tab === t.k ? '' : ''}`}
+                style={tab === t.k
+                  ? { backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(15,154,177,0.18)' }
+                  : { color: 'var(--text-muted)' }}
+              >
                 {t.l}
               </button>
             ))}
@@ -688,6 +662,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               <section>
                 <h2 className="section-title mb-3">基本情報 (Project Core)</h2>
                 <div className="card p-5 grid grid-cols-2 gap-4">
+                  <div className="col-span-2 flex flex-wrap gap-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <span>種別: <span style={{ color: 'var(--accent)' }}>{typeLabel}</span></span>
+                    <span>現在フェーズ: <span style={{ color: 'var(--accent)' }}>{currentPhases[currentPhaseIndex]?.name || '未設定'}</span></span>
+                    <span>総フェーズ数: {currentPhases.length}</span>
+                  </div>
                   <div>
                     <label className="field-label">種別</label>
                     <select
@@ -732,30 +711,28 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               </section>
 
-              {/* カスタムフィールド */}
+              {/* フィールド */}
               <section>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="section-title">カスタムフィールド (Project Custom)</h2>
-                  <button onClick={addField} className="btn-secondary text-xs py-1 px-3">+ フィールド追加</button>
+                  <h2 className="section-title">フィールド</h2>
                 </div>
                 {customFields.length === 0 ? (
                   <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-                    <p className="text-sm">カスタムフィールドがありません</p>
-                    <p className="text-xs mt-1">PRポイント、技術的ハイライト、参照URLなど施策固有の情報を追加できます</p>
-                    <button onClick={addField} className="btn-secondary text-xs mt-3">+ フィールドを追加</button>
+                    <p className="text-sm">このプロジェクト種別には追加フィールドがありません</p>
+                    <p className="text-xs mt-1">フィールド定義の追加や変更はプロジェクト設定から行ってください</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                     {customFields.map((f, i) => (
-                      <CustomFieldRow
-                        key={f.id}
-                        field={f}
-                        globalAssetObjects={globalAssetObjects}
-                        onChange={nf => updateField(i, nf)}
-                        onRemove={() => removeField(i)}
-                        onCrawl={() => crawlField(f.id)}
-                        crawling={crawlingFieldId === f.id}
-                      />
+                      <div key={f.id} className={f.layout === 'full' ? 'xl:col-span-2' : ''}>
+                        <CustomFieldRow
+                          field={f}
+                          globalAssetObjects={globalAssetObjects}
+                          onChange={nf => updateField(i, nf)}
+                          onCrawl={() => crawlField(f.id)}
+                          crawling={crawlingFieldId === f.id}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -769,7 +746,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     {suggestions.map(s => (
                       <div key={s.field_id} className="card p-4 flex items-start gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-violet-300">{s.label}</p>
+                          <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{s.label}</p>
                           <p className="text-sm mt-1">{s.suggested_value}</p>
                           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{s.reason}</p>
                         </div>
@@ -797,7 +774,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* 右: AI生成パネル */}
-        <div className="w-72 shrink-0 border-l overflow-y-auto p-5 space-y-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-surface)' }}>
+        <div className="w-80 shrink-0 border-l overflow-y-auto p-5 space-y-5" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
           <h2 className="section-title">コンテンツ生成</h2>
 
           {/* 生成コンテンツ選択 */}
@@ -805,14 +782,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>生成するコンテンツ</p>
             <div className="space-y-1.5">
               {currentContentTemplates.map((template) => (
-                <label key={template.id} className="flex items-center gap-2.5 cursor-pointer group">
+                <label key={template.id} className="flex items-center gap-2.5 cursor-pointer group rounded-xl px-3 py-2 transition-colors bg-white/60 border" style={{ borderColor: 'var(--border)' }}>
                   <input
                     type="checkbox"
                     checked={selectedContentKeys.includes(template.key)}
                     onChange={e => setSelectedContentKeys(prev => e.target.checked ? [...prev, template.key] : prev.filter(t => t !== template.key))}
-                    className="accent-violet-500"
+                    className="accent-cyan-600"
                   />
-                  <span className={`text-sm transition-colors ${selectedContentKeys.includes(template.key) ? 'text-gray-200' : 'text-gray-500'}`}>{template.name}</span>
+                  <span className="text-sm transition-colors" style={{ color: selectedContentKeys.includes(template.key) ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{template.name}</span>
                 </label>
               ))}
               {currentContentTemplates.length === 0 && (
@@ -829,12 +806,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             disabled={generating || selectedContentKeys.length === 0}
             className="btn-primary w-full justify-center py-2.5"
           >
-            {generating ? (
-              <span className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 border-2 border-violet-300 border-t-transparent rounded-full animate-spin" />
-                生成中...
-              </span>
-            ) : `選択中の ${selectedContentKeys.length} 件を生成`}
+              {generating ? (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 border-2 border-cyan-100 border-t-transparent rounded-full animate-spin" />
+                  生成中...
+                </span>
+              ) : `選択中の ${selectedContentKeys.length} 件を生成`}
           </button>
 
           <div>
@@ -854,7 +831,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             <button onClick={complete} disabled={completing} className="btn-secondary w-full justify-center text-sm">
               {completing ? (
                 <span className="flex items-center gap-2">
-                  <span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--text-muted)', borderTopColor: 'transparent' }} />
                   分析中...
                 </span>
               ) : 'AI補完を実行'}
@@ -862,10 +839,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           </div>
 
           {aiError && (
-            <div className="p-3 rounded-md border" style={{ borderColor: 'rgba(248,113,113,0.35)', color: 'rgb(252,165,165)' }}>
+            <div className="p-3 rounded-xl border" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
               <p className="text-xs font-semibold">AI実行エラー</p>
               <p className="text-xs mt-1">{aiError}</p>
-              <button onClick={() => router.push(withBasePath('/settings/ai'))} className="text-xs mt-2 text-violet-300 hover:text-violet-200">
+              <button onClick={() => router.push(withBasePath('/settings/ai'))} className="text-xs mt-2 transition-colors" style={{ color: 'var(--accent)' }}>
                 AI設定を開く →
               </button>
             </div>
@@ -875,21 +852,21 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
             <p className="text-xs mb-2 section-title">AIへの参照スコープ</p>
             <ul className="text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
-              <li className="flex items-center gap-1.5"><span className="text-green-400">✓</span> Global Assets</li>
-              <li className="flex items-center gap-1.5"><span className="text-green-400">✓</span> プロジェクトコア情報</li>
-              <li className="flex items-center gap-1.5"><span className={project.custom_fields.length > 0 ? 'text-green-400' : 'text-gray-600'}>
+              <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> Global Assets</li>
+              <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> プロジェクトコア情報</li>
+              <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.length > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                 {project.custom_fields.length > 0 ? '✓' : '−'}
-              </span> カスタムフィールド ({project.custom_fields.length}件)</li>
-              <li className="flex items-center gap-1.5"><span className={project.custom_fields.some(f => f.crawled_content) ? 'text-green-400' : 'text-gray-600'}>
+              </span> フィールド ({project.custom_fields.length}件)</li>
+              <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.some(f => f.crawled_content) ? 'var(--success)' : 'var(--text-muted)' }}>
                 {project.custom_fields.some(f => f.crawled_content) ? '✓' : '−'}
               </span> クロール済みURL</li>
             </ul>
           </div>
 
           {inheritedCount > 0 && (
-            <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/30">
-              <p className="text-xs text-amber-400 font-semibold">⚠ 継承フィールドあり</p>
-              <p className="text-xs text-amber-300 mt-1">{inheritedCount}件のフィールドが前回施策から継承されています。生成前に確認を推奨します。</p>
+            <div className="p-3 rounded-xl border" style={{ backgroundColor: 'rgba(255, 243, 224, 0.8)', borderColor: 'rgba(215,138,29,0.25)' }}>
+              <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>⚠ 継承フィールドあり</p>
+              <p className="text-xs mt-1" style={{ color: '#9a6213' }}>{inheritedCount}件のフィールドが前回施策から継承されています。生成前に確認を推奨します。</p>
             </div>
           )}
         </div>

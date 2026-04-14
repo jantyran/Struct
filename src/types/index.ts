@@ -1,6 +1,7 @@
 export type ProjectType = string;
 export type ProjectStatus = 'draft' | 'active' | 'archived';
 export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'select' | 'reference' | 'reference_multi';
+export type FieldLayout = 'half' | 'full';
 export type AssetType = string;
 export type GlobalAssetFieldType = 'text' | 'textarea' | 'url' | 'number' | 'date';
 export type AIProvider = 'anthropic' | 'openai' | 'gemini';
@@ -24,6 +25,7 @@ export interface ProjectFieldTemplate {
   label: string;
   type: FieldType;
   options: string;
+  layout?: FieldLayout;
 }
 
 export interface ProjectContentTemplate {
@@ -102,11 +104,13 @@ export interface Project {
 export interface CustomField {
   id: string;
   project_id: string;
+  template_id?: string;
   key: string;
   label: string;
   type: FieldType;
   value: string;
   options: string; // JSON string for select / reference config
+  layout?: FieldLayout;
   inherited: number; // 0 or 1
   inherited_from: string | null;
   crawled_content: string | null;

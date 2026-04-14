@@ -29,11 +29,13 @@ function NewProjectModal({
     const customFields: CustomField[] = (selectedType?.field_templates || []).map((field, index) => ({
       id: uuidv4(),
       project_id: '',
+      template_id: field.id,
       key: field.key,
       label: field.label,
       type: field.type,
       value: '',
       options: field.options || '{}',
+      layout: field.layout === 'full' ? 'full' : 'half',
       inherited: 0,
       inherited_from: null,
       crawled_content: null,

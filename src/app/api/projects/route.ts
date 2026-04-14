@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { requireSession } from '@/lib/auth';
+import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
+import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
+import type { CustomField } from '@/types';
 
 export async function GET() {
   try {
@@ -38,11 +41,13 @@ export async function POST(request: Request) {
       description?: string;
       custom_fields?: Array<{
         id?: string;
+        template_id?: string;
         key: string;
         label: string;
         type: string;
         value?: string;
         options?: string;
+        layout?: 'half' | 'full';
         inherited?: number;
         inherited_from?: string | null;
         sort_order?: number;
@@ -55,6 +60,10 @@ export async function POST(request: Request) {
 
     const id = uuidv4();
     const tx = db.transaction(() => {
+      const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+      const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
+      const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? 'campaign'));
+
       db.prepare(`
         INSERT INTO projects (id, name, type, phase_key, target, start_date, end_date, budget, channels, description, owner_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -72,23 +81,24 @@ export async function POST(request: Request) {
         user.id
       );
 
-      (body.custom_fields ?? []).forEach((field, index) => {
-        db.prepare(`
-          INSERT INTO custom_fields (id, project_id, key, label, type, value, options, inherited, inherited_from, sort_order)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          field.id ?? uuidv4(),
-          id,
-          field.key,
-          field.label,
-          field.type,
-          field.value ?? '',
-          field.options ?? '{}',
-          field.inherited ?? 0,
-          field.inherited_from ?? null,
-          field.sort_order ?? index
-        );
-      });
+      const incomingFields = (body.custom_fields ?? []).map((field, index) => ({
+        id: field.id ?? uuidv4(),
+        project_id: id,
+        template_id: field.template_id ?? undefined,
+        key: field.key,
+        label: field.label,
+        type: field.type as CustomField['type'],
+        value: field.value ?? '',
+        options: field.options ?? '{}',
+        layout: field.layout === 'full' ? 'full' : 'half',
+        inherited: field.inherited ?? 0,
+        inherited_from: field.inherited_from ?? null,
+        crawled_content: null,
+        sort_order: field.sort_order ?? index,
+      })) as CustomField[];
+
+      const syncedFields = syncCustomFieldsWithDefinition(id, incomingFields, currentDefinition);
+      persistProjectCustomFields(db, id, syncedFields);
     });
     tx();
 
