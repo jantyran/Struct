@@ -166,6 +166,19 @@ function migrateProjectCoreFields(db: Database.Database) {
     description: string;
   }>;
 
+  // key → old column value のマッピング（インデックス依存を排除）
+  function legacyValueFor(key: string, project: typeof projects[number]): string {
+    switch (key) {
+      case 'target':      return project.target || '';
+      case 'start_date':  return project.start_date || '';
+      case 'end_date':    return project.end_date || '';
+      case 'budget':      return project.budget || '';
+      case 'channels':    return normalizeChannelsValue(project.channels);
+      case 'description': return project.description || '';
+      default:            return '';
+    }
+  }
+
   for (const project of projects) {
     // 既に組み込みフィールドが存在するプロジェクトはスキップ
     const existingBuiltins = db.prepare(
@@ -174,23 +187,13 @@ function migrateProjectCoreFields(db: Database.Database) {
 
     if (existingBuiltins.cnt > 0) continue;
 
-    // コアカラムの値が全て空の場合もスキップしない（空値で組み込みフィールドを初期化する）
-    const migrations = [
-      { def: BUILTIN_FIELD_TEMPLATES[0], value: project.target || '' },
-      { def: BUILTIN_FIELD_TEMPLATES[1], value: project.start_date || '' },
-      { def: BUILTIN_FIELD_TEMPLATES[2], value: project.end_date || '' },
-      { def: BUILTIN_FIELD_TEMPLATES[3], value: project.budget || '' },
-      { def: BUILTIN_FIELD_TEMPLATES[4], value: normalizeChannelsValue(project.channels) },
-      { def: BUILTIN_FIELD_TEMPLATES[5], value: project.description || '' },
-    ];
-
     const tx = db.transaction(() => {
-      // 既存のカスタムフィールドの sort_order を後ろにずらす
       const existingCount = (db.prepare(
         'SELECT COUNT(*) as cnt FROM custom_fields WHERE project_id = ?'
       ).get(project.id) as { cnt: number }).cnt;
 
-      migrations.forEach(({ def, value }, i) => {
+      BUILTIN_FIELD_TEMPLATES.forEach((def, i) => {
+        const value = legacyValueFor(def.key, project);
         db.prepare(`
           INSERT INTO custom_fields
             (id, project_id, template_id, key, label, type, value, options, layout,

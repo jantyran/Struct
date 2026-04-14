@@ -1,16 +1,92 @@
-import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
+import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition } from '@/types';
 
-/** 組み込みフィールドテンプレートのデフォルト定義（全プロジェクト種別共通） */
-export const BUILTIN_FIELD_TEMPLATES: ProjectFieldTemplate[] = [
-  { id: '_builtin_target',      key: 'target',      label: 'ターゲット', type: 'text',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
-  { id: '_builtin_start_date',  key: 'start_date',  label: '開始日',    type: 'date',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
-  { id: '_builtin_end_date',    key: 'end_date',    label: '終了日',    type: 'date',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
-  { id: '_builtin_budget',      key: 'budget',      label: '予算',      type: 'text',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
-  { id: '_builtin_channels',    key: 'channels',    label: 'チャネル',  type: 'text',     options: '{}', layout: 'half', is_builtin: true, section: '基本情報' },
-  { id: '_builtin_description', key: 'description', label: '概要',      type: 'textarea', options: '{}', layout: 'full', is_builtin: true, section: '基本情報' },
+/** デフォルトセクション定義 */
+export const DEFAULT_SECTIONS: SectionDefinition[] = [
+  { id: 'section-basic', name: '基本情報', color: '#0f9ab1' },
+  { id: 'section-detail', name: '詳細', color: '#6366f1' },
 ];
 
-const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'field_templates'>[] = [
+/**
+ * 組み込みフィールドテンプレートのデフォルト定義（全プロジェクト種別共通）
+ *
+ * 設計方針：
+ * - マーケティング施策に普遍的に必要なフィールドのみを組み込みとする
+ * - 種別固有の情報はカスタムテンプレート (DEFAULT_CUSTOM_TEMPLATES) で管理する
+ */
+export const BUILTIN_FIELD_TEMPLATES: ProjectFieldTemplate[] = [
+  {
+    id: '_builtin_description',
+    key: 'description',
+    label: '目的・背景',
+    type: 'textarea',
+    options: '{}',
+    layout: 'full',
+    is_builtin: true,
+    section: '基本情報',
+  },
+  {
+    id: '_builtin_target',
+    key: 'target',
+    label: 'ターゲット',
+    type: 'textarea',
+    options: '{}',
+    layout: 'full',
+    is_builtin: true,
+    section: '基本情報',
+  },
+  {
+    id: '_builtin_kpi',
+    key: 'kpi',
+    label: '目標KPI・成果指標',
+    type: 'textarea',
+    options: '{}',
+    layout: 'full',
+    is_builtin: true,
+    section: '基本情報',
+  },
+  {
+    id: '_builtin_start_date',
+    key: 'start_date',
+    label: '開始日',
+    type: 'date',
+    options: '{}',
+    layout: 'half',
+    is_builtin: true,
+    section: '基本情報',
+  },
+  {
+    id: '_builtin_end_date',
+    key: 'end_date',
+    label: '終了日',
+    type: 'date',
+    options: '{}',
+    layout: 'half',
+    is_builtin: true,
+    section: '基本情報',
+  },
+  {
+    id: '_builtin_budget',
+    key: 'budget',
+    label: '予算（円）',
+    type: 'number',
+    options: '{}',
+    layout: 'half',
+    is_builtin: true,
+    section: '基本情報',
+  },
+  {
+    id: '_builtin_channels',
+    key: 'channels',
+    label: '主要チャネル',
+    type: 'textarea',
+    options: '{}',
+    layout: 'half',
+    is_builtin: true,
+    section: '基本情報',
+  },
+];
+
+const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'field_templates' | 'sections'>[] = [
   {
     id: 'project-type-event',
     key: 'event',
@@ -55,19 +131,130 @@ const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'field_templates'>[] = 
   },
 ];
 
-// カスタムフィールドテンプレートのデフォルト（組み込み以外）
+// カスタムフィールドテンプレートのデフォルト（組み込み以外・種別固有）
 const DEFAULT_CUSTOM_TEMPLATES: Record<string, ProjectFieldTemplate[]> = {
   event: [
-    { id: 'event-field-theme', key: 'theme', label: 'イベントテーマ', type: 'text', options: '{}', layout: 'half', section: '詳細' },
-    { id: 'event-field-venue', key: 'venue', label: '会場', type: 'text', options: '{}', layout: 'half', section: '詳細' },
+    {
+      id: 'event-field-format',
+      key: 'event_format',
+      label: '開催形式',
+      type: 'select',
+      options: JSON.stringify({ choices: ['オンライン', 'オフライン', 'ハイブリッド'] }),
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'event-field-venue',
+      key: 'venue',
+      label: '会場・プラットフォーム',
+      type: 'text',
+      options: '{}',
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'event-field-capacity',
+      key: 'capacity',
+      label: '定員・想定参加者数',
+      type: 'number',
+      options: '{}',
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'event-field-theme',
+      key: 'theme',
+      label: 'テーマ・タグライン',
+      type: 'text',
+      options: '{}',
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'event-field-registration-url',
+      key: 'registration_url',
+      label: '申し込みページURL',
+      type: 'url',
+      options: '{}',
+      layout: 'full',
+      section: '詳細',
+    },
   ],
   campaign: [
-    { id: 'campaign-field-message', key: 'core_message', label: '訴求メッセージ', type: 'textarea', options: '{}', layout: 'full', section: '詳細' },
-    { id: 'campaign-field-kpi', key: 'kpi', label: '主要KPI', type: 'text', options: '{}', layout: 'half', section: '詳細' },
+    {
+      id: 'campaign-field-type',
+      key: 'campaign_type',
+      label: 'キャンペーン種別',
+      type: 'select',
+      options: JSON.stringify({ choices: ['認知拡大', 'リード獲得', 'ナーチャリング（育成）', '購入・申し込み促進', 'ロイヤリティ向上', 'その他'] }),
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'campaign-field-message',
+      key: 'core_message',
+      label: '訴求メッセージ・コア提案',
+      type: 'textarea',
+      options: '{}',
+      layout: 'full',
+      section: '詳細',
+    },
+    {
+      id: 'campaign-field-lp-url',
+      key: 'landing_page_url',
+      label: 'LP / ランディングページURL',
+      type: 'url',
+      options: '{}',
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'campaign-field-cta',
+      key: 'cta',
+      label: 'CTA（行動喚起フレーズ）',
+      type: 'text',
+      options: '{}',
+      layout: 'half',
+      section: '詳細',
+    },
   ],
   content: [
-    { id: 'content-field-format', key: 'content_format', label: 'フォーマット', type: 'text', options: '{}', layout: 'half', section: '詳細' },
-    { id: 'content-field-source', key: 'source_reference', label: '参照元URL', type: 'url', options: '{}', layout: 'full', section: '詳細' },
+    {
+      id: 'content-field-format',
+      key: 'content_format',
+      label: 'コンテンツ種別・フォーマット',
+      type: 'select',
+      options: JSON.stringify({ choices: ['ブログ記事', 'ホワイトペーパー', '動画', 'インフォグラフィック', 'ケーススタディ', 'ニュースリリース', 'SNS投稿', 'その他'] }),
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'content-field-medium',
+      key: 'publication_medium',
+      label: '掲載先・配信先',
+      type: 'text',
+      options: '{}',
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'content-field-length',
+      key: 'target_length',
+      label: '目標文字数・尺',
+      type: 'text',
+      options: '{}',
+      layout: 'half',
+      section: '詳細',
+    },
+    {
+      id: 'content-field-source',
+      key: 'source_reference',
+      label: '参考・参照元URL',
+      type: 'url',
+      options: '{}',
+      layout: 'full',
+      section: '詳細',
+    },
   ],
 };
 
@@ -82,6 +269,14 @@ function safeJson<T>(value: unknown, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function normalizeSection(section: Partial<SectionDefinition>, index: number): SectionDefinition {
+  return {
+    id: section.id || `section-${index + 1}`,
+    name: section.name?.trim() || `セクション ${index + 1}`,
+    color: typeof section.color === 'string' && section.color ? section.color : DEFAULT_SECTIONS[index % DEFAULT_SECTIONS.length]?.color ?? '#0f9ab1',
+  };
 }
 
 function normalizePhase(phase: Partial<ProjectPhase>, index: number): ProjectPhase {
@@ -126,7 +321,7 @@ function mergeBuiltinTemplates(storedTemplates: Partial<ProjectFieldTemplate>[])
 }
 
 function normalizeTypeDefinition(
-  definition: Partial<ProjectTypeDefinition> & { field_templates?: Partial<ProjectFieldTemplate>[] },
+  definition: Partial<ProjectTypeDefinition> & { field_templates?: Partial<ProjectFieldTemplate>[]; sections?: Partial<SectionDefinition>[] },
   index: number
 ): ProjectTypeDefinition {
   const legacyContentTemplates = safeArray<{ id?: string }>((definition as any).content_templates);
@@ -151,6 +346,12 @@ function normalizeTypeDefinition(
   // 初回（storedが空）かつデフォルト種別の場合、カスタム初期値を補完
   const defaultCustoms = customs.length === 0 ? (DEFAULT_CUSTOM_TEMPLATES[definition.key ?? ''] ?? []) : customs;
 
+  // セクション定義を正規化（保存済みがあればそれを使用、なければデフォルト）
+  const storedSections = safeArray<Partial<SectionDefinition>>(definition.sections);
+  const normalizedSections = storedSections.length > 0
+    ? storedSections.map(normalizeSection)
+    : [...DEFAULT_SECTIONS];
+
   return {
     id: definition.id || `project-type-${index + 1}`,
     key: (definition.key || `project_type_${index + 1}`).trim() || `project_type_${index + 1}`,
@@ -158,6 +359,7 @@ function normalizeTypeDefinition(
     description: definition.description ?? '',
     is_default: definition.is_default === true,
     phases: safeArray<Partial<ProjectPhase>>(definition.phases).map(normalizePhase),
+    sections: normalizedSections,
     field_templates: [...builtins, ...defaultCustoms],
     content_template_ids: contentTemplateIds.length > 0
       ? contentTemplateIds
@@ -196,6 +398,7 @@ export function createProjectTypeDefinition(seed: Partial<ProjectTypeDefinition>
       description: seed.description || '',
       is_default: seed.is_default,
       phases: seed.phases || [{ id: 'phase-planning', key: 'planning', name: '企画' }],
+      sections: seed.sections || [],
       field_templates: seed.field_templates || [],
       content_template_ids: seed.content_template_ids || [],
     },

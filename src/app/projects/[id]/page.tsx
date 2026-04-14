@@ -193,6 +193,13 @@ function ChildFieldValueInput({
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
+          ) : field.type === 'number' ? (
+            <input
+              className="field-input text-xs"
+              type="number"
+              value={field.value}
+              onChange={(e) => onChange({ ...field, value: e.target.value })}
+            />
           ) : (
             <input
               className="field-input text-xs"
@@ -457,6 +464,8 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
                 {crawling ? '取得中...' : 'クロール'}
               </button>
             </div>
+          ) : field.type === 'number' ? (
+            <input className="field-input text-xs" type="number" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
           ) : (
             <input className="field-input text-xs" type={field.type === 'date' ? 'date' : 'text'} value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
           )}
@@ -797,8 +806,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     acc[sec].push(f);
     return acc;
   }, {});
-  // セクション表示順：組み込みフィールドのセクションを先に、その後カスタム
-  const sectionOrder = Array.from(new Set(allFields.map(f => f.section?.trim() || '詳細')));
+  // セクション表示順：種別定義のsections順 → それ以外は末尾に追加
+  const definedSections = currentProjectType?.sections ?? [];
+  const definedSectionNames = definedSections.map((s) => s.name);
+  const extraSectionNames = Array.from(new Set(allFields.map(f => f.section?.trim() || '詳細'))).filter((n) => !definedSectionNames.includes(n));
+  const sectionOrder = [...definedSectionNames.filter((n) => fieldsBySection[n]), ...extraSectionNames];
+  const sectionColorMap = Object.fromEntries(definedSections.map((s) => [s.name, s.color]));
 
   return (
     <div className="h-full flex flex-col">
@@ -1049,27 +1062,40 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   <p className="text-xs mt-1">プロジェクト種別設定でフィールドを追加してください</p>
                 </div>
               ) : (
-                sectionOrder.map(sec => (
-                  <section key={sec}>
-                    <h2 className="section-title mb-3">{sec}</h2>
-                    <div className="card p-5 grid grid-cols-2 gap-4">
-                      {(fieldsBySection[sec] ?? []).map((f) => {
-                        const globalIdx = allFields.findIndex(af => af.id === f.id);
-                        return (
-                          <div key={f.id} className={f.layout === 'full' ? 'col-span-2' : ''}>
-                            <CustomFieldRow
-                              field={f}
-                              globalAssetObjects={globalAssetObjects}
-                              onChange={nf => updateField(globalIdx, nf)}
-                              onCrawl={() => crawlField(f.id)}
-                              crawling={crawlingFieldId === f.id}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ))
+                sectionOrder.map(sec => {
+                  const secColor = sectionColorMap[sec];
+                  return (
+                    <section key={sec}>
+                      <div className="flex items-center gap-2 mb-3">
+                        {secColor && (
+                          <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />
+                        )}
+                        <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{sec}</h2>
+                      </div>
+                      <div className="card overflow-hidden">
+                        {secColor && (
+                          <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />
+                        )}
+                        <div className="p-5 grid grid-cols-2 gap-4">
+                          {(fieldsBySection[sec] ?? []).map((f) => {
+                            const globalIdx = allFields.findIndex(af => af.id === f.id);
+                            return (
+                              <div key={f.id} className={f.layout === 'full' ? 'col-span-2' : ''}>
+                                <CustomFieldRow
+                                  field={f}
+                                  globalAssetObjects={globalAssetObjects}
+                                  onChange={nf => updateField(globalIdx, nf)}
+                                  onCrawl={() => crawlField(f.id)}
+                                  crawling={crawlingFieldId === f.id}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })
               )}
 
               {/* AI補完サジェスト */}

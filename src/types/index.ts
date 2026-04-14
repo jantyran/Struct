@@ -1,6 +1,6 @@
 export type ProjectType = string;
 export type ProjectStatus = 'draft' | 'active' | 'archived';
-export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'select' | 'reference' | 'reference_multi' | 'group' | 'group_list';
+export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'number' | 'select' | 'reference' | 'reference_multi' | 'group' | 'group_list';
 export type FieldLayout = 'half' | 'full';
 export type AssetType = string;
 export type GlobalAssetFieldType = 'text' | 'textarea' | 'url' | 'number' | 'date' | 'reference' | 'reference_multi';
@@ -17,6 +17,13 @@ export interface ProjectPhase {
   id: string;
   key: string;
   name: string;
+}
+
+export interface SectionDefinition {
+  id: string;
+  name: string;
+  /** hex color, e.g. '#0f9ab1' */
+  color: string;
 }
 
 export interface ProjectFieldTemplate {
@@ -51,6 +58,8 @@ export interface ProjectTypeDefinition {
   name: string;
   description: string;
   phases: ProjectPhase[];
+  /** セクション定義（表示順・カラー） */
+  sections: SectionDefinition[];
   /** 組み込み + カスタムフィールドテンプレートを統合管理 */
   field_templates: ProjectFieldTemplate[];
   content_template_ids: string[];
@@ -180,6 +189,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   textarea: '長文テキスト',
   url: 'URL',
   date: '日付',
+  number: '数値',
   select: '選択肢',
   reference: '参照',
   reference_multi: '複数参照',

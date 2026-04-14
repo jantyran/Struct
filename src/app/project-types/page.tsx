@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
+import type { GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition } from '@/types';
 import { FIELD_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
-import { createProjectTypeDefinition, defaultProjectTypeDefinitions } from '@/lib/project-types';
+import { createProjectTypeDefinition, defaultProjectTypeDefinitions, DEFAULT_SECTIONS } from '@/lib/project-types';
 
 function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   const next = [...items];
@@ -133,6 +133,82 @@ function ChildFieldTemplateRow({
   );
 }
 
+// プリセットカラー（カラーパレット）
+const SECTION_COLOR_PRESETS = [
+  '#0f9ab1', // アクセント青緑
+  '#6366f1', // インディゴ
+  '#10b981', // エメラルド
+  '#f59e0b', // アンバー
+  '#ef4444', // レッド
+  '#8b5cf6', // バイオレット
+  '#ec4899', // ピンク
+  '#64748b', // スレート
+];
+
+function SectionRow({
+  section,
+  dragging,
+  onDragStart,
+  onDrop,
+  onChange,
+  onRemove,
+}: {
+  section: SectionDefinition;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDrop: () => void;
+  onChange: (section: SectionDefinition) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      className={`grid grid-cols-[28px_1fr_auto_80px] gap-2 items-center rounded-xl border p-3 ${dragging ? 'opacity-60' : ''}`}
+      style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.68)' }}
+    >
+      <div className="text-sm text-center cursor-grab select-none" style={{ color: 'var(--text-muted)' }}>⋮⋮</div>
+      <div>
+        <label className="field-label">セクション名</label>
+        <div className="flex items-center gap-1.5">
+          {/* カラーバー */}
+          <span className="shrink-0 rounded" style={{ width: 4, height: 24, backgroundColor: section.color, display: 'inline-block' }} />
+          <input className="field-input text-sm" value={section.name} onChange={(e) => onChange({ ...section, name: e.target.value })} />
+        </div>
+      </div>
+      <div>
+        <label className="field-label">カラー</label>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {SECTION_COLOR_PRESETS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              title={color}
+              onClick={() => onChange({ ...section, color })}
+              className="rounded transition-all"
+              style={{
+                width: 20, height: 20,
+                backgroundColor: color,
+                outline: section.color === color ? `2px solid ${color}` : 'none',
+                outlineOffset: 2,
+              }}
+            />
+          ))}
+          {/* カスタムカラーピッカー */}
+          <label title="カスタムカラー" className="cursor-pointer rounded overflow-hidden flex items-center justify-center"
+            style={{ width: 20, height: 20, border: '1.5px dashed var(--border)' }}>
+            <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>+</span>
+            <input type="color" className="sr-only" value={section.color} onChange={(e) => onChange({ ...section, color: e.target.value })} />
+          </label>
+        </div>
+      </div>
+      <button onClick={onRemove} className="btn-danger self-end">削除</button>
+    </div>
+  );
+}
+
 function PhaseRow({
   phase,
   dragging,
@@ -173,6 +249,7 @@ function PhaseRow({
 
 function FieldTemplateRow({
   field,
+  sections,
   globalAssetObjects,
   dragging,
   onDragStart,
@@ -181,6 +258,7 @@ function FieldTemplateRow({
   onRemove,
 }: {
   field: ProjectFieldTemplate;
+  sections: SectionDefinition[];
   globalAssetObjects: GlobalAssetObject[];
   dragging: boolean;
   onDragStart: () => void;
@@ -216,12 +294,25 @@ function FieldTemplateRow({
         </div>
         <div>
           <label className="field-label">セクション</label>
-          <input
-            className="field-input text-sm"
-            value={field.section ?? ''}
-            onChange={(e) => onChange({ ...field, section: e.target.value })}
-            placeholder="基本情報 / 詳細 …"
-          />
+          {sections.length > 0 ? (
+            <select
+              className="field-input text-sm"
+              value={field.section ?? ''}
+              onChange={(e) => onChange({ ...field, section: e.target.value })}
+            >
+              <option value="">（未設定）</option>
+              {sections.map((sec) => (
+                <option key={sec.id} value={sec.name}>{sec.name}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="field-input text-sm"
+              value={field.section ?? ''}
+              onChange={(e) => onChange({ ...field, section: e.target.value })}
+              placeholder="セクション名"
+            />
+          )}
         </div>
         <div>
           <label className="field-label">キー</label>
@@ -365,6 +456,7 @@ export default function ProjectTypesPage() {
   const [openDefinitionIds, setOpenDefinitionIds] = useState<string[]>([]);
   const [draggingPhase, setDraggingPhase] = useState<{ definitionId: string; index: number } | null>(null);
   const [draggingField, setDraggingField] = useState<{ definitionId: string; index: number } | null>(null);
+  const [draggingSection, setDraggingSection] = useState<{ definitionId: string; index: number } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -592,6 +684,70 @@ export default function ProjectTypesPage() {
                   ))}
                 </div>
 
+                {/* セクション定義 */}
+                <div className="rounded-md border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="section-title">セクション定義</h2>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                        フィールドをグループ化するセクションを定義します。順序・カラーをカスタマイズできます。
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const colorIndex = (definition.sections ?? []).length % SECTION_COLOR_PRESETS.length;
+                        updateDefinition(index, {
+                          ...definition,
+                          sections: [...(definition.sections ?? []), { id: uuidv4(), name: `セクション ${(definition.sections ?? []).length + 1}`, color: SECTION_COLOR_PRESETS[colorIndex] }],
+                        });
+                      }}
+                      className="btn-secondary text-xs py-1 px-3"
+                    >
+                      + セクション追加
+                    </button>
+                  </div>
+
+                  {/* セクションプレビュー */}
+                  {(definition.sections ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {(definition.sections ?? []).map((sec) => (
+                        <div key={sec.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium"
+                          style={{ backgroundColor: `${sec.color}18`, border: `1px solid ${sec.color}44`, color: sec.color }}>
+                          <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: sec.color }} />
+                          {sec.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {(definition.sections ?? []).length === 0 ? (
+                    <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                      セクションがありません。追加するとフィールドをグループ化できます。
+                    </div>
+                  ) : (
+                    (definition.sections ?? []).map((sec, secIndex) => (
+                      <SectionRow
+                        key={sec.id}
+                        section={sec}
+                        dragging={draggingSection?.definitionId === definition.id && draggingSection.index === secIndex}
+                        onDragStart={() => setDraggingSection({ definitionId: definition.id, index: secIndex })}
+                        onDrop={() => {
+                          if (!draggingSection || draggingSection.definitionId !== definition.id || draggingSection.index === secIndex) return;
+                          updateDefinition(index, { ...definition, sections: reorderList(definition.sections ?? [], draggingSection.index, secIndex) });
+                          setDraggingSection(null);
+                        }}
+                        onChange={(nextSec) => {
+                          const sections = [...(definition.sections ?? [])];
+                          sections[secIndex] = nextSec;
+                          updateDefinition(index, { ...definition, sections });
+                        }}
+                        onRemove={() => updateDefinition(index, { ...definition, sections: (definition.sections ?? []).filter((_, i) => i !== secIndex) })}
+                      />
+                    ))
+                  )}
+                </div>
+
+                {/* フィールド設定 */}
                 <div className="rounded-md border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -603,7 +759,7 @@ export default function ProjectTypesPage() {
                     <button
                       onClick={() => updateDefinition(index, {
                         ...definition,
-                        field_templates: [...definition.field_templates, { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}', layout: 'half', section: '' }],
+                        field_templates: [...definition.field_templates, { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}', layout: 'half', section: (definition.sections ?? [])[0]?.name ?? '' }],
                       })}
                       className="btn-secondary text-xs py-1 px-3"
                     >
@@ -617,6 +773,7 @@ export default function ProjectTypesPage() {
                       <FieldTemplateRow
                         key={field.id}
                         field={field}
+                        sections={definition.sections ?? []}
                         globalAssetObjects={globalAssetObjects}
                         dragging={draggingField?.definitionId === definition.id && draggingField.index === fieldIndex}
                         onDragStart={() => setDraggingField({ definitionId: definition.id, index: fieldIndex })}
