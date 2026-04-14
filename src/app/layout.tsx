@@ -35,7 +35,7 @@ function Sidebar() {
         <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--accent)' }}>
           Struct
         </span>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>マーケティング資産エンジン</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>MKTキャンペーン運用デスク</p>
       </div>
 
       {/* ナビ */}
@@ -67,7 +67,7 @@ function Sidebar() {
 
       {!user && !loading && (
         <div className="p-4 border-t text-xs leading-5" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-          Struct は、マーケティング施策の情報を整理し、再利用できる資産として管理するためのアプリです。
+          Struct は、マーケティングキャンペーンの進行管理、情報集約、全体整理をひとつにまとめるためのアプリです。
         </div>
       )}
 
@@ -111,7 +111,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <head>
-        <title>Struct — マーケティング資産エンジン</title>
+        <title>Struct — MKTキャンペーン運用デスク</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="flex h-screen overflow-hidden">

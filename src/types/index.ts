@@ -1,9 +1,9 @@
 export type ProjectType = string;
 export type ProjectStatus = 'draft' | 'active' | 'archived';
-export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'select' | 'reference' | 'reference_multi';
+export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'select' | 'reference' | 'reference_multi' | 'group' | 'group_list';
 export type FieldLayout = 'half' | 'full';
 export type AssetType = string;
-export type GlobalAssetFieldType = 'text' | 'textarea' | 'url' | 'number' | 'date';
+export type GlobalAssetFieldType = 'text' | 'textarea' | 'url' | 'number' | 'date' | 'reference' | 'reference_multi';
 export type AIProvider = 'anthropic' | 'openai' | 'gemini';
 
 export interface AISettings {
@@ -57,6 +57,7 @@ export interface GlobalAssetField {
   key: string;
   label: string;
   type: GlobalAssetFieldType;
+  options?: string;
 }
 
 export interface GlobalAssetRecord {
@@ -172,4 +173,6 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   select: '選択肢',
   reference: '参照',
   reference_multi: '複数参照',
+  group: 'グループ',
+  group_list: '繰り返しグループ',
 };

@@ -62,7 +62,8 @@ function normalizeField(field: Partial<GlobalAssetField>, index: number): Global
     id: field.id || `field-${index + 1}`,
     key,
     label: field.label?.trim() || key,
-    type: ['text', 'textarea', 'url', 'number', 'date'].includes(type) ? type : 'text',
+    type: ['text', 'textarea', 'url', 'number', 'date', 'reference', 'reference_multi'].includes(type) ? type : 'text',
+    options: typeof field.options === 'string' && field.options ? field.options : '{}',
   };
 }
 

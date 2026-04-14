@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
@@ -21,10 +21,188 @@ function parseFieldOptions(options: string) {
     if (Array.isArray(parsed)) {
       return { choices: parsed as string[] };
     }
-    return parsed as { choices?: string[]; referenceObjectId?: string; referenceRecordKey?: string; referenceRecordKeys?: string[] };
+    return parsed as { choices?: string[]; referenceObjectId?: string; referenceRecordKey?: string; referenceRecordKeys?: string[]; children?: ProjectFieldTemplate[] };
   } catch {
     return {};
   }
+}
+
+type GroupChildState = { value: string; options?: string };
+
+function normalizeGroupChildState(value: unknown): GroupChildState {
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in (value as Record<string, unknown>)) {
+    return {
+      value: typeof (value as Record<string, unknown>).value === 'string' ? String((value as Record<string, unknown>).value) : '',
+      options: typeof (value as Record<string, unknown>).options === 'string' ? String((value as Record<string, unknown>).options) : undefined,
+    };
+  }
+  return { value: typeof value === 'string' ? value : '' };
+}
+
+function parseGroupValue(value: string) {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).map(([key, childValue]) => [key, normalizeGroupChildState(childValue)])) as Record<string, GroupChildState>;
+  } catch {
+    return {};
+  }
+}
+
+function parseGroupListValue(value: string) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => Object.fromEntries(Object.entries(item).map(([key, childValue]) => [key, normalizeGroupChildState(childValue)])) as Record<string, GroupChildState>);
+  } catch {
+    return [];
+  }
+}
+
+function buildChildField(childTemplate: ProjectFieldTemplate, state: GroupChildState | undefined, inherited = 0): CustomField {
+  return {
+    ...childTemplate,
+    project_id: '',
+    value: state?.value || '',
+    options: state?.options || childTemplate.options,
+    inherited,
+    inherited_from: null,
+    crawled_content: null,
+    sort_order: 0,
+  };
+}
+
+function ChildFieldValueInput({
+  field,
+  globalAssetObjects,
+  onChange,
+}: {
+  field: CustomField;
+  globalAssetObjects: GlobalAssetObject[];
+  onChange: (field: CustomField) => void;
+}) {
+  const options = parseFieldOptions(field.options);
+  const referenceObject = globalAssetObjects.find((object) => object.id === options.referenceObjectId);
+  const referenceChoices = referenceObject?.records ?? [];
+  const selectedReferenceRecords = referenceChoices.filter((record) => (options.referenceRecordKeys ?? []).includes(record.key));
+  const availableReferenceChoices = referenceChoices.filter((record) => !(options.referenceRecordKeys ?? []).includes(record.key));
+  const childTemplates = options.children ?? [];
+  const groupValue = parseGroupValue(field.value);
+  const groupListValue = parseGroupListValue(field.value);
+
+  return (
+    <div className={field.layout === 'full' ? 'md:col-span-2' : ''}>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            {FIELD_TYPE_LABELS[field.type] || field.type}
+          </span>
+          {(field.type === 'reference' || field.type === 'reference_multi') && (
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              ・ {referenceObject?.name || '未設定'}
+            </span>
+          )}
+        </div>
+
+        {field.type === 'reference' && (
+          <select
+            className="field-input text-xs"
+            value={options.referenceRecordKey || ''}
+            onChange={(e) => {
+              const record = referenceChoices.find((choice) => choice.key === e.target.value);
+              onChange({
+                ...field,
+                value: record?.name || '',
+                options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: e.target.value }),
+              });
+            }}
+          >
+            <option value="">（選択してください）</option>
+            {referenceChoices.map((record) => (
+              <option key={record.id} value={record.key}>{record.name}</option>
+            ))}
+          </select>
+        )}
+
+        {field.type === 'reference_multi' && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <label className="field-label mb-0 shrink-0">参照レコードを追加</label>
+              <select
+                className="field-input text-xs"
+                value=""
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  const nextKeys = [...(options.referenceRecordKeys ?? []), e.target.value];
+                  const nextRecords = referenceChoices.filter((record) => nextKeys.includes(record.key));
+                  onChange({
+                    ...field,
+                    value: nextRecords.map((record) => record.name).join(' / '),
+                    options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
+                  });
+                }}
+              >
+                <option value="">（追加するレコードを選択）</option>
+                {availableReferenceChoices.map((record) => (
+                  <option key={record.id} value={record.key}>{record.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              {selectedReferenceRecords.length === 0 ? (
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ参照レコードは選択されていません。</div>
+              ) : (
+                selectedReferenceRecords.map((record) => (
+                  <div key={record.id} className="flex items-center justify-between rounded-xl border px-3 py-2 text-xs bg-white/70" style={{ borderColor: 'var(--border)' }}>
+                    <span>{record.name}</span>
+                    <button
+                      type="button"
+                      className="transition-colors"
+                      style={{ color: '#cc5c6d' }}
+                      onClick={() => {
+                        const nextKeys = (options.referenceRecordKeys ?? []).filter((key) => key !== record.key);
+                        const nextRecords = referenceChoices.filter((choice) => nextKeys.includes(choice.key));
+                        onChange({
+                          ...field,
+                          value: nextRecords.map((choice) => choice.name).join(' / '),
+                          options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
+                        });
+                      }}
+                    >
+                      削除
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {field.type !== 'reference' && field.type !== 'reference_multi' && (
+          field.type === 'textarea' ? (
+            <textarea className="field-input text-xs" rows={3} value={field.value} onChange={(e) => onChange({ ...field, value: e.target.value })} />
+          ) : field.type === 'select' ? (
+            <select className="field-input text-xs" value={field.value} onChange={(e) => onChange({ ...field, value: e.target.value })}>
+              <option value="">（選択してください）</option>
+              {(options.choices ?? []).map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="field-input text-xs"
+              type={field.type === 'date' ? 'date' : field.type === 'url' ? 'url' : 'text'}
+              value={field.value}
+              onChange={(e) => onChange({ ...field, value: e.target.value })}
+            />
+          )
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ============================================================
@@ -43,6 +221,9 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   const referenceChoices = referenceObject?.records ?? [];
   const selectedReferenceRecords = referenceChoices.filter((record) => (options.referenceRecordKeys ?? []).includes(record.key));
   const availableReferenceChoices = referenceChoices.filter((record) => !(options.referenceRecordKeys ?? []).includes(record.key));
+  const childTemplates = options.children ?? [];
+  const groupValue = parseGroupValue(field.value);
+  const groupListValue = parseGroupListValue(field.value);
 
   return (
     <div className={`rounded-xl border p-3 space-y-2 ${isInherited ? 'inherited-field' : ''}`} style={{ borderColor: isInherited ? 'rgba(245,158,11,0.4)' : 'var(--border)', backgroundColor: 'rgba(255,255,255,0.62)' }}>
@@ -60,6 +241,11 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
             <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
               {FIELD_TYPE_LABELS[field.type] || field.type}
             </span>
+            {(field.type === 'reference' || field.type === 'reference_multi') && (
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                ・ {referenceObject?.name || '未設定'}
+              </span>
+            )}
           </div>
         </div>
         <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
@@ -67,12 +253,111 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
         </div>
       </div>
 
-      {field.type === 'reference' && (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="field-label">参照オブジェクト</label>
-            <p className="text-xs px-1 py-1" style={{ color: 'var(--text-muted)' }}>{referenceObject?.name || '未設定'}</p>
+      {field.type === 'group' && (
+        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+          {childTemplates.length === 0 ? (
+            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>このグループには子項目がありません。設定画面で追加してください。</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {childTemplates.map((childTemplate) => {
+                const childField = buildChildField(childTemplate, groupValue[childTemplate.id] ?? groupValue[childTemplate.key], field.inherited);
+                return (
+                  <ChildFieldValueInput
+                    key={childTemplate.id}
+                    field={childField}
+                    globalAssetObjects={globalAssetObjects}
+                    onChange={(nextChild) => {
+                      const nextValue = {
+                        ...groupValue,
+                        [childTemplate.id]: { value: nextChild.value, options: nextChild.options },
+                      };
+                      onChange({ ...field, value: JSON.stringify(nextValue) });
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {field.type === 'group_list' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <label className="field-label mb-0">グループ一覧</label>
+            <button
+              type="button"
+              className="btn-secondary text-xs py-1 px-3"
+              onClick={() => {
+                const emptyItem = childTemplates.reduce<Record<string, GroupChildState>>((acc, childTemplate) => {
+                  acc[childTemplate.id] = { value: '', options: childTemplate.options };
+                  return acc;
+                }, {});
+                onChange({ ...field, value: JSON.stringify([...groupListValue, emptyItem]) });
+              }}
+            >
+              + 追加
+            </button>
           </div>
+          {groupListValue.length === 0 ? (
+            <div className="rounded-xl border px-3 py-4 text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+              まだ項目はありません。必要なまとまりを追加してください。
+            </div>
+          ) : (
+            groupListValue.map((item, itemIndex) => {
+              const summary = childTemplates
+                .slice(0, 2)
+                .map((childTemplate) => (item[childTemplate.id] ?? item[childTemplate.key])?.value)
+                .filter((value): value is string => Boolean(value))
+                .join(' / ');
+              return (
+                <details key={`${field.id}-${itemIndex}`} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+                  <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{field.label} {itemIndex + 1}</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{summary || '内容を入力してください'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-danger text-xs"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const nextItems = groupListValue.filter((_, currentIndex) => currentIndex !== itemIndex);
+                        onChange({ ...field, value: JSON.stringify(nextItems) });
+                      }}
+                    >
+                      削除
+                    </button>
+                  </summary>
+                  <div className="border-t p-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderColor: 'var(--border)' }}>
+                    {childTemplates.map((childTemplate) => {
+                      const childField = buildChildField(childTemplate, item[childTemplate.id] ?? item[childTemplate.key], field.inherited);
+                      return (
+                        <ChildFieldValueInput
+                          key={childTemplate.id}
+                          field={childField}
+                          globalAssetObjects={globalAssetObjects}
+                          onChange={(nextChild) => {
+                            const nextItems = [...groupListValue];
+                            nextItems[itemIndex] = {
+                              ...nextItems[itemIndex],
+                              [childTemplate.id]: { value: nextChild.value, options: nextChild.options },
+                            };
+                            onChange({ ...field, value: JSON.stringify(nextItems) });
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {field.type === 'reference' && (
+        <div className="grid grid-cols-1 gap-2">
           <div>
             <label className="field-label">参照レコード</label>
             <select
@@ -98,13 +383,8 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
 
       {field.type === 'reference_multi' && (
         <div className="space-y-2">
-          <div>
-            <label className="field-label">参照オブジェクト</label>
-            <p className="text-xs px-1 py-1" style={{ color: 'var(--text-muted)' }}>{referenceObject?.name || '未設定'}</p>
-          </div>
-
-          <div>
-            <label className="field-label">参照レコードを追加</label>
+          <div className="flex items-center gap-3">
+            <label className="field-label mb-0 shrink-0">参照レコードを追加</label>
             <select
               className="field-input text-xs"
               value=""
@@ -157,7 +437,7 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
         </div>
       )}
 
-      {field.type !== 'reference' && field.type !== 'reference_multi' && (
+      {field.type !== 'reference' && field.type !== 'reference_multi' && field.type !== 'group' && field.type !== 'group_list' && (
         <div>
           {field.type === 'textarea' ? (
             <textarea className="field-input text-xs" rows={3} value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />

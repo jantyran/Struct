@@ -9,6 +9,17 @@ import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { defaultGlobalAssetObjects, normalizeGlobalAssets } from '@/lib/global-assets';
 
+function parseFieldOptions(options?: string) {
+  try {
+    const parsed = JSON.parse(options || '{}');
+    return parsed && typeof parsed === 'object'
+      ? parsed as { referenceObjectId?: string }
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 const EMPTY_GA: GlobalAssets = {
   objects: defaultGlobalAssetObjects(),
   updated_at: '',
@@ -20,19 +31,24 @@ const FIELD_TYPE_LABELS: Record<GlobalAssetFieldType, string> = {
   url: 'URL',
   number: '数値',
   date: '日付',
+  reference: '参照',
+  reference_multi: '複数参照',
 };
 
 function FieldRow({
   field,
+  objects,
   onChange,
   onRemove,
 }: {
   field: GlobalAssetField;
+  objects: GlobalAssetObject[];
   onChange: (field: GlobalAssetField) => void;
   onRemove: () => void;
 }) {
+  const options = parseFieldOptions(field.options);
   return (
-    <div className="grid grid-cols-[1.2fr_1fr_160px_80px] gap-2 items-end">
+    <div className="grid grid-cols-[1.2fr_1fr_160px_180px_80px] gap-2 items-end">
       <div>
         <label className="field-label">項目名</label>
         <input className="field-input text-sm" value={field.label} onChange={(e) => onChange({ ...field, label: e.target.value })} />
@@ -43,11 +59,41 @@ function FieldRow({
       </div>
       <div>
         <label className="field-label">種別</label>
-        <select className="field-input text-sm" value={field.type} onChange={(e) => onChange({ ...field, type: e.target.value as GlobalAssetFieldType })}>
+        <select
+          className="field-input text-sm"
+          value={field.type}
+          onChange={(e) => {
+            const nextType = e.target.value as GlobalAssetFieldType;
+            onChange({
+              ...field,
+              type: nextType,
+              options: nextType === 'reference' || nextType === 'reference_multi'
+                ? JSON.stringify({ referenceObjectId: options.referenceObjectId || '' })
+                : '{}',
+            });
+          }}
+        >
           {Object.entries(FIELD_TYPE_LABELS).map(([type, label]) => (
             <option key={type} value={type}>{label}</option>
           ))}
         </select>
+      </div>
+      <div>
+        <label className="field-label">参照先</label>
+        {(field.type === 'reference' || field.type === 'reference_multi') ? (
+          <select
+            className="field-input text-sm"
+            value={options.referenceObjectId || ''}
+            onChange={(e) => onChange({ ...field, options: JSON.stringify({ referenceObjectId: e.target.value }) })}
+          >
+            <option value="">（選択してください）</option>
+            {objects.map((object) => (
+              <option key={object.id} value={object.id}>{object.name}</option>
+            ))}
+          </select>
+        ) : (
+          <div className="text-xs px-2 py-2" style={{ color: 'var(--text-muted)' }}>不要</div>
+        )}
       </div>
       <button onClick={onRemove} className="btn-danger">削除</button>
     </div>
@@ -58,6 +104,7 @@ function RecordCard({
   object,
   record,
   expanded,
+  objects,
   onToggle,
   onMetaChange,
   onChange,
@@ -66,6 +113,7 @@ function RecordCard({
   object: GlobalAssetObject;
   record: GlobalAssetObject['records'][number];
   expanded: boolean;
+  objects: GlobalAssetObject[];
   onToggle: () => void;
   onMetaChange: (patch: Pick<GlobalAssetObject['records'][number], 'name' | 'key'>) => void;
   onChange: (values: Record<string, string>) => void;
@@ -94,11 +142,74 @@ function RecordCard({
       </div>
       {expanded && object.fields.map((field) => {
         const value = record.values[field.key] ?? '';
+        const options = parseFieldOptions(field.options);
+        const referenceObject = objects.find((item) => item.id === options.referenceObjectId);
+        const referenceRecords = referenceObject?.records ?? [];
+        const multiValue = (() => {
+          if (field.type !== 'reference_multi') return [] as string[];
+          try {
+            const parsed = JSON.parse(value || '[]');
+            return Array.isArray(parsed) ? parsed as string[] : [];
+          } catch {
+            return [];
+          }
+        })();
         return (
           <div key={field.id}>
             <label className="field-label">{field.label}</label>
             {field.type === 'textarea' ? (
               <textarea className="field-input" rows={3} value={value} onChange={(e) => onChange({ ...record.values, [field.key]: e.target.value })} />
+            ) : field.type === 'reference' ? (
+              <select
+                className="field-input"
+                value={value}
+                onChange={(e) => onChange({ ...record.values, [field.key]: e.target.value })}
+              >
+                <option value="">（選択してください）</option>
+                {referenceRecords.map((referenceRecord) => (
+                  <option key={referenceRecord.id} value={referenceRecord.key}>{referenceRecord.name}</option>
+                ))}
+              </select>
+            ) : field.type === 'reference_multi' ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <label className="field-label mb-0 shrink-0">参照レコードを追加</label>
+                  <select
+                    className="field-input"
+                    value=""
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      const next = Array.from(new Set([...multiValue, e.target.value]));
+                      onChange({ ...record.values, [field.key]: JSON.stringify(next) });
+                    }}
+                  >
+                    <option value="">（追加するレコードを選択）</option>
+                    {referenceRecords.filter((referenceRecord) => !multiValue.includes(referenceRecord.key)).map((referenceRecord) => (
+                      <option key={referenceRecord.id} value={referenceRecord.key}>{referenceRecord.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {multiValue.length > 0 && (
+                  <div className="space-y-2">
+                    {multiValue.map((recordKey) => {
+                      const referenceRecord = referenceRecords.find((item) => item.key === recordKey);
+                      return (
+                        <div key={recordKey} className="flex items-center justify-between rounded-xl border px-3 py-2 text-xs bg-white/70" style={{ borderColor: 'var(--border)' }}>
+                          <span>{referenceRecord?.name || recordKey}</span>
+                          <button
+                            type="button"
+                            className="transition-colors"
+                            style={{ color: '#cc5c6d' }}
+                            onClick={() => onChange({ ...record.values, [field.key]: JSON.stringify(multiValue.filter((item) => item !== recordKey)) })}
+                          >
+                            削除
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ) : (
               <input
                 className="field-input"
@@ -191,6 +302,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
           key: nextFieldKey,
           label: '新しい項目',
           type: 'text',
+          options: '{}',
         },
       ],
       records: object.records.map((record) => ({
@@ -355,6 +467,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
                 <FieldRow
                   key={field.id}
                   field={field}
+                  objects={data.objects.filter((candidate) => candidate.id !== object.id)}
                   onChange={(nextField) => updateField(fieldIndex, nextField)}
                   onRemove={() => removeField(fieldIndex)}
                 />
@@ -382,6 +495,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
                 object={object}
                 record={record}
                 expanded={openRecordIds.includes(record.id)}
+                objects={data.objects.filter((candidate) => candidate.id !== object.id)}
                 onToggle={() => toggleRecord(record.id)}
                 onMetaChange={(patch) => updateRecordMeta(recordIndex, patch)}
                 onChange={(values) => updateRecord(recordIndex, values)}

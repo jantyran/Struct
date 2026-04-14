@@ -6,7 +6,60 @@ function normalizeLayout(value: unknown): 'half' | 'full' {
   return value === 'full' ? 'full' : 'half';
 }
 
+function parseOptions(value: string | undefined | null) {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function deriveFieldState(template: ProjectFieldTemplate, existing?: Partial<CustomField>) {
+  const templateOptions = parseOptions(template.options);
+  const existingOptions = parseOptions(existing?.options);
+  const existingValue = existing?.value ?? '';
+
+  if (template.type === 'reference') {
+    const nextReferenceObjectId = String(templateOptions.referenceObjectId || existingOptions.referenceObjectId || '');
+    const sameReferenceObject = nextReferenceObjectId === String(existingOptions.referenceObjectId || '');
+    return {
+      value: sameReferenceObject ? existingValue : '',
+      options: JSON.stringify({
+        referenceObjectId: nextReferenceObjectId,
+        referenceRecordKey: sameReferenceObject ? (existingOptions.referenceRecordKey || '') : '',
+      }),
+    };
+  }
+
+  if (template.type === 'reference_multi') {
+    const nextReferenceObjectId = String(templateOptions.referenceObjectId || existingOptions.referenceObjectId || '');
+    const sameReferenceObject = nextReferenceObjectId === String(existingOptions.referenceObjectId || '');
+    return {
+      value: sameReferenceObject ? existingValue : '',
+      options: JSON.stringify({
+        referenceObjectId: nextReferenceObjectId,
+        referenceRecordKeys: sameReferenceObject && Array.isArray(existingOptions.referenceRecordKeys) ? existingOptions.referenceRecordKeys : [],
+      }),
+    };
+  }
+
+  if (template.type === 'select') {
+    const choices = Array.isArray(templateOptions.choices) ? templateOptions.choices : [];
+    return {
+      value: choices.includes(existingValue) ? existingValue : '',
+      options: JSON.stringify({ choices }),
+    };
+  }
+
+  return {
+    value: existingValue,
+    options: template.options ?? '{}',
+  };
+}
+
 function toCustomFieldRecord(projectId: string, template: ProjectFieldTemplate, valueSeed?: Partial<CustomField>, sortOrder = 0): CustomField {
+  const derivedState = deriveFieldState(template, valueSeed);
   return {
     id: valueSeed?.id || uuidv4(),
     project_id: projectId,
@@ -14,8 +67,8 @@ function toCustomFieldRecord(projectId: string, template: ProjectFieldTemplate, 
     key: template.key,
     label: template.label,
     type: template.type,
-    value: valueSeed?.value ?? '',
-    options: template.options ?? '{}',
+    value: derivedState.value,
+    options: derivedState.options,
     layout: normalizeLayout(template.layout),
     inherited: valueSeed?.inherited ?? 0,
     inherited_from: valueSeed?.inherited_from ?? null,

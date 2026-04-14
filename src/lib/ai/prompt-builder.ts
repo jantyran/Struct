@@ -29,9 +29,7 @@ export function buildProjectContext(project: ProjectWithFields, globalAssets: Gl
   const customFieldsText = project.custom_fields.length > 0
     ? '\n\n【カスタムフィールド】\n' + project.custom_fields.map(f => {
         const flag = f.inherited ? ' [継承・要確認]' : '';
-        const content = f.crawled_content
-          ? `${f.value}\n  [URL取得内容]: ${f.crawled_content.substring(0, 800)}...`
-          : f.value || '（未入力）';
+        const content = formatCustomFieldValue(f);
         return `- ${f.label}${flag}: ${content}`;
       }).join('\n')
     : '';
@@ -152,6 +150,41 @@ export { SYSTEM_PROMPT };
 
 function safeJson<T>(str: string, fallback: T): T {
   try { return JSON.parse(str) as T; } catch { return fallback; }
+}
+
+function formatCustomFieldValue(field: CustomField): string {
+  if (field.type === 'group') {
+    const options = safeJson<{ children?: Array<{ key: string; label: string }> }>(field.options, {});
+    const values = safeJson<Record<string, { value?: string } | string>>(field.value, {});
+    const childLines = (options.children ?? []).map((child) => {
+      const childId = (child as { id?: string }).id;
+      const raw = (childId ? values[childId] : undefined) ?? values[child.key];
+      const value = typeof raw === 'string' ? raw : raw?.value || '';
+      return `  - ${child.label}: ${value || '（未入力）'}`;
+    });
+    return childLines.length > 0 ? `\n${childLines.join('\n')}` : '（未入力）';
+  }
+
+  if (field.type === 'group_list') {
+    const options = safeJson<{ children?: Array<{ key: string; label: string }> }>(field.options, {});
+    const values = safeJson<Array<Record<string, { value?: string } | string>>>(field.value, []);
+    if (values.length === 0) return '（未入力）';
+    return `\n${values.map((item, index) => {
+      const childLines = (options.children ?? []).map((child) => {
+        const childId = (child as { id?: string }).id;
+        const raw = (childId ? item[childId] : undefined) ?? item[child.key];
+        const value = typeof raw === 'string' ? raw : raw?.value || '';
+        return `    - ${child.label}: ${value || '（未入力）'}`;
+      }).join('\n');
+      return `  - ${index + 1}件目\n${childLines}`;
+    }).join('\n')}`;
+  }
+
+  if (field.crawled_content) {
+    return `${field.value}\n  [URL取得内容]: ${field.crawled_content.substring(0, 800)}...`;
+  }
+
+  return field.value || '（未入力）';
 }
 
 function projectTypeLabel(type: string): string {

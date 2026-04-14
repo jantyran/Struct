@@ -16,14 +16,121 @@ function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   return next;
 }
 
+type FieldOptionState = {
+  choices?: string[];
+  referenceObjectId?: string;
+  children?: ProjectFieldTemplate[];
+};
+
 function parseFieldOptions(options: string) {
   try {
     const parsed = JSON.parse(options || '{}');
     if (Array.isArray(parsed)) return { choices: parsed as string[] };
-    return parsed as { choices?: string[]; referenceObjectId?: string; referenceRecordKeys?: string[] };
+    return parsed as FieldOptionState;
   } catch {
     return {};
   }
+}
+
+function serializeFieldOptions(options: FieldOptionState) {
+  return JSON.stringify(options);
+}
+
+function createChildTemplate(index: number): ProjectFieldTemplate {
+  return {
+    id: uuidv4(),
+    key: `child_${index + 1}`,
+    label: `子項目 ${index + 1}`,
+    type: 'text',
+    options: '{}',
+    layout: 'half',
+  };
+}
+
+function ChildFieldTemplateRow({
+  field,
+  globalAssetObjects,
+  onChange,
+  onRemove,
+}: {
+  field: ProjectFieldTemplate;
+  globalAssetObjects: GlobalAssetObject[];
+  onChange: (field: ProjectFieldTemplate) => void;
+  onRemove: () => void;
+}) {
+  const options = parseFieldOptions(field.options);
+
+  return (
+    <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+      <div className="grid grid-cols-[1.2fr_1fr_160px_120px_80px] gap-2 items-end">
+        <div>
+          <label className="field-label">子項目名</label>
+          <input className="field-input text-sm" value={field.label} onChange={(e) => onChange({ ...field, label: e.target.value })} />
+        </div>
+        <div>
+          <label className="field-label">キー</label>
+          <input className="field-input text-sm" value={field.key} onChange={(e) => onChange({ ...field, key: e.target.value.replace(/\s+/g, '_') })} />
+        </div>
+        <div>
+          <label className="field-label">種別</label>
+          <select
+            className="field-input text-sm"
+            value={field.type}
+            onChange={(e) => {
+              const nextType = e.target.value as ProjectFieldTemplate['type'];
+              const nextOptions = nextType === 'select'
+                ? serializeFieldOptions({ choices: options.choices ?? [] })
+                : nextType === 'reference' || nextType === 'reference_multi'
+                  ? serializeFieldOptions({ referenceObjectId: options.referenceObjectId || '' })
+                  : '{}';
+              onChange({ ...field, type: nextType, options: nextOptions });
+            }}
+          >
+            {Object.entries(FIELD_TYPE_LABELS)
+              .filter(([type]) => !['group', 'group_list'].includes(type))
+              .map(([type, label]) => (
+                <option key={type} value={type}>{label}</option>
+              ))}
+          </select>
+        </div>
+        <div>
+          <label className="field-label">表示幅</label>
+          <select className="field-input text-sm" value={field.layout || 'half'} onChange={(e) => onChange({ ...field, layout: e.target.value as ProjectFieldTemplate['layout'] })}>
+            <option value="half">2列</option>
+            <option value="full">1列</option>
+          </select>
+        </div>
+        <button onClick={onRemove} className="btn-danger">削除</button>
+      </div>
+
+      {field.type === 'select' && (
+        <div>
+          <label className="field-label">選択肢（カンマ区切り）</label>
+          <input
+            className="field-input text-sm"
+            value={(options.choices ?? []).join(', ')}
+            onChange={(e) => onChange({ ...field, options: serializeFieldOptions({ choices: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) }) })}
+          />
+        </div>
+      )}
+
+      {(field.type === 'reference' || field.type === 'reference_multi') && (
+        <div>
+          <label className="field-label">参照オブジェクト</label>
+          <select
+            className="field-input text-sm"
+            value={options.referenceObjectId || ''}
+            onChange={(e) => onChange({ ...field, options: serializeFieldOptions({ referenceObjectId: e.target.value }) })}
+          >
+            <option value="">（選択してください）</option>
+            {globalAssetObjects.map((object) => (
+              <option key={object.id} value={object.id}>{object.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function PhaseRow({
@@ -82,6 +189,7 @@ function FieldTemplateRow({
   onRemove: () => void;
 }) {
   const options = parseFieldOptions(field.options);
+  const childFields = options.children ?? [];
 
   return (
     <div
@@ -110,10 +218,12 @@ function FieldTemplateRow({
             onChange={(e) => {
               const nextType = e.target.value as ProjectFieldTemplate['type'];
               const nextOptions = nextType === 'select'
-                ? JSON.stringify({ choices: options.choices ?? [] })
+                ? serializeFieldOptions({ choices: options.choices ?? [] })
                 : nextType === 'reference' || nextType === 'reference_multi'
-                  ? JSON.stringify({ referenceObjectId: options.referenceObjectId || '' })
-                  : '{}';
+                  ? serializeFieldOptions({ referenceObjectId: options.referenceObjectId || '' })
+                  : nextType === 'group' || nextType === 'group_list'
+                    ? serializeFieldOptions({ children: options.children ?? [] })
+                    : '{}';
               onChange({ ...field, type: nextType, options: nextOptions });
             }}
           >
@@ -140,7 +250,7 @@ function FieldTemplateRow({
             value={(options.choices ?? []).join(', ')}
             onChange={(e) => onChange({
               ...field,
-              options: JSON.stringify({ choices: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) }),
+              options: serializeFieldOptions({ choices: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) }),
             })}
             placeholder="例: 高, 中, 低"
           />
@@ -155,7 +265,7 @@ function FieldTemplateRow({
             value={options.referenceObjectId || ''}
             onChange={(e) => onChange({
               ...field,
-              options: JSON.stringify({ referenceObjectId: e.target.value }),
+              options: serializeFieldOptions({ referenceObjectId: e.target.value }),
             })}
           >
             <option value="">（選択してください）</option>
@@ -163,6 +273,53 @@ function FieldTemplateRow({
               <option key={object.id} value={object.id}>{object.name}</option>
             ))}
           </select>
+        </div>
+      )}
+
+      {(field.type === 'group' || field.type === 'group_list') && (
+        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>子項目設定</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                このまとまりの中に入る項目を定義します。子項目のネストは1段までです。
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary text-xs py-1 px-3"
+              onClick={() => onChange({
+                ...field,
+                options: serializeFieldOptions({ children: [...childFields, createChildTemplate(childFields.length)] }),
+              })}
+            >
+              + 子項目追加
+            </button>
+          </div>
+          {childFields.length === 0 ? (
+            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              まだ子項目がありません。会場名や住所のような中身を追加してください。
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {childFields.map((childField, childIndex) => (
+                <ChildFieldTemplateRow
+                  key={childField.id}
+                  field={childField}
+                  globalAssetObjects={globalAssetObjects}
+                  onChange={(nextChild) => {
+                    const nextChildren = [...childFields];
+                    nextChildren[childIndex] = nextChild;
+                    onChange({ ...field, options: serializeFieldOptions({ children: nextChildren }) });
+                  }}
+                  onRemove={() => {
+                    const nextChildren = childFields.filter((_, currentIndex) => currentIndex !== childIndex);
+                    onChange({ ...field, options: serializeFieldOptions({ children: nextChildren }) });
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

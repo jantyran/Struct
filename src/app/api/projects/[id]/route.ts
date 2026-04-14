@@ -42,10 +42,6 @@ export async function GET(_req: Request, { params }: Params) {
     const currentDefinition = definitions.find((definition) => definition.key === project.type);
     const syncedFields = syncCustomFieldsWithDefinition(params.id, fields, currentDefinition);
 
-    if (JSON.stringify(fields) !== JSON.stringify(syncedFields)) {
-      persistProjectCustomFields(db, params.id, syncedFields);
-    }
-
     const members = db.prepare(`
       SELECT m.*, u.email, u.name FROM project_members m
       JOIN users u ON m.user_id = u.id
@@ -94,6 +90,7 @@ export async function PUT(request: Request, { params }: Params) {
         layout?: 'half' | 'full';
         inherited?: number;
         inherited_from?: string | null;
+        crawled_content?: string | null;
         sort_order?: number;
       }>;
     };
@@ -143,7 +140,7 @@ export async function PUT(request: Request, { params }: Params) {
           layout: f.layout === 'full' ? 'full' : 'half',
           inherited: f.inherited ?? 0,
           inherited_from: f.inherited_from ?? null,
-          crawled_content: null,
+          crawled_content: f.crawled_content ?? null,
           sort_order: f.sort_order ?? idx,
         })) as CustomField[];
         const syncedFields = syncCustomFieldsWithDefinition(params.id, incomingFields, currentDefinition);

@@ -48,8 +48,8 @@ export async function POST(request: Request, { params }: Params) {
 
       for (const field of sourceFields) {
         db.prepare(`
-          INSERT INTO custom_fields (id, project_id, template_id, key, label, type, value, options, layout, inherited, inherited_from, sort_order)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO custom_fields (id, project_id, template_id, key, label, type, value, options, layout, inherited, inherited_from, crawled_content, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           uuidv4(),
           newId,
@@ -62,6 +62,7 @@ export async function POST(request: Request, { params }: Params) {
           field.layout === 'full' ? 'full' : 'half',
           body.include_values && field.value ? 1 : 0,
           body.include_values && field.value ? params.id : null,
+          body.include_values ? (field.crawled_content ?? null) : null,
           field.sort_order,
         );
       }
