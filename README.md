@@ -50,6 +50,7 @@ npm run dev
 ANTHROPIC_API_KEY=sk-ant-...
 JWT_SECRET=任意の長い文字列
 NEXT_PUBLIC_BASE_URL=http://133.18.123.87:3002 (外部アクセスの例)
+NEXT_PUBLIC_BASE_PATH= (ルート配備が既定。`/struct` のようなサブパス配備時のみ設定)
 ```
 
 開発サーバーはデフォルトで `0.0.0.0:3002` で起動し、外部からの接続を受け付けます。

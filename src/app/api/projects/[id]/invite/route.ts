@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { requireSession } from '@/lib/auth';
+import { BASE_PATH } from '@/lib/paths';
 
 interface Params { params: { id: string } }
 
@@ -29,7 +30,7 @@ export async function POST(request: Request, { params }: Params) {
       VALUES (?, ?, ?, ?, ?)
     `).run(uuidv4(), params.id, email.toLowerCase(), token, expires_at.toISOString());
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/invites/${token}`;
+    const inviteUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}${BASE_PATH}/invites/${token}`;
     return NextResponse.json({ success: true, inviteUrl });
   } catch (err) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

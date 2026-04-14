@@ -1,21 +1,50 @@
 'use client';
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion } from '@/types';
-import { ASSET_TYPE_LABELS, FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate } from '@/types';
+import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
+import { withBasePath } from '@/lib/paths';
+import { useAuth } from '@/components/AuthContext';
+
+function normalizeProject(project: ProjectWithFields): ProjectWithFields {
+  return {
+    ...project,
+    custom_fields: Array.isArray(project?.custom_fields) ? project.custom_fields : [],
+    members: Array.isArray(project?.members) ? project.members : [],
+    invitations: Array.isArray(project?.invitations) ? project.invitations : [],
+  };
+}
+
+function parseFieldOptions(options: string) {
+  try {
+    const parsed = JSON.parse(options || '{}');
+    if (Array.isArray(parsed)) {
+      return { choices: parsed as string[] };
+    }
+    return parsed as { choices?: string[]; referenceObjectId?: string; referenceRecordKey?: string; referenceRecordKeys?: string[] };
+  } catch {
+    return {};
+  }
+}
 
 // ============================================================
 // カスタムフィールドエディター
 // ============================================================
-function CustomFieldRow({ field, onChange, onRemove, onCrawl, crawling }: {
+function CustomFieldRow({ field, globalAssetObjects, onChange, onRemove, onCrawl, crawling }: {
   field: CustomField;
+  globalAssetObjects: GlobalAssetObject[];
   onChange: (f: CustomField) => void;
   onRemove: () => void;
   onCrawl: () => void;
   crawling: boolean;
 }) {
   const isInherited = field.inherited === 1;
+  const options = parseFieldOptions(field.options);
+  const referenceObject = globalAssetObjects.find((object) => object.id === options.referenceObjectId);
+  const referenceChoices = referenceObject?.records ?? [];
+  const selectedReferenceRecords = referenceChoices.filter((record) => (options.referenceRecordKeys ?? []).includes(record.key));
+  const availableReferenceChoices = referenceChoices.filter((record) => !(options.referenceRecordKeys ?? []).includes(record.key));
 
   return (
     <div className={`rounded-md border p-3 space-y-2 ${isInherited ? 'inherited-field' : ''}`} style={{ borderColor: isInherited ? 'rgba(245,158,11,0.4)' : 'var(--border)' }}>
@@ -33,7 +62,21 @@ function CustomFieldRow({ field, onChange, onRemove, onCrawl, crawling }: {
         </div>
         <div>
           <label className="field-label">種別</label>
-          <select className="field-input text-xs" value={field.type} onChange={e => onChange({ ...field, type: e.target.value as FieldType })}>
+          <select
+            className="field-input text-xs"
+            value={field.type}
+            onChange={e => {
+              const nextType = e.target.value as FieldType;
+              const nextOptions = nextType === 'select'
+                ? JSON.stringify({ choices: options.choices ?? [] })
+                : nextType === 'reference'
+                  ? JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: '' })
+                  : nextType === 'reference_multi'
+                    ? JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: [] })
+                  : '{}';
+              onChange({ ...field, type: nextType, value: '', options: nextOptions });
+            }}
+          >
             {(Object.entries(FIELD_TYPE_LABELS) as [FieldType, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
@@ -46,10 +89,125 @@ function CustomFieldRow({ field, onChange, onRemove, onCrawl, crawling }: {
         <div>
           <label className="field-label">選択肢（カンマ区切り）</label>
           <input className="field-input text-xs"
-            value={(() => { try { return JSON.parse(field.options || '[]').join(', '); } catch { return ''; } })()}
-            onChange={e => onChange({ ...field, options: JSON.stringify(e.target.value.split(',').map(s => s.trim()).filter(Boolean)) })}
+            value={(options.choices ?? []).join(', ')}
+            onChange={e => onChange({ ...field, options: JSON.stringify({ choices: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }) })}
             placeholder="選択肢A, 選択肢B, 選択肢C"
           />
+        </div>
+      )}
+
+      {field.type === 'reference' && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="field-label">参照オブジェクト</label>
+            <select
+              className="field-input text-xs"
+              value={options.referenceObjectId || ''}
+              onChange={(e) => onChange({
+                ...field,
+                value: '',
+                options: JSON.stringify({ referenceObjectId: e.target.value, referenceRecordKey: '' }),
+              })}
+            >
+              <option value="">（選択してください）</option>
+              {globalAssetObjects.map((object) => (
+                <option key={object.id} value={object.id}>{object.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="field-label">参照レコード</label>
+            <select
+              className="field-input text-xs"
+              value={options.referenceRecordKey || ''}
+              onChange={(e) => {
+                const record = referenceChoices.find((choice) => choice.key === e.target.value);
+                onChange({
+                  ...field,
+                  value: record?.name || '',
+                  options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: e.target.value }),
+                });
+              }}
+            >
+              <option value="">（選択してください）</option>
+              {referenceChoices.map((record) => (
+                <option key={record.id} value={record.key}>{record.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {field.type === 'reference_multi' && (
+        <div className="space-y-2">
+          <div>
+            <label className="field-label">参照オブジェクト</label>
+            <select
+              className="field-input text-xs"
+              value={options.referenceObjectId || ''}
+              onChange={(e) => onChange({
+                ...field,
+                value: '',
+                options: JSON.stringify({ referenceObjectId: e.target.value, referenceRecordKeys: [] }),
+              })}
+            >
+              <option value="">（選択してください）</option>
+              {globalAssetObjects.map((object) => (
+                <option key={object.id} value={object.id}>{object.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="field-label">参照レコードを追加</label>
+            <select
+              className="field-input text-xs"
+              value=""
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const nextKeys = [...(options.referenceRecordKeys ?? []), e.target.value];
+                const nextRecords = referenceChoices.filter((record) => nextKeys.includes(record.key));
+                onChange({
+                  ...field,
+                  value: nextRecords.map((record) => record.name).join(' / '),
+                  options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
+                });
+              }}
+            >
+              <option value="">（追加するレコードを選択）</option>
+              {availableReferenceChoices.map((record) => (
+                <option key={record.id} value={record.key}>{record.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="field-label">選択中の参照レコード</label>
+            {selectedReferenceRecords.length === 0 ? (
+              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ参照レコードは選択されていません。</div>
+            ) : (
+              selectedReferenceRecords.map((record) => (
+                <div key={record.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-xs" style={{ borderColor: 'var(--border)' }}>
+                  <span>{record.name}</span>
+                  <button
+                    type="button"
+                    className="text-rose-300 hover:text-rose-200"
+                    onClick={() => {
+                      const nextKeys = (options.referenceRecordKeys ?? []).filter((key) => key !== record.key);
+                      const nextRecords = referenceChoices.filter((choice) => nextKeys.includes(choice.key));
+                      onChange({
+                        ...field,
+                        value: nextRecords.map((choice) => choice.name).join(' / '),
+                        options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
+                      });
+                    }}
+                  >
+                    削除
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
@@ -60,10 +218,12 @@ function CustomFieldRow({ field, onChange, onRemove, onCrawl, crawling }: {
         ) : field.type === 'select' ? (
           <select className="field-input text-xs" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })}>
             <option value="">（選択してください）</option>
-            {(() => { try { return JSON.parse(field.options || '[]') as string[]; } catch { return []; } })().map(opt => (
+            {(options.choices ?? []).map(opt => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
+        ) : field.type === 'reference' || field.type === 'reference_multi' ? (
+          <input className="field-input text-xs" value={field.value} readOnly placeholder="参照レコードを選択してください" />
         ) : field.type === 'url' ? (
           <div className="flex gap-2">
             <input className="field-input text-xs flex-1" type="url" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} placeholder="https://" />
@@ -85,10 +245,27 @@ function CustomFieldRow({ field, onChange, onRemove, onCrawl, crawling }: {
 // ============================================================
 // 生成アセット表示
 // ============================================================
-function AssetCard({ asset, onDelete }: { asset: GeneratedAsset; onDelete: () => void }) {
+function AssetCard({
+  asset,
+  onDelete,
+  onSaved,
+}: {
+  asset: GeneratedAsset;
+  onDelete: () => void;
+  onSaved: (nextAsset: GeneratedAsset) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(asset.title);
+  const [draftContent, setDraftContent] = useState(asset.content);
+  const [saving, setSaving] = useState(false);
   const warnings = (() => { try { return JSON.parse(asset.warnings) as string[]; } catch { return []; } })();
+
+  useEffect(() => {
+    setDraftTitle(asset.title);
+    setDraftContent(asset.content);
+  }, [asset.title, asset.content]);
 
   function copy() {
     navigator.clipboard.writeText(asset.content);
@@ -96,11 +273,28 @@ function AssetCard({ asset, onDelete }: { asset: GeneratedAsset; onDelete: () =>
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function saveEdit() {
+    setSaving(true);
+    try {
+      const res = await fetch(withBasePath(`/api/projects/${asset.project_id}/assets`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assetId: asset.id, title: draftTitle, content: draftContent }),
+      });
+      const payload = await res.json();
+      if (!res.ok) return;
+      onSaved(payload as GeneratedAsset);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b cursor-pointer" style={{ borderColor: 'var(--border)' }} onClick={() => setExpanded(e => !e)}>
         <div>
-          <span className="text-xs font-semibold text-violet-300">{ASSET_TYPE_LABELS[asset.asset_type as AssetType] ?? asset.asset_type}</span>
+          <span className="text-xs font-semibold text-violet-300">{asset.title}</span>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{new Date(asset.created_at).toLocaleString('ja-JP')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -118,11 +312,34 @@ function AssetCard({ asset, onDelete }: { asset: GeneratedAsset; onDelete: () =>
               </ul>
             </div>
           )}
-          <pre className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
-            {asset.content}
-          </pre>
+          {editing ? (
+            <div className="space-y-3">
+              <div>
+                <label className="field-label">タイトル</label>
+                <input className="field-input text-sm" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label">内容</label>
+                <textarea className="field-input text-sm" rows={18} value={draftContent} onChange={(e) => setDraftContent(e.target.value)} />
+              </div>
+            </div>
+          ) : (
+            <pre className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
+              {asset.content}
+            </pre>
+          )}
           <div className="flex gap-2 mt-4">
-            <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
+            {editing ? (
+              <>
+                <button onClick={() => { setDraftTitle(asset.title); setDraftContent(asset.content); setEditing(false); }} className="btn-secondary text-xs">キャンセル</button>
+                <button onClick={saveEdit} disabled={saving} className="btn-primary text-xs">{saving ? '保存中...' : '保存'}</button>
+              </>
+            ) : (
+              <>
+                <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
+                <button onClick={() => setEditing(true)} className="btn-secondary text-xs">編集</button>
+              </>
+            )}
             <button onClick={onDelete} className="btn-danger">削除</button>
           </div>
         </div>
@@ -134,35 +351,104 @@ function AssetCard({ asset, onDelete }: { asset: GeneratedAsset; onDelete: () =>
 // ============================================================
 // メインページ
 // ============================================================
-export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ProjectPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const router = useRouter();
+  const { user, loading: authLoading, checkSession } = useAuth();
   const [project, setProject] = useState<ProjectWithFields | null>(null);
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
+  const [projectTypes, setProjectTypes] = useState<ProjectTypeDefinition[]>([]);
+  const [globalAssetObjects, setGlobalAssetObjects] = useState<GlobalAssetObject[]>([]);
+  const [contentTemplates, setContentTemplates] = useState<ProjectContentTemplate[]>([]);
   const [saving, setSaving] = useState(false);
   const [savingMsg, setSavingMsg] = useState('');
   const [generating, setGenerating] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
-  const [selectedAssetTypes, setSelectedAssetTypes] = useState<AssetType[]>(['lp', 'sns_twitter']);
+  const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
+  const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
   const [tab, setTab] = useState<'fields' | 'assets'>('fields');
+  const [loadError, setLoadError] = useState<string>('');
+  const [aiError, setAiError] = useState('');
 
   const loadProject = useCallback(async () => {
-    const [pr, ar] = await Promise.all([
-      fetch(`/api/projects/${id}`).then(r => r.json()),
-      fetch(`/api/projects/${id}/assets`).then(r => r.json()),
+    setLoadError('');
+    const [projectRes, assetsRes] = await Promise.all([
+      fetch(withBasePath(`/api/projects/${id}`)),
+      fetch(withBasePath(`/api/projects/${id}/assets`)),
     ]);
-    setProject(pr as ProjectWithFields);
-    setAssets(ar as GeneratedAsset[]);
-  }, [id]);
+    const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
+      fetch(withBasePath('/api/project-types')),
+      fetch(withBasePath('/api/global-assets')),
+      fetch(withBasePath('/api/content-templates')),
+    ]);
+    const [pr, ar, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
+      projectRes.json(),
+      assetsRes.json(),
+      projectTypesRes.json(),
+      globalAssetsRes.json(),
+      contentTemplatesRes.json(),
+    ]);
 
-  useEffect(() => { loadProject(); }, [loadProject]);
+    if (projectRes.status === 401) {
+      setProject(null);
+      setAssets([]);
+      router.push(withBasePath('/login'));
+      return;
+    }
+
+    if (projectRes.status === 404 || assetsRes.status === 404) {
+      setProject(null);
+      setAssets([]);
+      setLoadError('このプロジェクトは見つからないか、アクセスできません。');
+      return;
+    }
+
+    if (!projectRes.ok || !assetsRes.ok) {
+      setProject(null);
+      setAssets([]);
+      setLoadError('プロジェクトの読み込みに失敗しました。');
+      return;
+    }
+
+    setProject(normalizeProject(pr as ProjectWithFields));
+    setAssets(Array.isArray(ar) ? ar as GeneratedAsset[] : []);
+    setProjectTypes(Array.isArray(projectTypesPayload.project_types) ? projectTypesPayload.project_types as ProjectTypeDefinition[] : []);
+    setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects as GlobalAssetObject[] : []);
+    setContentTemplates(Array.isArray(contentTemplatesPayload.content_templates) ? contentTemplatesPayload.content_templates as ProjectContentTemplate[] : []);
+  }, [id, router]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    (async () => {
+      const resolvedUser = user ?? await checkSession();
+      if (!resolvedUser) {
+        setProject(null);
+        setAssets([]);
+        router.push(withBasePath('/login'));
+        return;
+      }
+      loadProject();
+    })();
+  }, [authLoading, user, loadProject, router, checkSession]);
+
+  useEffect(() => {
+    const currentType = projectTypes.find((definition) => definition.key === project?.type);
+    const availableKeys = contentTemplates
+      .filter((template) => currentType?.content_template_ids.includes(template.id))
+      .map((template) => template.key);
+    setSelectedContentKeys((current) => {
+      const filtered = current.filter((key) => availableKeys.includes(key));
+      if (filtered.length > 0) return filtered;
+      return availableKeys.slice(0, Math.min(availableKeys.length, 2));
+    });
+  }, [project?.type, projectTypes, contentTemplates]);
 
   async function save(p: ProjectWithFields) {
     setSaving(true);
     const channels = (() => { try { return JSON.parse(p.channels) as string[]; } catch { return []; } })();
-    await fetch(`/api/projects/${id}`, {
+    await fetch(withBasePath(`/api/projects/${id}`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...p, channels, custom_fields: p.custom_fields }),
@@ -206,7 +492,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   async function crawlField(fieldId: string) {
     setCrawlingFieldId(fieldId);
     try {
-      const res = await fetch(`/api/projects/${id}/crawl`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ field_id: fieldId }) });
+      const res = await fetch(withBasePath(`/api/projects/${id}/crawl`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ field_id: fieldId }) });
       if (res.ok) await loadProject();
     } finally {
       setCrawlingFieldId(null);
@@ -214,11 +500,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }
 
   async function generate() {
-    if (!project || selectedAssetTypes.length === 0) return;
+    if (!project || selectedContentKeys.length === 0) return;
+    setAiError('');
     await save(project);
     setGenerating(true);
     try {
-      await fetch(`/api/projects/${id}/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ asset_types: selectedAssetTypes }) });
+      const res = await fetch(withBasePath(`/api/projects/${id}/generate`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset_types: selectedContentKeys, additional_instruction: additionalGenerationInstruction }),
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        setAiError(payload.error || 'AI生成に失敗しました。');
+        return;
+      }
       await loadProject();
       setTab('assets');
     } finally {
@@ -228,11 +524,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
   async function complete() {
     if (!project) return;
+    setAiError('');
     await save(project);
     setCompleting(true);
     try {
-      const res = await fetch(`/api/projects/${id}/complete`, { method: 'POST' });
-      const data = await res.json() as { suggestions: CompletionSuggestion[] };
+      const res = await fetch(withBasePath(`/api/projects/${id}/complete`), { method: 'POST' });
+      const data = await res.json() as { suggestions: CompletionSuggestion[]; error?: string };
+      if (!res.ok) {
+        setAiError(data.error || 'AI補完に失敗しました。');
+        return;
+      }
       setSuggestions(data.suggestions ?? []);
     } finally {
       setCompleting(false);
@@ -247,53 +548,123 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   }
 
   async function deleteAsset(assetId: string) {
-    await fetch(`/api/projects/${id}/assets?assetId=${assetId}`, { method: 'DELETE' });
+    await fetch(withBasePath(`/api/projects/${id}/assets?assetId=${assetId}`), { method: 'DELETE' });
     setAssets(a => a.filter(x => x.id !== assetId));
+  }
+
+  function updateAsset(updatedAsset: GeneratedAsset) {
+    setAssets((current) => current.map((asset) => asset.id === updatedAsset.id ? updatedAsset : asset));
   }
 
   async function deleteProject() {
     if (!confirm('このプロジェクトを削除しますか？')) return;
-    await fetch(`/api/projects/${id}`, { method: 'DELETE' });
-    router.push('/');
+    await fetch(withBasePath(`/api/projects/${id}`), { method: 'DELETE' });
+    router.push(withBasePath('/'));
   }
 
-  if (!project) return (
+  if (authLoading || !user) return (
     <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-muted)' }}>
       <p>読み込み中...</p>
     </div>
   );
 
+  if (!project) return (
+    <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-muted)' }}>
+      <p>{loadError || '読み込み中...'}</p>
+    </div>
+  );
+
   const channels = (() => { try { return JSON.parse(project.channels) as string[]; } catch { return []; } })();
-  const inheritedCount = project.custom_fields.filter(f => f.inherited === 1).length;
+  const customFields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
+  const inheritedCount = customFields.filter(f => f.inherited === 1).length;
+  const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
+  const currentContentTemplates = contentTemplates.filter((template) => currentProjectType?.content_template_ids.includes(template.id));
+  const typeLabel = currentProjectType?.name || PROJECT_TYPE_LABELS[project.type as ProjectType] || project.type;
+  const currentPhases = currentProjectType?.phases || [];
+  const currentPhaseIndex = currentPhases.findIndex((phase) => phase.key === project.phase_key);
 
   return (
     <div className="h-full flex flex-col">
       {/* ヘッダー */}
-      <div className="px-6 py-4 border-b flex items-center gap-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-surface)' }}>
-        <button onClick={() => router.push('/')} className="text-gray-500 hover:text-gray-300 text-sm">← 戻る</button>
-        <div className="flex-1 min-w-0">
-          <input
-            className="bg-transparent text-lg font-bold w-full focus:outline-none border-b border-transparent focus:border-gray-600 transition-colors"
-            value={project.name}
-            onChange={e => setProject({ ...project, name: e.target.value })}
-          />
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-violet-300">{PROJECT_TYPE_LABELS[project.type] ?? project.type}</span>
-            {project.cloned_from && <span className="text-xs text-gray-500">• クローン</span>}
-            {inheritedCount > 0 && <span className="text-xs text-amber-400">• 要確認フィールド {inheritedCount}件</span>}
+      <div className="px-6 py-4 border-b space-y-4" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-surface)' }}>
+        <div className="flex items-center gap-4">
+          <button onClick={() => router.push(withBasePath('/'))} className="text-gray-500 hover:text-gray-300 text-sm">← 戻る</button>
+          <div className="flex-1 min-w-0">
+            <input
+              className="bg-transparent text-lg font-bold w-full focus:outline-none border-b border-transparent focus:border-gray-600 transition-colors"
+              value={project.name}
+              onChange={e => setProject({ ...project, name: e.target.value })}
+            />
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-violet-300">{typeLabel}</span>
+              {project.cloned_from && <span className="text-xs text-gray-500">• クローン</span>}
+              {inheritedCount > 0 && <span className="text-xs text-amber-400">• 要確認フィールド {inheritedCount}件</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {savingMsg && <span className="text-xs text-green-400">{savingMsg}</span>}
+            <select className="field-input text-xs w-auto" value={project.status} onChange={e => setProject({ ...project, status: e.target.value as typeof project.status })}>
+              <option value="draft">下書き</option>
+              <option value="active">実施中</option>
+              <option value="archived">アーカイブ</option>
+            </select>
+            <button onClick={() => save(project)} disabled={saving} className="btn-primary text-sm">
+              {saving ? '保存中...' : '保存'}
+            </button>
+            <button onClick={deleteProject} className="btn-danger text-xs">削除</button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {savingMsg && <span className="text-xs text-green-400">{savingMsg}</span>}
-          <select className="field-input text-xs w-auto" value={project.status} onChange={e => setProject({ ...project, status: e.target.value as typeof project.status })}>
-            <option value="draft">下書き</option>
-            <option value="active">実施中</option>
-            <option value="archived">アーカイブ</option>
-          </select>
-          <button onClick={() => save(project)} disabled={saving} className="btn-primary text-sm">
-            {saving ? '保存中...' : '保存'}
-          </button>
-          <button onClick={deleteProject} className="btn-danger text-xs">削除</button>
+
+        {currentPhases.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-cyan-300">進行パス</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  全体の流れと現在地を表示しています。クリックで現在フェーズを切り替えられます。
+                </p>
+              </div>
+              <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                現在地: {currentPhases[currentPhaseIndex]?.name || '未設定'}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {currentPhases.map((phase, phaseIndex) => {
+                const isCurrent = phase.key === project.phase_key;
+                const isCompleted = currentPhaseIndex >= 0 && phaseIndex < currentPhaseIndex;
+                return (
+                  <button
+                    key={phase.id}
+                    type="button"
+                    onClick={() => setProject({ ...project, phase_key: phase.key })}
+                    className="px-4 py-2 rounded-md text-sm font-medium transition-colors border"
+                    style={{
+                      borderColor: isCurrent ? 'rgba(34,211,238,0.6)' : isCompleted ? 'rgba(16,185,129,0.45)' : 'var(--border)',
+                      backgroundColor: isCurrent ? 'rgba(34,211,238,0.12)' : isCompleted ? 'rgba(16,185,129,0.12)' : 'rgba(148,163,184,0.05)',
+                      color: isCurrent ? 'rgb(103,232,249)' : isCompleted ? 'rgb(110,231,183)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {phaseIndex + 1}. {phase.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {currentPhases.length === 0 && (
+          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            この種別にはまだフェーズ定義がありません。プロジェクト種別設定で追加してください。
+          </div>
+        )}
+      </div>
+      
+      <div className="px-6 pt-4">
+        <div className="card p-4">
+          <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            <span>種別: <span className="text-violet-300">{typeLabel}</span></span>
+            <span>現在フェーズ: <span className="text-cyan-300">{currentPhases[currentPhaseIndex]?.name || '未設定'}</span></span>
+            <span>総フェーズ数: {currentPhases.length}</span>
+          </div>
         </div>
       </div>
 
@@ -303,7 +674,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* タブ切り替え */}
           <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-            {[{ k: 'fields' as const, l: 'プロジェクト情報' }, { k: 'assets' as const, l: `生成済みアセット (${assets.length})` }].map(t => (
+            {[{ k: 'fields' as const, l: 'プロジェクト情報' }, { k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }].map(t => (
               <button key={t.k} onClick={() => setTab(t.k)}
                 className={`text-sm px-3 py-1.5 rounded-md transition-colors ${tab === t.k ? 'bg-violet-700/20 text-violet-300' : 'text-gray-400 hover:text-gray-200'}`}>
                 {t.l}
@@ -319,8 +690,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <div className="card p-5 grid grid-cols-2 gap-4">
                   <div>
                     <label className="field-label">種別</label>
-                    <select className="field-input" value={project.type} onChange={e => setProject({ ...project, type: e.target.value as typeof project.type })}>
-                      {Object.entries(PROJECT_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    <select
+                      className="field-input"
+                      value={project.type}
+                      onChange={e => {
+                        const nextType = e.target.value as typeof project.type;
+                        const nextDefinition = projectTypes.find((definition) => definition.key === nextType);
+                        const nextPhaseKey = nextDefinition?.phases.find((phase) => phase.key === project.phase_key)
+                          ? project.phase_key
+                          : (nextDefinition?.phases[0]?.key || '');
+                        setProject({ ...project, type: nextType, phase_key: nextPhaseKey });
+                      }}
+                    >
+                      {projectTypes.map((definition) => <option key={definition.id} value={definition.key}>{definition.name}</option>)}
                     </select>
                   </div>
                   <div>
@@ -356,7 +738,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   <h2 className="section-title">カスタムフィールド (Project Custom)</h2>
                   <button onClick={addField} className="btn-secondary text-xs py-1 px-3">+ フィールド追加</button>
                 </div>
-                {project.custom_fields.length === 0 ? (
+                {customFields.length === 0 ? (
                   <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
                     <p className="text-sm">カスタムフィールドがありません</p>
                     <p className="text-xs mt-1">PRポイント、技術的ハイライト、参照URLなど施策固有の情報を追加できます</p>
@@ -364,10 +746,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {project.custom_fields.map((f, i) => (
+                    {customFields.map((f, i) => (
                       <CustomFieldRow
                         key={f.id}
                         field={f}
+                        globalAssetObjects={globalAssetObjects}
                         onChange={nf => updateField(i, nf)}
                         onRemove={() => removeField(i)}
                         onCrawl={() => crawlField(f.id)}
@@ -401,12 +784,12 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <section>
               {assets.length === 0 ? (
                 <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
-                  <p>まだアセットが生成されていません</p>
-                  <p className="text-xs mt-1">右パネルからアセットタイプを選んで生成してください</p>
+                  <p>まだコンテンツは生成されていません</p>
+                  <p className="text-xs mt-1">右パネルから生成対象を選んで実行してください</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {assets.map(a => <AssetCard key={a.id} asset={a} onDelete={() => deleteAsset(a.id)} />)}
+                  {assets.map(a => <AssetCard key={a.id} asset={a} onDelete={() => deleteAsset(a.id)} onSaved={updateAsset} />)}
                 </div>
               )}
             </section>
@@ -415,30 +798,35 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
         {/* 右: AI生成パネル */}
         <div className="w-72 shrink-0 border-l overflow-y-auto p-5 space-y-5" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-surface)' }}>
-          <h2 className="section-title">AI生成エンジン</h2>
+          <h2 className="section-title">コンテンツ生成</h2>
 
-          {/* アセットタイプ選択 */}
+          {/* 生成コンテンツ選択 */}
           <div>
-            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>生成するアセット</p>
+            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>生成するコンテンツ</p>
             <div className="space-y-1.5">
-              {(Object.entries(ASSET_TYPE_LABELS) as [AssetType, string][]).map(([type, label]) => (
-                <label key={type} className="flex items-center gap-2.5 cursor-pointer group">
+              {currentContentTemplates.map((template) => (
+                <label key={template.id} className="flex items-center gap-2.5 cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={selectedAssetTypes.includes(type)}
-                    onChange={e => setSelectedAssetTypes(prev => e.target.checked ? [...prev, type] : prev.filter(t => t !== type))}
+                    checked={selectedContentKeys.includes(template.key)}
+                    onChange={e => setSelectedContentKeys(prev => e.target.checked ? [...prev, template.key] : prev.filter(t => t !== template.key))}
                     className="accent-violet-500"
                   />
-                  <span className={`text-sm transition-colors ${selectedAssetTypes.includes(type) ? 'text-gray-200' : 'text-gray-500'}`}>{label}</span>
+                  <span className={`text-sm transition-colors ${selectedContentKeys.includes(template.key) ? 'text-gray-200' : 'text-gray-500'}`}>{template.name}</span>
                 </label>
               ))}
+              {currentContentTemplates.length === 0 && (
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  このプロジェクト種別には生成コンテンツ定義がありません。設定から追加してください。
+                </div>
+              )}
             </div>
           </div>
 
           {/* 生成ボタン */}
           <button
             onClick={generate}
-            disabled={generating || selectedAssetTypes.length === 0}
+            disabled={generating || selectedContentKeys.length === 0}
             className="btn-primary w-full justify-center py-2.5"
           >
             {generating ? (
@@ -446,8 +834,19 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 <span className="inline-block w-3 h-3 border-2 border-violet-300 border-t-transparent rounded-full animate-spin" />
                 生成中...
               </span>
-            ) : `選択中の ${selectedAssetTypes.length} 種類を生成`}
+            ) : `選択中の ${selectedContentKeys.length} 件を生成`}
           </button>
+
+          <div>
+            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
+            <textarea
+              className="field-input text-xs"
+              rows={4}
+              value={additionalGenerationInstruction}
+              onChange={(e) => setAdditionalGenerationInstruction(e.target.value)}
+              placeholder="今回だけ反映したい条件や補足があれば入力"
+            />
+          </div>
 
           <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
             <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>フィールド自動補完</p>
@@ -461,6 +860,16 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
               ) : 'AI補完を実行'}
             </button>
           </div>
+
+          {aiError && (
+            <div className="p-3 rounded-md border" style={{ borderColor: 'rgba(248,113,113,0.35)', color: 'rgb(252,165,165)' }}>
+              <p className="text-xs font-semibold">AI実行エラー</p>
+              <p className="text-xs mt-1">{aiError}</p>
+              <button onClick={() => router.push(withBasePath('/settings/ai'))} className="text-xs mt-2 text-violet-300 hover:text-violet-200">
+                AI設定を開く →
+              </button>
+            </div>
+          )}
 
           {/* 参照情報サマリー */}
           <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>

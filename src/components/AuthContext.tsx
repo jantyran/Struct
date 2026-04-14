@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { withBasePath } from '@/lib/paths';
 
 interface User {
   id: string;
@@ -13,14 +14,14 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   logout: () => Promise<void>;
-  checkSession: () => Promise<void>;
+  checkSession: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   logout: async () => {},
-  checkSession: async () => {},
+  checkSession: async () => null,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -30,15 +31,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkSession = async () => {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await fetch(withBasePath('/api/auth/me'));
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
+        return data.user as User;
       } else {
         setUser(null);
+        return null;
       }
     } catch (err) {
       setUser(null);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -49,9 +53,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch(withBasePath('/api/auth/logout'), { method: 'POST' });
     setUser(null);
-    router.push('/login');
+    router.push(withBasePath('/login'));
   };
 
   return (

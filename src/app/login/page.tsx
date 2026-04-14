@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthContext';
+import { withBasePath } from '@/lib/paths';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,7 +19,7 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(withBasePath('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -27,7 +28,11 @@ export default function LoginPage() {
       const data = await res.json();
       if (res.ok) {
         await checkSession();
-        router.push('/');
+        const redirectTo =
+          typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('redirect') || withBasePath('/')
+            : withBasePath('/');
+        router.push(redirectTo);
       } else {
         setError(data.error || 'ログインに失敗しました。');
       }
@@ -80,7 +85,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <p className="text-xs text-gray-500">
             アカウントをお持ちでないですか？{' '}
-            <Link href="/signup" className="text-violet-400 hover:text-violet-300">
+            <Link href={withBasePath('/signup')} className="text-violet-400 hover:text-violet-300">
               新規登録
             </Link>
           </p>

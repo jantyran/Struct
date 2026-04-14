@@ -29,12 +29,24 @@ export async function POST(request: Request) {
     const body = await request.json() as {
       name: string;
       type?: string;
+      phase_key?: string;
       target?: string;
       start_date?: string;
       end_date?: string;
       budget?: string;
       channels?: string[];
       description?: string;
+      custom_fields?: Array<{
+        id?: string;
+        key: string;
+        label: string;
+        type: string;
+        value?: string;
+        options?: string;
+        inherited?: number;
+        inherited_from?: string | null;
+        sort_order?: number;
+      }>;
     };
 
     if (!body.name?.trim()) {
@@ -42,21 +54,43 @@ export async function POST(request: Request) {
     }
 
     const id = uuidv4();
-    db.prepare(`
-      INSERT INTO projects (id, name, type, target, start_date, end_date, budget, channels, description, owner_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      body.name.trim(),
-      body.type ?? 'campaign',
-      body.target ?? '',
-      body.start_date ?? '',
-      body.end_date ?? '',
-      body.budget ?? '',
-      JSON.stringify(body.channels ?? []),
-      body.description ?? '',
-      user.id
-    );
+    const tx = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO projects (id, name, type, phase_key, target, start_date, end_date, budget, channels, description, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        body.name.trim(),
+        body.type ?? 'campaign',
+        body.phase_key ?? '',
+        body.target ?? '',
+        body.start_date ?? '',
+        body.end_date ?? '',
+        body.budget ?? '',
+        JSON.stringify(body.channels ?? []),
+        body.description ?? '',
+        user.id
+      );
+
+      (body.custom_fields ?? []).forEach((field, index) => {
+        db.prepare(`
+          INSERT INTO custom_fields (id, project_id, key, label, type, value, options, inherited, inherited_from, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          field.id ?? uuidv4(),
+          id,
+          field.key,
+          field.label,
+          field.type,
+          field.value ?? '',
+          field.options ?? '{}',
+          field.inherited ?? 0,
+          field.inherited_from ?? null,
+          field.sort_order ?? index
+        );
+      });
+    });
+    tx();
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     return NextResponse.json(project, { status: 201 });

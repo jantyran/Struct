@@ -1,145 +1,221 @@
 'use client';
-import { useState, useEffect } from 'react';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { GlobalAssets, Product } from '@/types';
+import type { GlobalAssets, GlobalAssetObject } from '@/types';
+import { withBasePath } from '@/lib/paths';
+import { useAuth } from '@/components/AuthContext';
+import { createGlobalAssetObject, defaultGlobalAssetObjects, normalizeGlobalAssets } from '@/lib/global-assets';
 
 const EMPTY_GA: GlobalAssets = {
-  company_name: '',
-  company_description: '',
-  brand_voice: '',
-  brand_guidelines: '',
-  products: [],
+  objects: defaultGlobalAssetObjects(),
   updated_at: '',
 };
 
-function ProductCard({ product, onChange, onRemove }: {
-  product: Product;
-  onChange: (p: Product) => void;
-  onRemove: () => void;
+function NewObjectModal({
+  onClose,
+  onSubmit,
+  submitting,
+}: {
+  onClose: () => void;
+  onSubmit: (payload: { name: string; key: string; description: string }) => void;
+  submitting: boolean;
 }) {
+  const [name, setName] = useState('');
+  const [key, setKey] = useState('');
+  const [description, setDescription] = useState('');
+
+  const normalizedKey = key.replace(/\s+/g, '_');
+  const canSubmit = name.trim().length > 0 && normalizedKey.trim().length > 0;
+
   return (
-    <div className="card p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-violet-300">製品 / サービス</span>
-        <button onClick={onRemove} className="btn-danger">削除</button>
-      </div>
-      <div>
-        <label className="field-label">名称</label>
-        <input className="field-input" value={product.name} onChange={e => onChange({ ...product, name: e.target.value })} placeholder="例: Struct Pro" />
-      </div>
-      <div>
-        <label className="field-label">概要</label>
-        <textarea className="field-input" rows={2} value={product.description} onChange={e => onChange({ ...product, description: e.target.value })} placeholder="製品・サービスの説明" />
-      </div>
-      <div>
-        <label className="field-label">機能・特徴</label>
-        <textarea className="field-input" rows={2} value={product.features} onChange={e => onChange({ ...product, features: e.target.value })} placeholder="主要な機能や特徴を記述" />
-      </div>
-      <div>
-        <label className="field-label">価格</label>
-        <input className="field-input" value={product.price} onChange={e => onChange({ ...product, price: e.target.value })} placeholder="例: ¥9,800/月（税込）" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="card w-full max-w-lg p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-5">新しいオブジェクトを追加</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="field-label">オブジェクト名 *</label>
+            <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例: 導入事例" autoFocus />
+          </div>
+          <div>
+            <label className="field-label">オブジェクトキー *</label>
+            <input className="field-input" value={normalizedKey} onChange={(e) => setKey(e.target.value)} placeholder="case_studies" />
+          </div>
+          <div>
+            <label className="field-label">説明</label>
+            <textarea className="field-input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="このオブジェクトで管理する内容" />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="btn-secondary flex-1" disabled={submitting}>キャンセル</button>
+          <button
+            onClick={() => onSubmit({ name: name.trim(), key: normalizedKey.trim(), description: description.trim() })}
+            disabled={!canSubmit || submitting}
+            className="btn-primary flex-1"
+          >
+            {submitting ? '保存中...' : '保存して詳細へ'}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function GlobalAssetsPage() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [data, setData] = useState<GlobalAssets>(EMPTY_GA);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showNewObjectModal, setShowNewObjectModal] = useState(false);
 
   useEffect(() => {
-    fetch('/api/global-assets').then(r => r.json()).then(setData);
-  }, []);
+    if (authLoading) return;
+    if (!user) {
+      setData(EMPTY_GA);
+      router.push(withBasePath('/login'));
+      return;
+    }
+
+    (async () => {
+      const res = await fetch(withBasePath('/api/global-assets'));
+      const payload = await res.json();
+      if (res.status === 401) {
+        setData(EMPTY_GA);
+        router.push(withBasePath('/login'));
+        return;
+      }
+      setData(normalizeGlobalAssets(payload));
+    })();
+  }, [authLoading, router, user]);
 
   async function handleSave() {
     setSaving(true);
-    await fetch('/api/global-assets', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const res = await fetch(withBasePath('/api/global-assets'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const payload = await res.json();
     setSaving(false);
+
+    if (res.status === 401) {
+      router.push(withBasePath('/login'));
+      return;
+    }
+
+    setData(normalizeGlobalAssets(payload));
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   }
 
-  function addProduct() {
-    setData(d => ({ ...d, products: [...d.products, { id: uuidv4(), name: '', description: '', features: '', price: '' }] }));
+  function removeObject(index: number) {
+    setData((current) => ({ ...current, objects: current.objects.filter((_, objectIndex) => objectIndex !== index) }));
   }
 
-  function updateProduct(idx: number, p: Product) {
-    setData(d => { const ps = [...d.products]; ps[idx] = p; return { ...d, products: ps }; });
+  async function createObjectAndOpen(payload: { name: string; key: string; description: string }) {
+    const nextObject = createGlobalAssetObject({
+      id: uuidv4(),
+      key: payload.key,
+      name: payload.name,
+      description: payload.description,
+    });
+    const nextData = {
+      ...data,
+      objects: [...data.objects, nextObject],
+    };
+
+    setSaving(true);
+    const res = await fetch(withBasePath('/api/global-assets'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(nextData),
+    });
+    const payloadResponse = await res.json();
+    setSaving(false);
+
+    if (res.status === 401) {
+      router.push(withBasePath('/login'));
+      return;
+    }
+
+    setData(normalizeGlobalAssets(payloadResponse));
+    setSaved(true);
+    setShowNewObjectModal(false);
+    setTimeout(() => setSaved(false), 2500);
+    router.push(withBasePath(`/global-assets/${nextObject.id}`));
   }
 
-  function removeProduct(idx: number) {
-    setData(d => ({ ...d, products: d.products.filter((_, i) => i !== idx) }));
+  if (authLoading) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto">
+        <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
+          読み込み中...
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold">Global Assets</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>全プロジェクト共通の会社・ブランド情報</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+            オブジェクト一覧と管理ハブです。各オブジェクトの設定とレコード編集は詳細ページで行います。
+          </p>
         </div>
-        <button onClick={handleSave} disabled={saving} className="btn-primary">
-          {saving ? '保存中...' : saved ? '✓ 保存済み' : '保存'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowNewObjectModal(true)} className="btn-secondary">+ オブジェクト追加</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary">
+            {saving ? '保存中...' : saved ? '✓ 保存済み' : '保存'}
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-6">
-        {/* 会社情報 */}
-        <section>
-          <h2 className="section-title mb-3">会社情報</h2>
-          <div className="card p-5 space-y-4">
-            <div>
-              <label className="field-label">会社名</label>
-              <input className="field-input" value={data.company_name} onChange={e => setData(d => ({ ...d, company_name: e.target.value }))} placeholder="株式会社〇〇" />
+      <div className="space-y-8">
+        {data.objects.map((object, objectIndex) => (
+          <section key={object.id} className="card p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold">{object.name}</h2>
+                  {object.is_default && <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">既定</span>}
+                </div>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>キー: {object.key}</p>
+                {object.description && (
+                  <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>{object.description}</p>
+                )}
+                <div className="flex gap-4 mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <span>項目 {object.fields.length}</span>
+                  <span>レコード {object.records.length}</span>
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Link href={withBasePath(`/global-assets/${object.id}`)} className="btn-primary text-sm">
+                  詳細を開く
+                </Link>
+                <button onClick={() => removeObject(objectIndex)} className="btn-danger text-sm">削除</button>
+              </div>
             </div>
-            <div>
-              <label className="field-label">会社概要</label>
-              <textarea className="field-input" rows={3} value={data.company_description} onChange={e => setData(d => ({ ...d, company_description: e.target.value }))} placeholder="会社のミッション、事業内容、主な実績など" />
-            </div>
-          </div>
-        </section>
-
-        {/* ブランド */}
-        <section>
-          <h2 className="section-title mb-3">ブランド定義</h2>
-          <div className="card p-5 space-y-4">
-            <div>
-              <label className="field-label">ブランドボイス</label>
-              <textarea className="field-input" rows={3} value={data.brand_voice} onChange={e => setData(d => ({ ...d, brand_voice: e.target.value }))} placeholder="例: 誠実で専門的。難しい言葉を使わず、親しみやすいが信頼感のあるトーンで。" />
-            </div>
-            <div>
-              <label className="field-label">ブランドガイドライン</label>
-              <textarea className="field-input" rows={4} value={data.brand_guidelines} onChange={e => setData(d => ({ ...d, brand_guidelines: e.target.value }))} placeholder="使用してはいけない言葉、強調すべきポジション、競合との差別化ポイントなど" />
-            </div>
-          </div>
-        </section>
-
-        {/* 製品 */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="section-title">製品・サービス</h2>
-            <button onClick={addProduct} className="btn-secondary text-xs py-1 px-3">+ 追加</button>
-          </div>
-          {data.products.length === 0 ? (
-            <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-              <p className="text-sm">製品・サービス情報を追加してください</p>
-              <button onClick={addProduct} className="btn-secondary text-xs mt-3">+ 製品を追加</button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {data.products.map((p, i) => (
-                <ProductCard key={p.id} product={p} onChange={np => updateProduct(i, np)} onRemove={() => removeProduct(i)} />
-              ))}
-            </div>
-          )}
-        </section>
+          </section>
+        ))}
       </div>
 
       {data.updated_at && (
         <p className="text-xs mt-6" style={{ color: 'var(--text-muted)' }}>
           最終更新: {new Date(data.updated_at).toLocaleString('ja-JP')}
         </p>
+      )}
+
+      {showNewObjectModal && (
+        <NewObjectModal
+          onClose={() => setShowNewObjectModal(false)}
+          onSubmit={createObjectAndOpen}
+          submitting={saving}
+        />
       )}
     </div>
   );

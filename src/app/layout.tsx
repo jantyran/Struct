@@ -3,25 +3,36 @@ import './globals.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/components/AuthContext';
+import { withBasePath } from '@/lib/paths';
 
 function Sidebar() {
   const path = usePathname();
-  const { logout, user } = useAuth();
+  const { logout, user, loading } = useAuth();
 
-  const navItems = [
+  const privateNavItems = [
     { href: '/', label: 'ダッシュボード', icon: '⬡' },
     { href: '/global-assets', label: 'Global Assets', icon: '◈' },
   ];
+  const publicNavItems = [
+    { href: '/about', label: 'Struct とは', icon: '◌' },
+    { href: '/guide', label: '使い方', icon: '◎' },
+    { href: '/login', label: 'ログイン', icon: '→' },
+    { href: '/signup', label: '新規登録', icon: '+' },
+  ];
 
-  if (!user && path !== '/login' && path !== '/signup') {
-    return null;
-  }
+  const navItems = user ? privateNavItems : publicNavItems;
 
   return (
-    <aside className="w-56 shrink-0 flex flex-col border-r" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-surface)' }}>
+    <aside
+      className="w-60 shrink-0 flex flex-col border-r backdrop-blur-xl"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(240,250,252,0.94) 100%)',
+      }}
+    >
       {/* ロゴ */}
       <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
-        <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--accent-light)' }}>
+        <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--accent)' }}>
           Struct
         </span>
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>マーケティング資産エンジン</p>
@@ -36,9 +47,15 @@ function Sidebar() {
                 href={item.href}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
                   path === item.href
-                    ? 'bg-violet-700/20 text-violet-300'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                    ? 'text-slate-900'
+                    : 'text-slate-500 hover:text-slate-800'
                 }`}
+                style={path === item.href
+                  ? {
+                      background: 'linear-gradient(135deg, rgba(126,215,222,0.3) 0%, rgba(255,255,255,0.92) 100%)',
+                      boxShadow: 'inset 0 0 0 1px rgba(15,154,177,0.16)',
+                    }
+                  : undefined}
               >
                 <span className="text-base">{item.icon}</span>
                 {item.label}
@@ -48,8 +65,31 @@ function Sidebar() {
         </ul>
       </nav>
 
+      {!user && !loading && (
+        <div className="p-4 border-t text-xs leading-5" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+          Struct は、マーケティング施策の情報を整理し、再利用できる資産として管理するためのアプリです。
+        </div>
+      )}
+
       {user && (
         <div className="p-4 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
+          <Link
+            href={withBasePath('/settings')}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+              path.startsWith('/settings') || path.startsWith('/project-types')
+                ? 'text-slate-900'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+            style={path.startsWith('/settings') || path.startsWith('/project-types')
+              ? {
+                  background: 'linear-gradient(135deg, rgba(126,215,222,0.3) 0%, rgba(255,255,255,0.92) 100%)',
+                  boxShadow: 'inset 0 0 0 1px rgba(15,154,177,0.16)',
+                }
+              : undefined}
+          >
+            <span className="text-base">⚙</span>
+            設定
+          </Link>
           <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{user.email}</div>
           <button 
             onClick={logout}
@@ -78,7 +118,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <div className="flex h-full w-full">
             <Sidebar />
-            <main className="flex-1 overflow-y-auto">
+            <main className="flex-1 overflow-y-auto" style={{ background: 'transparent' }}>
               {children}
             </main>
           </div>

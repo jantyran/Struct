@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { v4 as uuidv4 } from 'uuid';
 import { generateText } from '@/lib/ai/client';
 import {
   buildProjectContext,
@@ -9,12 +10,20 @@ import {
 } from '@/lib/ai/prompt-builder';
 import { requireSession } from '@/lib/auth';
 import type { ProjectWithFields, GlobalAssets } from '@/types';
+import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
+import { normalizeAISettingsRow } from '@/lib/ai/settings';
 
 interface Params { params: { id: string } }
 
 export async function POST(_req: Request, { params }: Params) {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
 
     const project = db.prepare(`
@@ -27,8 +36,12 @@ export async function POST(_req: Request, { params }: Params) {
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
-    const globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
-    if (!globalAssetsRow) return NextResponse.json({ error: 'Global assets missing' }, { status: 500 });
+    let globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+    if (!globalAssetsRow) {
+      const assetsId = uuidv4();
+      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(assetsId, user.id);
+      globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(assetsId) as any;
+    }
 
     const typedProject: ProjectWithFields = {
       ...project,
@@ -54,14 +67,8 @@ export async function POST(_req: Request, { params }: Params) {
       type: project.type,
     };
 
-    const typedGlobal: GlobalAssets = {
-      company_name: globalAssetsRow.company_name || '',
-      company_description: globalAssetsRow.company_description || '',
-      brand_voice: globalAssetsRow.brand_voice || '',
-      brand_guidelines: globalAssetsRow.brand_guidelines || '',
-      products: JSON.parse(globalAssetsRow.products || '[]'),
-      updated_at: globalAssetsRow.updated_at,
-    };
+    const typedGlobal: GlobalAssets = normalizeGlobalAssetsRow(globalAssetsRow);
+    const aiSettings = normalizeAISettingsRow(globalAssetsRow);
 
     const emptyFields = typedProject.custom_fields.filter(f => !f.value?.trim());
     if (emptyFields.length === 0) {
@@ -69,12 +76,12 @@ export async function POST(_req: Request, { params }: Params) {
     }
 
     const prompt = buildCompletionPrompt(typedProject, typedGlobal, emptyFields);
-    const raw = await generateText(prompt, SYSTEM_PROMPT, 2048);
+    const raw = await generateText(prompt, SYSTEM_PROMPT, 2048, aiSettings);
     const suggestions = parseCompletionResponse(raw);
 
     return NextResponse.json({ suggestions, raw_response: raw });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Completion failed' }, { status: 500 });
   }
 }

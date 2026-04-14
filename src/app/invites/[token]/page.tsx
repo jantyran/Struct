@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthContext';
+import { withBasePath } from '@/lib/paths';
 
 export default function InviteAcceptPage() {
   const { token } = useParams<{ token: string }>();
@@ -14,7 +15,7 @@ export default function InviteAcceptPage() {
 
   useEffect(() => {
     if (token) {
-      fetch(`/api/invites/${token}`)
+      fetch(withBasePath(`/api/invites/${token}`))
         .then(res => res.json())
         .then(data => {
           if (data.error) setError(data.error);
@@ -25,16 +26,16 @@ export default function InviteAcceptPage() {
 
   const handleAccept = async () => {
     if (!user) {
-      router.push(`/login?redirect=/invites/${token}`);
+      router.push(withBasePath(`/login?redirect=${encodeURIComponent(withBasePath(`/invites/${token}`))}`));
       return;
     }
     
     setAccepting(true);
     try {
-      const res = await fetch(`/api/invites/${token}/accept`, { method: 'POST' });
+      const res = await fetch(withBasePath(`/api/invites/${token}/accept`), { method: 'POST' });
       const data = await res.json();
       if (data.error) setError(data.error);
-      else router.push(`/projects/${data.projectId}`);
+      else router.push(withBasePath(`/projects/${data.projectId}`));
     } catch (err) {
       setError('招待の受諾に失敗しました。');
     } finally {
@@ -59,7 +60,7 @@ export default function InviteAcceptPage() {
             {!user ? (
               <div className="space-y-4">
                 <p className="text-sm text-gray-400">参加するにはログインが必要です。</p>
-                <button onClick={() => router.push(`/login?redirect=/invites/${token}`)} className="btn-primary w-full justify-center">
+                <button onClick={() => router.push(withBasePath(`/login?redirect=${encodeURIComponent(withBasePath(`/invites/${token}`))}`))} className="btn-primary w-full justify-center">
                   ログインして参加
                 </button>
               </div>
@@ -79,7 +80,7 @@ export default function InviteAcceptPage() {
           </>
         )}
         
-        <button onClick={() => router.push('/')} className="mt-6 text-xs text-gray-500 hover:text-gray-300">
+        <button onClick={() => router.push(withBasePath('/'))} className="mt-6 text-xs text-gray-500 hover:text-gray-300">
           ダッシュボードへ戻る
         </button>
       </div>

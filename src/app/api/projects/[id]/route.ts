@@ -15,8 +15,14 @@ async function checkProjectAccess(projectId: string, userId: string) {
 }
 
 export async function GET(_req: Request, { params }: Params) {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch (err) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
     
     const project = db.prepare(`
@@ -33,7 +39,7 @@ export async function GET(_req: Request, { params }: Params) {
       JOIN users u ON m.user_id = u.id
       WHERE m.project_id = ?
     `).all(params.id);
-    const invitations = db.prepare('SELECT * FROM invitations WHERE project_id = ? AND status = "PENDING"').all(params.id);
+    const invitations = db.prepare("SELECT * FROM invitations WHERE project_id = ? AND status = 'PENDING'").all(params.id);
 
     return NextResponse.json({ 
       ...project, 
@@ -42,7 +48,8 @@ export async function GET(_req: Request, { params }: Params) {
       invitations
     });
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('GET /api/projects/[id] failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -56,6 +63,7 @@ export async function PUT(request: Request, { params }: Params) {
     const body = await request.json() as {
       name?: string;
       type?: string;
+      phase_key?: string;
       status?: string;
       target?: string;
       start_date?: string;
@@ -69,8 +77,9 @@ export async function PUT(request: Request, { params }: Params) {
         label: string;
         type: string;
         value?: string;
-        options?: string[];
+        options?: string;
         inherited?: number;
+        inherited_from?: string | null;
         sort_order?: number;
       }>;
     };
@@ -80,6 +89,7 @@ export async function PUT(request: Request, { params }: Params) {
         UPDATE projects SET
           name = COALESCE(?, name),
           type = COALESCE(?, type),
+          phase_key = COALESCE(?, phase_key),
           status = COALESCE(?, status),
           target = COALESCE(?, target),
           start_date = COALESCE(?, start_date),
@@ -92,6 +102,7 @@ export async function PUT(request: Request, { params }: Params) {
       `).run(
         body.name ?? null,
         body.type ?? null,
+        body.phase_key ?? null,
         body.status ?? null,
         body.target ?? null,
         body.start_date ?? null,
@@ -116,14 +127,14 @@ export async function PUT(request: Request, { params }: Params) {
           if (f.id) {
             db.prepare(`
               UPDATE custom_fields SET
-                key = ?, label = ?, type = ?, value = ?, options = ?, sort_order = ?
+                key = ?, label = ?, type = ?, value = ?, options = ?, inherited = ?, inherited_from = ?, sort_order = ?
               WHERE id = ?
-            `).run(f.key, f.label, f.type, f.value ?? '', JSON.stringify(f.options ?? []), f.sort_order ?? idx, f.id);
+            `).run(f.key, f.label, f.type, f.value ?? '', f.options ?? '{}', f.inherited ?? 0, f.inherited_from ?? null, f.sort_order ?? idx, f.id);
           } else {
             db.prepare(`
-              INSERT INTO custom_fields (id, project_id, key, label, type, value, options, sort_order)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(uuidv4(), params.id, f.key, f.label, f.type, f.value ?? '', JSON.stringify(f.options ?? []), f.sort_order ?? idx);
+              INSERT INTO custom_fields (id, project_id, key, label, type, value, options, inherited, inherited_from, sort_order)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(uuidv4(), params.id, f.key, f.label, f.type, f.value ?? '', f.options ?? '{}', f.inherited ?? 0, f.inherited_from ?? null, f.sort_order ?? idx);
           }
         });
       }

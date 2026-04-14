@@ -1,22 +1,81 @@
-export type ProjectType = 'event' | 'campaign' | 'content' | 'other';
+export type ProjectType = string;
 export type ProjectStatus = 'draft' | 'active' | 'archived';
-export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'select';
-export type AssetType = 'lp' | 'dm' | 'sns_twitter' | 'sns_linkedin' | 'ad_copy' | 'email' | 'report';
+export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'select' | 'reference' | 'reference_multi';
+export type AssetType = string;
+export type GlobalAssetFieldType = 'text' | 'textarea' | 'url' | 'number' | 'date';
+export type AIProvider = 'anthropic' | 'openai' | 'gemini';
 
-export interface Product {
+export interface AISettings {
+  provider: AIProvider;
+  model: string;
+  api_key: string;
+  base_url: string;
+}
+
+export interface ProjectPhase {
   id: string;
+  key: string;
+  name: string;
+}
+
+export interface ProjectFieldTemplate {
+  id: string;
+  key: string;
+  label: string;
+  type: FieldType;
+  options: string;
+}
+
+export interface ProjectContentTemplate {
+  id: string;
+  key: string;
+  name: string;
+  channel: string;
+  channel_other: string;
+  text_format: 'plain' | 'markdown';
+  tone: string;
+  mandatory_elements: string;
+  example_structure: string;
+  instruction: string;
+}
+
+export interface ProjectTypeDefinition {
+  id: string;
+  key: string;
   name: string;
   description: string;
-  features: string;
-  price: string;
+  phases: ProjectPhase[];
+  field_templates: ProjectFieldTemplate[];
+  content_template_ids: string[];
+  is_default?: boolean;
+}
+
+export interface GlobalAssetField {
+  id: string;
+  key: string;
+  label: string;
+  type: GlobalAssetFieldType;
+}
+
+export interface GlobalAssetRecord {
+  id: string;
+  name: string;
+  key: string;
+  values: Record<string, string>;
+}
+
+export interface GlobalAssetObject {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  fields: GlobalAssetField[];
+  records: GlobalAssetRecord[];
+  is_default?: boolean;
 }
 
 export interface GlobalAssets {
-  company_name: string;
-  company_description: string;
-  brand_voice: string;
-  brand_guidelines: string;
-  products: Product[];
+  objects: GlobalAssetObject[];
   updated_at: string;
 }
 
@@ -24,6 +83,7 @@ export interface Project {
   id: string;
   name: string;
   type: ProjectType;
+  phase_key: string;
   status: ProjectStatus;
   cloned_from: string | null;
   target: string;
@@ -46,7 +106,7 @@ export interface CustomField {
   label: string;
   type: FieldType;
   value: string;
-  options: string; // JSON string for select type
+  options: string; // JSON string for select / reference config
   inherited: number; // 0 or 1
   inherited_from: string | null;
   crawled_content: string | null;
@@ -83,7 +143,7 @@ export interface CompletionSuggestion {
   reason: string;
 }
 
-export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+export const ASSET_TYPE_LABELS: Record<string, string> = {
   lp: 'LP構成案',
   dm: 'ダイレクトメール',
   sns_twitter: 'Twitter/X投稿',
@@ -106,4 +166,6 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   url: 'URL',
   date: '日付',
   select: '選択肢',
+  reference: '参照',
+  reference_multi: '複数参照',
 };

@@ -36,3 +36,6 @@ next-env.d.ts
 
 # data
 /data/struct.json
+/data/struct.db
+/data/struct.db-shm
+/data/struct.db-wal

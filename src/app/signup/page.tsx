@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthContext';
+import { withBasePath } from '@/lib/paths';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -24,7 +25,7 @@ export default function SignupPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/auth/signup', {
+      const res = await fetch(withBasePath('/api/auth/signup'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name }),
@@ -33,7 +34,11 @@ export default function SignupPage() {
       const data = await res.json();
       if (res.ok) {
         await checkSession();
-        router.push('/');
+        const redirectTo =
+          typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('redirect') || withBasePath('/')
+            : withBasePath('/');
+        router.push(redirectTo);
       } else {
         setError(data.error || 'アカウントの作成に失敗しました。');
       }
@@ -106,7 +111,7 @@ export default function SignupPage() {
         <div className="mt-6 text-center">
           <p className="text-xs text-gray-500">
             すでにアカウントをお持ちですか？{' '}
-            <Link href="/login" className="text-violet-400 hover:text-violet-300">
+            <Link href={withBasePath('/login')} className="text-violet-400 hover:text-violet-300">
               ログイン
             </Link>
           </p>
