@@ -1,6 +1,7 @@
-import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
+import type { CoreFieldConfig, CoreFieldKey, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
+import { DEFAULT_CORE_FIELDS } from '@/types';
 
-const DEFAULT_PROJECT_TYPES: ProjectTypeDefinition[] = [
+const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'core_fields_config'>[] = [
   {
     id: 'project-type-event',
     key: 'event',
@@ -89,6 +90,22 @@ function normalizeFieldTemplate(field: Partial<ProjectFieldTemplate>, index: num
   };
 }
 
+const VALID_CORE_KEYS: CoreFieldKey[] = ['target', 'start_date', 'end_date', 'budget', 'channels', 'description'];
+
+function normalizeCoreFieldsConfig(raw: unknown): CoreFieldConfig[] {
+  const defaults = DEFAULT_CORE_FIELDS;
+  if (!Array.isArray(raw)) return defaults;
+  return defaults.map((def) => {
+    const found = (raw as Partial<CoreFieldConfig>[]).find((item) => item?.key === def.key);
+    if (!found || !VALID_CORE_KEYS.includes(found.key as CoreFieldKey)) return def;
+    return {
+      key: def.key,
+      label: typeof found.label === 'string' && found.label.trim() ? found.label.trim() : def.label,
+      enabled: typeof found.enabled === 'boolean' ? found.enabled : def.enabled,
+    };
+  });
+}
+
 function normalizeTypeDefinition(definition: Partial<ProjectTypeDefinition>, index: number): ProjectTypeDefinition {
   const legacyContentTemplates = safeArray<{ id?: string }>((definition as any).content_templates);
   const contentTemplateIds = safeArray<string>(definition.content_template_ids).filter(Boolean);
@@ -109,6 +126,7 @@ function normalizeTypeDefinition(definition: Partial<ProjectTypeDefinition>, ind
     is_default: definition.is_default === true,
     phases: safeArray<Partial<ProjectPhase>>(definition.phases).map(normalizePhase),
     field_templates: safeArray<Partial<ProjectFieldTemplate>>(definition.field_templates).map(normalizeFieldTemplate),
+    core_fields_config: normalizeCoreFieldsConfig((definition as any).core_fields_config),
     content_template_ids: contentTemplateIds.length > 0
       ? contentTemplateIds
       : legacyContentTemplates.length > 0

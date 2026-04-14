@@ -41,6 +41,23 @@ export interface ProjectContentTemplate {
   instruction: string;
 }
 
+export type CoreFieldKey = 'target' | 'start_date' | 'end_date' | 'budget' | 'channels' | 'description';
+
+export interface CoreFieldConfig {
+  key: CoreFieldKey;
+  label: string;
+  enabled: boolean;
+}
+
+export const DEFAULT_CORE_FIELDS: CoreFieldConfig[] = [
+  { key: 'target',      label: 'ターゲット',          enabled: true },
+  { key: 'start_date',  label: '開始日',               enabled: true },
+  { key: 'end_date',    label: '終了日',               enabled: true },
+  { key: 'budget',      label: '予算',                 enabled: true },
+  { key: 'channels',    label: 'チャネル',             enabled: true },
+  { key: 'description', label: '概要',                 enabled: true },
+];
+
 export interface ProjectTypeDefinition {
   id: string;
   key: string;
@@ -49,6 +66,7 @@ export interface ProjectTypeDefinition {
   phases: ProjectPhase[];
   field_templates: ProjectFieldTemplate[];
   content_template_ids: string[];
+  core_fields_config: CoreFieldConfig[];
   is_default?: boolean;
 }
 

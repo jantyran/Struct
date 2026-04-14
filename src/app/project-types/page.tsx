@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
-import { FIELD_TYPE_LABELS } from '@/types';
+import type { CoreFieldConfig, GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition } from '@/types';
+import { DEFAULT_CORE_FIELDS, FIELD_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { createProjectTypeDefinition, defaultProjectTypeDefinitions } from '@/lib/project-types';
@@ -562,6 +562,53 @@ export default function ProjectTypesPage() {
                       onRemove={() => updateDefinition(index, { ...definition, phases: definition.phases.filter((_, currentPhaseIndex) => currentPhaseIndex !== phaseIndex) })}
                     />
                   ))}
+                </div>
+
+                <div className="rounded-md border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+                  <div>
+                    <h2 className="section-title">基本情報フィールド設定</h2>
+                    <p className="text-xs mt-1 mb-3" style={{ color: 'var(--text-muted)' }}>
+                      プロジェクトの基本情報に表示するフィールドをカスタマイズできます。ラベル名の変更・非表示の設定が可能です。
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {(definition.core_fields_config ?? DEFAULT_CORE_FIELDS).map((field: CoreFieldConfig) => (
+                      <div
+                        key={field.key}
+                        className="flex items-center gap-3 rounded-xl border px-3 py-2"
+                        style={{ borderColor: 'var(--border)', backgroundColor: field.enabled ? 'rgba(255,255,255,0.72)' : 'rgba(241,250,252,0.5)' }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={field.enabled}
+                          onChange={(e) => {
+                            const next = (definition.core_fields_config ?? DEFAULT_CORE_FIELDS).map((f: CoreFieldConfig) =>
+                              f.key === field.key ? { ...f, enabled: e.target.checked } : f
+                            );
+                            updateDefinition(index, { ...definition, core_fields_config: next });
+                          }}
+                          className="w-4 h-4 rounded accent-cyan-600"
+                        />
+                        <span className="text-xs w-24 shrink-0" style={{ color: 'var(--text-muted)' }}>{field.key}</span>
+                        <input
+                          className="field-input text-sm flex-1"
+                          value={field.label}
+                          disabled={!field.enabled}
+                          placeholder="ラベル名"
+                          onChange={(e) => {
+                            const next = (definition.core_fields_config ?? DEFAULT_CORE_FIELDS).map((f: CoreFieldConfig) =>
+                              f.key === field.key ? { ...f, label: e.target.value } : f
+                            );
+                            updateDefinition(index, { ...definition, core_fields_config: next });
+                          }}
+                          style={{ opacity: field.enabled ? 1 : 0.45 }}
+                        />
+                        {!field.enabled && (
+                          <span className="text-[11px] shrink-0" style={{ color: 'var(--text-muted)' }}>非表示</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="rounded-md border p-4 space-y-3" style={{ borderColor: 'var(--border)' }}>

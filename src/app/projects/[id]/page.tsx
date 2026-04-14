@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate } from '@/types';
-import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
+import { DEFAULT_CORE_FIELDS, FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 
@@ -783,6 +783,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const typeLabel = currentProjectType?.name || PROJECT_TYPE_LABELS[project.type as ProjectType] || project.type;
   const currentPhases = currentProjectType?.phases || [];
   const currentPhaseIndex = currentPhases.findIndex((phase) => phase.key === project.phase_key);
+  const coreFieldsConfig = currentProjectType?.core_fields_config ?? DEFAULT_CORE_FIELDS;
+  const coreField = (key: string) => coreFieldsConfig.find(f => f.key === key);
 
   return (
     <div className="h-full flex flex-col">
@@ -1007,13 +1009,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             <>
               {/* コアフィールド */}
               <section>
-                <h2 className="section-title mb-3">基本情報 (Project Core)</h2>
+                <h2 className="section-title mb-3">基本情報</h2>
                 <div className="card p-5 grid grid-cols-2 gap-4">
-                  <div className="col-span-2 flex flex-wrap gap-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    <span>種別: <span style={{ color: 'var(--accent)' }}>{typeLabel}</span></span>
-                    <span>現在フェーズ: <span style={{ color: 'var(--accent)' }}>{currentPhases[currentPhaseIndex]?.name || '未設定'}</span></span>
-                    <span>総フェーズ数: {currentPhases.length}</span>
-                  </div>
+                  {/* 種別は常に表示 */}
                   <div>
                     <label className="field-label">種別</label>
                     <select
@@ -1031,30 +1029,42 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       {projectTypes.map((definition) => <option key={definition.id} value={definition.key}>{definition.name}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className="field-label">ターゲット</label>
-                    <input className="field-input" value={project.target} onChange={e => setProject({ ...project, target: e.target.value })} placeholder="例: 30代 BtoB マーケター" />
-                  </div>
-                  <div>
-                    <label className="field-label">開始日</label>
-                    <input className="field-input" type="date" value={project.start_date} onChange={e => setProject({ ...project, start_date: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="field-label">終了日</label>
-                    <input className="field-input" type="date" value={project.end_date} onChange={e => setProject({ ...project, end_date: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="field-label">予算</label>
-                    <input className="field-input" value={project.budget} onChange={e => setProject({ ...project, budget: e.target.value })} placeholder="例: ¥500,000" />
-                  </div>
-                  <div>
-                    <label className="field-label">チャネル（カンマ区切り）</label>
-                    <input className="field-input" value={channels.join(', ')} onChange={e => setProject({ ...project, channels: JSON.stringify(e.target.value.split(',').map(s => s.trim()).filter(Boolean)) })} placeholder="Web, SNS, メール" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="field-label">概要</label>
-                    <textarea className="field-input" rows={3} value={project.description} onChange={e => setProject({ ...project, description: e.target.value })} placeholder="施策の目的・背景・概要を記述" />
-                  </div>
+                  {coreField('target')?.enabled && (
+                    <div>
+                      <label className="field-label">{coreField('target')!.label}</label>
+                      <input className="field-input" value={project.target} onChange={e => setProject({ ...project, target: e.target.value })} placeholder="例: 30代 BtoB マーケター" />
+                    </div>
+                  )}
+                  {coreField('start_date')?.enabled && (
+                    <div>
+                      <label className="field-label">{coreField('start_date')!.label}</label>
+                      <input className="field-input" type="date" value={project.start_date} onChange={e => setProject({ ...project, start_date: e.target.value })} />
+                    </div>
+                  )}
+                  {coreField('end_date')?.enabled && (
+                    <div>
+                      <label className="field-label">{coreField('end_date')!.label}</label>
+                      <input className="field-input" type="date" value={project.end_date} onChange={e => setProject({ ...project, end_date: e.target.value })} />
+                    </div>
+                  )}
+                  {coreField('budget')?.enabled && (
+                    <div>
+                      <label className="field-label">{coreField('budget')!.label}</label>
+                      <input className="field-input" value={project.budget} onChange={e => setProject({ ...project, budget: e.target.value })} placeholder="例: ¥500,000" />
+                    </div>
+                  )}
+                  {coreField('channels')?.enabled && (
+                    <div>
+                      <label className="field-label">{coreField('channels')!.label}（カンマ区切り）</label>
+                      <input className="field-input" value={channels.join(', ')} onChange={e => setProject({ ...project, channels: JSON.stringify(e.target.value.split(',').map(s => s.trim()).filter(Boolean)) })} placeholder="Web, SNS, メール" />
+                    </div>
+                  )}
+                  {coreField('description')?.enabled && (
+                    <div className="col-span-2">
+                      <label className="field-label">{coreField('description')!.label}</label>
+                      <textarea className="field-input" rows={3} value={project.description} onChange={e => setProject({ ...project, description: e.target.value })} placeholder="施策の目的・背景・概要を記述" />
+                    </div>
+                  )}
                 </div>
               </section>
 
