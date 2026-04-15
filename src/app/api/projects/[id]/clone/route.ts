@@ -29,13 +29,14 @@ export async function POST(request: Request, { params }: Params) {
 
     const tx = db.transaction(() => {
       db.prepare(`
-        INSERT INTO projects (id, name, type, phase_key, status, owner_id, cloned_from)
-        VALUES (?, ?, ?, ?, 'draft', ?, ?)
+        INSERT INTO projects (id, name, type, phase_key, status, owner_id, primary_assignee_id, cloned_from)
+        VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)
       `).run(
         newId,
         body.new_name.trim(),
         source.type,
         source.phase_key || '',
+        user.id,
         user.id,
         params.id,
       );

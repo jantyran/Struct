@@ -26,6 +26,27 @@ const settingSections = [
     meta: '種別設計 / パス設計 / 項目設計 / コンテンツ選択',
   },
   {
+    href: '/settings/users',
+    title: 'ユーザー管理',
+    description: '表示名・アバターと、担当者として使うユーザー情報を管理します。',
+    meta: 'プロフィール / メンバー基盤 / Todo担当者準備',
+    permission: 'manage_users',
+  },
+  {
+    href: '/settings/roles',
+    title: 'ロール・権限設定',
+    description: 'ロールを定義し、表示・編集・管理権限を設定します。',
+    meta: 'ロール定義 / 表示権限 / 編集権限 / 管理権限',
+    permission: 'manage_system_roles',
+  },
+  {
+    href: '/settings/project-roles',
+    title: 'プロジェクトロール設定',
+    description: 'プロジェクトメンバーに付与するロールと、プロジェクト内権限を設定します。',
+    meta: 'メンバー権限 / 項目表示 / 編集 / ノート / 生成',
+    permission: 'manage_project_roles',
+  },
+  {
     href: '/settings/password',
     title: 'パスワード変更',
     description: '現在のパスワードを確認したうえで、ログイン用パスワードを更新します。',
@@ -64,7 +85,9 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {settingSections.map((section) => (
+        {settingSections
+          .filter((section) => !section.permission || user.system_permissions?.[section.permission])
+          .map((section) => (
           <Link
             key={section.href}
             href={withBasePath(section.href)}

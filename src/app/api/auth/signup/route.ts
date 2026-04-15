@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { createSession } from "@/lib/auth";
+import { seedSystemRoles } from "@/lib/permissions";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
 
   // 初回ログイン用のGlobalAssets作成
   db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(uuidv4(), id);
+  seedSystemRoles(db);
 
   await createSession(id);
   return NextResponse.json({ success: true, user: { id, email, name } });

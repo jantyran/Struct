@@ -17,7 +17,8 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
   - フィールド値
   - フェーズ進行
   - 生成済みコンテンツ
-  - メンバーと招待情報
+  - 主担当者
+  - メンバーとプロジェクトロール
 - 公開向け情報
   - About
   - Guide
@@ -83,12 +84,15 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
     │   ├── about/page.tsx
     │   ├── api/
     │   │   ├── ai-settings/route.ts
-    │   │   ├── auth/
-    │   │   ├── content-templates/route.ts
-    │   │   ├── global-assets/route.ts
-    │   │   ├── invites/[token]/
-    │   │   ├── project-types/route.ts
-    │   │   └── projects/
+│   │   ├── auth/
+│   │   ├── content-templates/route.ts
+│   │   ├── global-assets/route.ts
+│   │   ├── invites/[token]/
+│   │   ├── project-roles/route.ts
+│   │   ├── project-types/route.ts
+│   │   ├── roles/route.ts
+│   │   ├── users/route.ts
+│   │   └── projects/
     │   ├── global-assets/page.tsx
     │   ├── global-assets/[objectId]/page.tsx
     │   ├── guide/page.tsx
@@ -100,6 +104,9 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
     │   ├── settings/page.tsx
     │   ├── settings/ai/page.tsx
     │   ├── settings/content-templates/page.tsx
+    │   ├── settings/project-roles/page.tsx
+    │   ├── settings/roles/page.tsx
+    │   ├── settings/users/page.tsx
     │   └── signup/page.tsx
     ├── components/
     │   └── AuthContext.tsx
@@ -111,6 +118,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
     │   ├── db/index.ts
     │   ├── global-assets.ts
     │   ├── project-field-sync.ts
+    │   ├── permissions.ts
     │   └── project-types.ts
     └── types/index.ts
 ```
@@ -170,6 +178,9 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - AI 設定
 - 生成コンテンツ設定
 - プロジェクト設定
+- ユーザー管理
+- システムロール設定
+- プロジェクトロール設定
 
 ### 5.8 AI 設定
 
@@ -213,12 +224,15 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 - 基本情報編集
 - フェーズ Path UI
+- メンバータブ
+  - 主担当者の変更
+  - 登録済みユーザーからプロジェクトメンバーを追加
+  - プロジェクトロールの付与・変更
 - 設定由来フィールドの値入力
 - Global Assets 参照
 - `group` / `group_list` 入力
 - 生成コンテンツの選択、追加指示付き生成
 - 生成済みコンテンツの直接編集
-- 招待管理
 
 ### 5.12 招待画面
 
@@ -227,6 +241,8 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - 招待トークン確認
 - ログイン誘導
 - 招待受諾後のプロジェクト参加
+- 現在のプロジェクト詳細 UI では、メール入力招待ではなく登録済みユーザー選択でメンバー追加する
+- 招待 API / 画面はレガシー互換として残っている
 
 ## 6. 認証と権限制御
 
@@ -241,11 +257,20 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 ### 6.2 権限モデル
 
-- `global_assets` はユーザー単位で保持
-- プロジェクトは `owner_id` を持つ
-- `project_members` で共同編集対象を保持
-- 招待発行と削除はオーナーのみ
-- プロジェクト詳細、生成、クロール、アセット取得はオーナーまたはメンバーが可能
+- 権限は `システムロール` と `プロジェクトロール` の2段構成
+- システムロール
+  - ユーザーに直接付与する
+  - ユーザー管理、システムロール管理、プロジェクトロール管理、全プロジェクト表示/編集などを制御する
+  - 定義は `system_role_definitions`
+  - ユーザー側の付与状態は `users.system_role`
+- プロジェクトロール
+  - プロジェクトメンバーに付与する
+  - プロジェクト内の表示、編集、項目表示/編集、生成、ノート、メンバー管理などを制御する
+  - 定義は `project_role_definitions`
+  - 付与状態は `project_members.role`
+- プロジェクトオーナーは対象プロジェクトに対して強い権限を持つ
+- `edit_all_projects` や `delete_any_project` などのシステム権限はプロジェクトロールを上書きできる
+- 権限判定の共通処理は `src/lib/permissions.ts`
 
 ## 7. データモデル
 
@@ -257,6 +282,8 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `email`
 - `password_hash`
 - `name`
+- `avatar_url`
+- `system_role`
 - `created_at`
 
 ### 7.2 global_assets
@@ -317,6 +344,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `phase_key`
 - `status`
 - `owner_id`
+- `primary_assignee_id`
 - `cloned_from`
 - `target`
 - `start_date`
@@ -331,6 +359,8 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 - `channels` は JSON 文字列で保存
 - `phase_key` は現在フェーズを表す
+- `primary_assignee_id` はプロジェクト全体の代表担当者
+- 主担当者はプロジェクトオーナーまたはプロジェクトメンバーから選択する
 
 ### 7.5 project_members
 
@@ -339,6 +369,11 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `user_id`
 - `role`
 - `created_at`
+
+補足:
+
+- `role` は `project_role_definitions.key` を参照する
+- 現在の UI では登録済みユーザーを選択して追加する
 
 ### 7.6 invitations
 
@@ -350,6 +385,11 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `status`
 - `expires_at`
 - `created_at`
+
+補足:
+
+- 招待機能はレガシー互換として残っている
+- 現在のプロジェクト詳細 UI では登録済みユーザー選択によるメンバー追加を使う
 
 ### 7.7 custom_fields
 
@@ -389,6 +429,47 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 - `asset_type` は固定列挙ではなく、生成コンテンツ定義の `key` ベース
 - `warnings` は JSON 文字列
+
+### 7.9 system_role_definitions
+
+- `id`
+- `key`
+- `name`
+- `description`
+- `permissions`
+- `is_system`
+- `sort_order`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- `permissions` は JSON 文字列
+- 初期ロール
+  - `SYSTEM_ADMIN`: システム管理者
+  - `MANAGER`: マネージャー
+  - `USER`: 一般ユーザー
+- 初回シード時、既存ユーザーの最初の1人を `SYSTEM_ADMIN` にする
+
+### 7.10 project_role_definitions
+
+- `id`
+- `key`
+- `name`
+- `description`
+- `permissions`
+- `is_system`
+- `sort_order`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- `permissions` は JSON 文字列
+- 初期ロール
+  - `PROJECT_MANAGER`: プロジェクト管理者
+  - `MEMBER`: メンバー
+  - `GUEST`: ゲスト
 
 ## 8. 設計方針
 
@@ -442,6 +523,14 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 ### 9.2 設定 / マスターデータ
 
+- `GET /api/users`
+- `POST /api/users`
+- `PATCH /api/users`
+- `DELETE /api/users`
+- `GET /api/roles`
+- `PUT /api/roles`
+- `GET /api/project-roles`
+- `PUT /api/project-roles`
 - `GET /api/global-assets`
 - `PUT /api/global-assets`
 - `GET /api/project-types`
@@ -465,6 +554,9 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `GET /api/projects/[id]/assets`
 - `PATCH /api/projects/[id]/assets`
 - `DELETE /api/projects/[id]/assets`
+- `POST /api/projects/[id]/members`
+- `PATCH /api/projects/[id]/members`
+- `DELETE /api/projects/[id]/members`
 - `POST /api/projects/[id]/invite`
 
 ### 9.4 招待
@@ -519,20 +611,67 @@ AI には次の情報を渡します。
 
 ## 11. 今後の実装予定
 
-### 11.1 プロジェクト ToDo
+### 11.1 Todo
 
 目的:
 
-- プロジェクトごとの日常タスク管理
-- フェーズ進行と連動した実務の可視化
+- プロジェクトごとの実行管理
+- 「誰が・何を・いつやるか」を明確にする
 
 想定:
 
-- プロジェクト詳細内で管理
-- チェック状態、期限、担当メモなどを持てる構成を検討
-- 案件進行中の作業ログに近い軽量運用を想定
+- 親子構造
+- 担当者
+- 開始日
+- 締切日
+- 優先度
+- ステータス
+- フェーズ紐付け
+- Todo が KANBAN カードと WBS 行の元データになる
 
-### 11.2 プロジェクト ノート
+### 11.2 KANBAN
+
+目的:
+
+- Todo の進行状況を直感的に把握する
+
+想定:
+
+- プロジェクト内 KANBAN
+  - 未着手 / 進行中 / 完了
+  - ドラッグでステータス更新
+  - 担当者、期日、優先度を表示
+- 施策横断 KANBAN
+  - プロジェクト単位のカード
+  - フェーズまたはステータス軸
+
+### 11.3 WBS
+
+目的:
+
+- Todo の日付から工程表を自動生成する
+
+想定:
+
+- X 軸は日付
+- Y 軸は Todo
+- 親子インデント
+- start_date から due_date までをバー表示
+- バー操作で日付編集し Todo に反映
+
+### 11.4 レポート
+
+目的:
+
+- キャンペーン成果を再利用できる形で残す
+
+想定:
+
+- プロジェクトに1つのレポート
+- KPI、背景、学び、インサイト
+- PDF 出力 / 閲覧 URL 共有
+
+### 11.5 プロジェクト ノート
 
 目的:
 
@@ -546,10 +685,29 @@ AI には次の情報を渡します。
 - 時系列または自由記述の運用を想定
 - 打ち合わせ記録、判断理由、補足メモの蓄積先として使う
 
+実装状況:
+
+- 既にプロジェクト詳細の `ノート` タブとして実装済み
+
+### 11.6 残っている主な作業
+
+- Todo の DB / API / UI 実装
+- Todo の担当者アサイン
+- Todo から KANBAN を生成
+- Todo の日付から WBS を生成
+- レポート機能
+- 権限の細粒度化
+  - 現状は主にプロジェクト単位・項目単位・ノート単位・生成単位
+  - 将来的に個別フィールドやセクション単位の制御が必要なら追加する
+- 招待機能の扱い整理
+  - 現在はレガシー互換で残している
+  - 登録済みユーザー選択方式に一本化するなら削除または非表示化する
+
 ## 12. 実装上の注意
 
 - `channels`、`options`、`warnings` は JSON 文字列で保存される
 - `group` / `group_list` の `value` も JSON 文字列で保持する
-- 招待 URL は `NEXT_PUBLIC_BASE_URL` に依存する
+- 招待 URL はレガシー招待機能でのみ `NEXT_PUBLIC_BASE_URL` に依存する
 - `JWT_SECRET` は本番では必ず明示設定する
 - AI 設定はユーザー単位で保存するため、サーバー全体の共通 API キー前提ではない
+- システムロールとプロジェクトロールの初期データは `src/lib/permissions.ts` で定義し、DB 初期化時にシードする

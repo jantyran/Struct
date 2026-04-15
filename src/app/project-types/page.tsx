@@ -929,6 +929,7 @@ export default function ProjectTypesPage() {
   const [openAssignedFieldPaletteIds, setOpenAssignedFieldPaletteIds] = useState<string[]>([]);
   const [openAssignedWidgetPaletteIds, setOpenAssignedWidgetPaletteIds] = useState<string[]>([]);
   const [openBuiltinFieldDefinitionIds, setOpenBuiltinFieldDefinitionIds] = useState<string[]>([]);
+  const [closedCustomFieldDefinitionIds, setClosedCustomFieldDefinitionIds] = useState<string[]>([]);
   const [pendingFieldScrollTarget, setPendingFieldScrollTarget] = useState<string | null>(null);
   const [draggingPhase, setDraggingPhase] = useState<{ definitionId: string; index: number } | null>(null);
   const [draggingSection, setDraggingSection] = useState<{ definitionId: string; index: number } | null>(null);
@@ -1060,6 +1061,14 @@ export default function ProjectTypesPage() {
 
   function toggleBuiltinFields(definitionId: string) {
     setOpenBuiltinFieldDefinitionIds((current) =>
+      current.includes(definitionId)
+        ? current.filter((id) => id !== definitionId)
+        : [...current, definitionId]
+    );
+  }
+
+  function toggleCustomFields(definitionId: string) {
+    setClosedCustomFieldDefinitionIds((current) =>
       current.includes(definitionId)
         ? current.filter((id) => id !== definitionId)
         : [...current, definitionId]
@@ -1574,8 +1583,8 @@ export default function ProjectTypesPage() {
                 </DefinitionAccordionSection>
 
                 <DefinitionAccordionSection
-                  title="フィールド設定"
-                  description="「組込」は全プロジェクト共通の基本フィールドです。ここでは項目の情報だけを編集します。UI上の配置はセクション設定で行います。"
+                  title="項目設定"
+                  description="「組み込み」は全プロジェクト共通の基本項目です。ここでは項目の情報だけを編集します。UI上の配置はセクション設定で行います。"
                   open={(openDefinitionPanels[definition.id] ?? []).includes('fields')}
                   onToggle={() => toggleDefinitionPanel(definition.id, 'fields')}
                   action={
@@ -1588,6 +1597,7 @@ export default function ProjectTypesPage() {
                             nextField,
                           ]),
                         });
+                        setClosedCustomFieldDefinitionIds((current) => current.filter((id) => id !== definition.id));
                         setPendingFieldScrollTarget(`field-row-${definition.id}-${nextField.id}`);
                       }}
                       className="btn-secondary text-xs py-1 px-3"
@@ -1602,6 +1612,7 @@ export default function ProjectTypesPage() {
                     (() => {
                       const builtinFields = definition.field_templates.filter((field) => field.is_builtin);
                       const customFields = definition.field_templates.filter((field) => !field.is_builtin);
+                      const customFieldsOpen = !closedCustomFieldDefinitionIds.includes(definition.id);
 
                       return (
                         <div className="space-y-4">
@@ -1639,27 +1650,47 @@ export default function ProjectTypesPage() {
                             )}
                           </div>
 
-                          <div className="space-y-3">
-                            {customFields.map((field) => {
-                              const fieldIndex = definition.field_templates.findIndex((currentField) => currentField.id === field.id);
-                              return (
-                                <div key={field.id} id={`field-row-${definition.id}-${field.id}`}>
-                                  <FieldTemplateRow
-                                    field={field}
-                                    globalAssetObjects={globalAssetObjects}
-                                    onChange={(nextField) => {
-                                      const fieldTemplates = [...definition.field_templates];
-                                      fieldTemplates[fieldIndex] = nextField;
-                                      updateDefinition(index, updateFieldTemplatesAndSections(definition, fieldTemplates));
-                                    }}
-                                    onRemove={() => updateDefinition(index, updateFieldTemplatesAndSections(
-                                      definition,
-                                      definition.field_templates.filter((_, currentFieldIndex) => currentFieldIndex !== fieldIndex)
-                                    ))}
-                                  />
-                                </div>
-                              );
-                            })}
+                          <div className="border-y" style={{ borderColor: 'var(--border)' }}>
+                            <button
+                              type="button"
+                              onClick={() => toggleCustomFields(definition.id)}
+                              className="w-full py-3 flex items-center justify-between gap-3 text-left"
+                            >
+                              <p className="text-sm font-semibold">カスタム項目</p>
+                              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                {customFieldsOpen ? '▲ 閉じる' : `▼ ${customFields.length}件`}
+                              </span>
+                            </button>
+                            {customFieldsOpen && (
+                              <div className="py-4 space-y-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                                {customFields.length === 0 ? (
+                                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                                    カスタム項目はありません。+ 項目追加から追加できます。
+                                  </p>
+                                ) : (
+                                  customFields.map((field) => {
+                                    const fieldIndex = definition.field_templates.findIndex((currentField) => currentField.id === field.id);
+                                    return (
+                                      <div key={field.id} id={`field-row-${definition.id}-${field.id}`}>
+                                        <FieldTemplateRow
+                                          field={field}
+                                          globalAssetObjects={globalAssetObjects}
+                                          onChange={(nextField) => {
+                                            const fieldTemplates = [...definition.field_templates];
+                                            fieldTemplates[fieldIndex] = nextField;
+                                            updateDefinition(index, updateFieldTemplatesAndSections(definition, fieldTemplates));
+                                          }}
+                                          onRemove={() => updateDefinition(index, updateFieldTemplatesAndSections(
+                                            definition,
+                                            definition.field_templates.filter((_, currentFieldIndex) => currentFieldIndex !== fieldIndex)
+                                          ))}
+                                        />
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );

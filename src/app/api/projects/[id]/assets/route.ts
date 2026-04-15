@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { requireProjectPermission } from '@/lib/permissions';
 
 interface Params { params: { id: string } }
 
@@ -17,6 +18,7 @@ export async function GET(_req: Request, { params }: Params) {
     `).get(params.id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'view_content')) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const assets = db.prepare(`
       SELECT * FROM generated_assets WHERE project_id = ? ORDER BY created_at DESC
@@ -42,6 +44,7 @@ export async function DELETE(request: Request, { params }: Params) {
     `).get(params.id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
 
     if (!assetId) {
       db.prepare('DELETE FROM generated_assets WHERE project_id = ?').run(params.id);
@@ -68,6 +71,7 @@ export async function PATCH(request: Request, { params }: Params) {
     `).get(params.id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
     if (!body.assetId) return NextResponse.json({ error: 'assetId is required' }, { status: 400 });
 
     const existing = db.prepare(`

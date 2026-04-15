@@ -3,6 +3,7 @@ import path from 'path';
 import { mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { BUILTIN_FIELD_TEMPLATES } from '@/lib/project-types';
+import { seedProjectRoles, seedSystemRoles } from '@/lib/permissions';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 mkdirSync(DATA_DIR, { recursive: true });
@@ -36,6 +37,8 @@ function initSchema(db: Database.Database) {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       name TEXT,
+      avatar_url TEXT DEFAULT '',
+      system_role TEXT DEFAULT 'USER',
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -47,6 +50,7 @@ function initSchema(db: Database.Database) {
       phase_key TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'draft',
       owner_id TEXT NOT NULL,
+      primary_assignee_id TEXT,
       cloned_from TEXT,
       target TEXT DEFAULT '',
       start_date TEXT DEFAULT '',
@@ -82,6 +86,32 @@ function initSchema(db: Database.Database) {
       expires_at TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    -- システムロール定義（ユーザーに直接付与）
+    CREATE TABLE IF NOT EXISTS system_role_definitions (
+      id TEXT PRIMARY KEY,
+      key TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      permissions TEXT NOT NULL DEFAULT '{}',
+      is_system INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- プロジェクトロール定義（プロジェクトメンバーに付与）
+    CREATE TABLE IF NOT EXISTS project_role_definitions (
+      id TEXT PRIMARY KEY,
+      key TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      permissions TEXT NOT NULL DEFAULT '{}',
+      is_system INTEGER DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
 
     -- Global Assets（ユーザーごとに1つ）
@@ -151,11 +181,16 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'global_assets', 'project_types', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'global_assets', 'content_templates', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'global_assets', 'ai_settings', `TEXT DEFAULT '{}'`);
+  ensureColumn(db, 'users', 'avatar_url', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'users', 'system_role', `TEXT DEFAULT 'USER'`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'projects', 'primary_assignee_id', `TEXT`);
   ensureColumn(db, 'custom_fields', 'template_id', `TEXT`);
   ensureColumn(db, 'custom_fields', 'layout', `TEXT DEFAULT 'half'`);
   ensureColumn(db, 'custom_fields', 'is_builtin', `INTEGER DEFAULT 0`);
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
+  seedSystemRoles(db);
+  seedProjectRoles(db);
 
   // 既存プロジェクトのコアカラム値を custom_fields に移行
   migrateProjectCoreFields(db);

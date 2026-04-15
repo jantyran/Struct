@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { requireSession } from '@/lib/auth';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
+import { hasSystemPermission } from '@/lib/permissions';
 import type { CustomField } from '@/types';
 
 export async function GET() {
@@ -11,12 +12,15 @@ export async function GET() {
     const user = await requireSession();
     const db = getDb();
 
-    const projects = db.prepare(`
-      SELECT DISTINCT p.* FROM projects p
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.owner_id = ? OR m.user_id = ?
-      ORDER BY p.updated_at DESC
-    `).all(user.id, user.id);
+    const canViewAll = hasSystemPermission(db, user.id, 'view_all_projects') || hasSystemPermission(db, user.id, 'edit_all_projects');
+    const projects = canViewAll
+      ? db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all()
+      : db.prepare(`
+          SELECT DISTINCT p.* FROM projects p
+          LEFT JOIN project_members m ON p.id = m.project_id
+          WHERE p.owner_id = ? OR m.user_id = ?
+          ORDER BY p.updated_at DESC
+        `).all(user.id, user.id);
 
     return NextResponse.json(projects);
   } catch (err) {
@@ -60,13 +64,14 @@ export async function POST(request: Request) {
       const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? 'campaign'));
 
       db.prepare(`
-        INSERT INTO projects (id, name, type, phase_key, owner_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO projects (id, name, type, phase_key, owner_id, primary_assignee_id)
+        VALUES (?, ?, ?, ?, ?, ?)
       `).run(
         id,
         body.name.trim(),
         body.type ?? 'campaign',
         body.phase_key ?? '',
+        user.id,
         user.id
       );
 

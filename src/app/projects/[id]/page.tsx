@@ -119,6 +119,14 @@ function parseFieldOptions(options: string) {
 
 type GroupChildState = { value: string; options?: string };
 
+function userDisplayName(user: { email: string; name?: string | null }) {
+  return user.name?.trim() || user.email;
+}
+
+function userInitials(user: { email: string; name?: string | null }) {
+  return userDisplayName(user).slice(0, 2).toUpperCase();
+}
+
 function normalizeGroupChildState(value: unknown): GroupChildState {
   if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in (value as Record<string, unknown>)) {
     return {
@@ -775,7 +783,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'fields' | 'assets' | 'notes'>('fields');
+  const [tab, setTab] = useState<'fields' | 'assets' | 'notes' | 'members'>('fields');
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
@@ -784,6 +792,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ title: string; body: string }>({ title: '', body: '' });
   const [noteCreating, setNoteCreating] = useState(false);
+  const [memberUserId, setMemberUserId] = useState('');
+  const [memberRole, setMemberRole] = useState('MEMBER');
+  const [memberMessage, setMemberMessage] = useState('');
+  const [memberSaving, setMemberSaving] = useState(false);
 
   const loadProject = useCallback(async () => {
     setLoadError('');
@@ -885,6 +897,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   }, [project, projectTypes]);
 
   async function save(p: ProjectWithFields) {
+    if (!p.current_permissions?.can_edit) return;
     setSaving(true);
     await fetch(withBasePath(`/api/projects/${id}`), {
       method: 'PUT',
@@ -894,12 +907,63 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         type: p.type,
         phase_key: p.phase_key,
         status: p.status,
-        custom_fields: p.custom_fields,
+        primary_assignee_id: p.primary_assignee_id ?? null,
+        ...(p.current_permissions?.can_edit_items ? { custom_fields: p.custom_fields } : {}),
       }),
     });
     setSaving(false);
     setSavingMsg('保存済み');
     setTimeout(() => setSavingMsg(''), 2000);
+  }
+
+  async function addProjectMember() {
+    if (!memberUserId) return;
+    setMemberSaving(true);
+    setMemberMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/members`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: memberUserId, role: memberRole }),
+    });
+    const payload = await res.json() as { error?: string };
+    setMemberSaving(false);
+
+    if (!res.ok) {
+      setMemberMessage(payload.error || 'メンバー追加に失敗しました');
+      return;
+    }
+
+    setMemberUserId('');
+    setMemberRole('MEMBER');
+    setMemberMessage('メンバーを更新しました');
+    await loadProject();
+  }
+
+  async function updateProjectMemberRole(userId: string, role: string) {
+    setMemberMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/members`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, role }),
+    });
+    if (!res.ok) {
+      const payload = await res.json() as { error?: string };
+      setMemberMessage(payload.error || 'ロール更新に失敗しました');
+      return;
+    }
+    await loadProject();
+  }
+
+  async function removeProjectMember(userId: string) {
+    if (!confirm('このメンバーをプロジェクトから外しますか？')) return;
+    setMemberMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/members?user_id=${encodeURIComponent(userId)}`), { method: 'DELETE' });
+    if (!res.ok) {
+      const payload = await res.json() as { error?: string };
+      setMemberMessage(payload.error || 'メンバー削除に失敗しました');
+      return;
+    }
+    await loadProject();
   }
 
   function updateField(idx: number, f: CustomField) {
@@ -1052,6 +1116,25 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const typeLabel = currentProjectType?.name || PROJECT_TYPE_LABELS[project.type as ProjectType] || project.type;
   const currentPhases = currentProjectType?.phases || [];
   const currentPhaseIndex = currentPhases.findIndex((phase) => phase.key === project.phase_key);
+  const assignableUsers = Array.isArray(project.assignable_users) ? project.assignable_users : [];
+  const currentUserMemberRole = project.members?.find((member) => member.user.id === user.id)?.role;
+  const currentPermissions = project.current_permissions;
+  const canManageMembers = Boolean(currentPermissions?.can_manage_members);
+  const canEditProject = Boolean(currentPermissions?.can_edit);
+  const canEditItems = Boolean(currentPermissions?.can_edit_items);
+  const canViewItems = Boolean(currentPermissions?.can_view_items);
+  const canViewContent = Boolean(currentPermissions?.can_view_content);
+  const canGenerateContent = Boolean(currentPermissions?.can_generate_content);
+  const canViewNotes = Boolean(currentPermissions?.can_view_notes);
+  const canEditNotes = Boolean(currentPermissions?.can_edit_notes);
+  const canDeleteProject = Boolean(currentPermissions?.can_delete);
+  const projectRoleDefinitions = project.project_role_definitions ?? [];
+  const roleLabel = (role: string) => projectRoleDefinitions.find((item) => item.key === role)?.name ?? role;
+  const projectMemberUserIds = new Set((project.members ?? []).map((member) => member.user.id));
+  const selectableProjectUsers = (project.registered_users ?? []).filter((candidate) =>
+    candidate.id !== project.owner?.id && !projectMemberUserIds.has(candidate.id)
+  );
+  const primaryAssignee = assignableUsers.find((item) => item.id === project.primary_assignee_id) ?? project.primary_assignee ?? null;
 
   // フィールドをセクション別にグループ化
   const fieldsBySection = allFields.reduce<Record<string, typeof allFields>>((acc, f) => {
@@ -1092,6 +1175,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             onFocus={e => (e.target.style.borderBottomColor = 'var(--accent)')}
             onBlur={e => (e.target.style.borderBottomColor = 'transparent')}
             value={project.name}
+            disabled={!canEditProject}
             onChange={e => setProject({ ...project, name: e.target.value })}
           />
 
@@ -1115,9 +1199,6 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             )}
           </div>
 
-          {/* 区切り */}
-          <span style={{ color: 'var(--border)', fontSize: 18, lineHeight: 1 }}>|</span>
-
           {/* ステータス・ピルセレクター */}
           <div className="flex items-center rounded-xl overflow-hidden border shrink-0" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}>
             {([
@@ -1130,6 +1211,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 <button
                   key={opt.value}
                   type="button"
+                  disabled={!canEditProject}
                   onClick={() => setProject({ ...project, status: opt.value })}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all"
                   style={{
@@ -1167,7 +1249,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               {savingMsg}
             </span>
           )}
-          <button onClick={() => save(project)} disabled={saving} className="btn-primary text-sm shrink-0">
+          <button onClick={() => save(project)} disabled={saving || !canEditProject} className="btn-primary text-sm shrink-0">
             {saving ? (
               <span className="flex items-center gap-1.5">
                 <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
@@ -1175,7 +1257,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               </span>
             ) : '保存'}
           </button>
-          <button onClick={deleteProject} className="btn-danger text-xs shrink-0">削除</button>
+          {canDeleteProject && <button onClick={deleteProject} className="btn-danger text-xs shrink-0">削除</button>}
         </div>
 
         {/* 進行パス（Salesforce Path スタイル・全幅均等） */}
@@ -1200,6 +1282,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   <button
                     key={phase.id}
                     type="button"
+                    disabled={!canEditProject}
                     onClick={() => setProject({ ...project, phase_key: phase.key })}
                     title={`フェーズを「${phase.name}」に切り替え`}
                     className="group relative flex flex-1 h-10 items-center justify-center transition-all focus:outline-none"
@@ -1275,9 +1358,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           {/* タブ切り替え */}
           <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
             {([
-              { k: 'fields' as const, l: 'プロジェクト情報' },
-              { k: 'notes' as const, l: `ノート (${notes.length})` },
-              { k: 'assets' as const, l: `生成コンテンツ (${assets.length})` },
+              ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
+              ...(canViewItems ? [{ k: 'members' as const, l: `メンバー (${assignableUsers.length})` }] : []),
+              ...(canViewNotes ? [{ k: 'notes' as const, l: `ノート (${notes.length})` }] : []),
+              ...(canViewContent ? [{ k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }] : []),
             ]).map(t => (
               <button key={t.k} onClick={() => setTab(t.k)}
                 className="text-sm px-3 py-1.5 rounded-xl transition-colors"
@@ -1290,7 +1374,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             ))}
           </div>
 
-          {tab === 'notes' ? (
+          {tab === 'notes' && canViewNotes ? (
             <section className="space-y-4">
               {/* 新規作成フォーム */}
               {noteCreating ? (
@@ -1308,6 +1392,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               ) : (
                 <button
                   onClick={() => setNoteCreating(true)}
+                  disabled={!canEditNotes}
                   className="btn-secondary w-full justify-center text-sm"
                 >
                   + 新しいノートを作成
@@ -1354,6 +1439,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 onClick={() => updateNote(note.id, { pinned: note.pinned === 1 ? 0 : 1 })}
+                                disabled={!canEditNotes}
                                 title={note.pinned === 1 ? 'ピン留めを外す' : 'ピン留め'}
                                 className="p-1 rounded transition-colors text-sm"
                                 style={{ color: note.pinned === 1 ? 'var(--accent)' : 'var(--text-muted)', opacity: note.pinned === 1 ? 1 : 0.4 }}
@@ -1361,6 +1447,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                 📌
                               </button>
                               <button
+                                disabled={!canEditNotes}
                                 onClick={() => {
                                   setNoteEditingId(note.id);
                                   setNoteDraft({ title: note.title, body: note.body });
@@ -1372,6 +1459,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                               </button>
                               <button
                                 onClick={() => deleteNote(note.id)}
+                                disabled={!canEditNotes}
                                 className="px-2 py-1 rounded transition-colors text-xs"
                                 style={{ color: '#b34a4a' }}
                               >
@@ -1392,7 +1480,137 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               )}
             </section>
-          ) : tab === 'fields' ? (
+          ) : tab === 'members' && canViewItems ? (
+            <section className="space-y-5">
+              <div className="card p-5 space-y-4">
+                <div>
+                  <h2 className="section-title">主担当</h2>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    プロジェクト全体の代表担当者です。Todo/KANBAN/WBSの担当者フィルタでも使います。
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+                  <div>
+                    <label className="field-label">主担当者</label>
+                    <select
+                      className="field-input"
+                      value={project.primary_assignee_id ?? ''}
+                      disabled={!canEditProject}
+                      onChange={(e) => setProject({ ...project, primary_assignee_id: e.target.value || null })}
+                    >
+                      <option value="">未設定</option>
+                      {assignableUsers.map((assignee) => (
+                        <option key={assignee.id} value={assignee.id}>
+                          {userDisplayName(assignee)} / {assignee.email}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button onClick={() => save(project)} disabled={saving || !canEditProject} className="btn-primary text-sm">
+                    主担当を保存
+                  </button>
+                </div>
+                <div className="rounded-xl border p-3 flex items-center gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
+                  {primaryAssignee?.avatar_url ? (
+                    <img src={primaryAssignee.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                      {primaryAssignee ? userInitials(primaryAssignee) : '未'}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{primaryAssignee ? userDisplayName(primaryAssignee) : '未設定'}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{primaryAssignee?.email ?? '主担当が設定されていません'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-5 space-y-4">
+                <div>
+                  <h2 className="section-title">メンバー</h2>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    登録済みユーザーだけをプロジェクトに追加できます。未登録ユーザーを追加する場合は、先にユーザー管理で作成してください。
+                  </p>
+                </div>
+
+                {canManageMembers && (
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
+                    <div>
+                      <label className="field-label">追加するユーザー</label>
+                      <select className="field-input" value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)}>
+                        <option value="">登録済みユーザーを選択</option>
+                        {selectableProjectUsers.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>
+                            {userDisplayName(candidate)} / {candidate.email}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field-label">プロジェクトロール</label>
+                      <select className="field-input" value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                        {projectRoleDefinitions.map((role) => (
+                          <option key={role.key} value={role.key}>{role.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={addProjectMember} disabled={memberSaving || !memberUserId} className="btn-secondary text-sm">
+                      {memberSaving ? '追加中...' : '追加'}
+                    </button>
+                    {memberMessage && (
+                      <p className="md:col-span-3 text-xs" style={{ color: memberMessage === 'メンバーを更新しました' ? 'var(--success)' : '#b34a4a' }}>
+                        {memberMessage}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {project.owner && (
+                    <div className="py-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>
+                        {userInitials(project.owner)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{userDisplayName(project.owner)}</p>
+                        <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{project.owner.email}</p>
+                      </div>
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>オーナー</span>
+                    </div>
+                  )}
+                  {(project.members ?? []).map((member) => (
+                    <div key={member.user.id} className="py-3 flex items-center gap-3">
+                      {member.user.avatar_url ? (
+                        <img src={member.user.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                          {userInitials(member.user)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{userDisplayName(member.user)}</p>
+                        <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{member.user.email}</p>
+                      </div>
+                      {canManageMembers ? (
+                        <select className="field-input text-xs py-1.5 w-52" value={member.role} onChange={(e) => updateProjectMemberRole(member.user.id, e.target.value)}>
+                          {projectRoleDefinitions.map((role) => (
+                            <option key={role.key} value={role.key}>{role.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>{roleLabel(member.role)}</span>
+                      )}
+                      {canManageMembers && (
+                        <button onClick={() => removeProjectMember(member.user.id)} className="btn-danger text-xs px-2 py-1">
+                          外す
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ) : tab === 'fields' && canViewItems ? (
             <>
               {/* セクション別フィールド表示 */}
               {(() => {
@@ -1486,8 +1704,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     {/* セクション定義も対象フィールドもない場合 */}
                     {definedSections.length === 0 && extraSectionNames.length === 0 && (
                       <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-                        <p className="text-sm">このプロジェクト種別にはフィールドがありません</p>
-                        <p className="text-xs mt-1">プロジェクト種別設定でフィールドを追加してください</p>
+                        <p className="text-sm">このプロジェクト種別には項目がありません</p>
+                        <p className="text-xs mt-1">プロジェクト種別設定で項目を追加してください</p>
                       </div>
                     )}
                   </>
@@ -1513,7 +1731,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </section>
               )}
             </>
-          ) : (
+          ) : tab === 'assets' && canViewContent ? (
             <section>
               {assets.length === 0 ? (
                 <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
@@ -1526,6 +1744,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               )}
             </section>
+          ) : (
+            <section>
+              <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                <p className="text-sm">この情報を表示する権限がありません</p>
+              </div>
+            </section>
           )}
         </div>
 
@@ -1534,7 +1758,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           <h2 className="section-title">コンテンツ生成</h2>
 
           {/* 生成コンテンツ選択 */}
-          <div>
+          {canViewContent && <div>
             <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>生成するコンテンツ</p>
             <div className="space-y-1.5">
               {currentContentTemplates.map((template) => (
@@ -1554,12 +1778,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
           {/* 生成ボタン */}
           <button
             onClick={generate}
-            disabled={generating || selectedContentKeys.length === 0}
+            disabled={generating || selectedContentKeys.length === 0 || !canGenerateContent}
             className="btn-primary w-full justify-center py-2.5"
           >
               {generating ? (
@@ -1581,9 +1805,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             />
           </div>
 
-          <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
-            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>フィールド自動補完</p>
-            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力フィールドの値をAIが推測します</p>
+          {canGenerateContent && <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>項目自動補完</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力項目の値をAIが推測します</p>
             <button onClick={complete} disabled={completing} className="btn-secondary w-full justify-center text-sm">
               {completing ? (
                 <span className="flex items-center gap-2">
@@ -1592,7 +1816,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </span>
               ) : 'AI補完を実行'}
             </button>
-          </div>
+          </div>}
 
           {aiError && (
             <div className="p-3 rounded-xl border" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
@@ -1612,7 +1836,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> プロジェクトコア情報</li>
               <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.length > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                 {project.custom_fields.length > 0 ? '✓' : '−'}
-              </span> フィールド ({project.custom_fields.length}件)</li>
+              </span> 項目 ({project.custom_fields.length}件)</li>
               <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.some(f => f.crawled_content) ? 'var(--success)' : 'var(--text-muted)' }}>
                 {project.custom_fields.some(f => f.crawled_content) ? '✓' : '−'}
               </span> クロール済みURL</li>
@@ -1621,8 +1845,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
           {inheritedCount > 0 && (
             <div className="p-3 rounded-xl border" style={{ backgroundColor: 'rgba(255, 243, 224, 0.8)', borderColor: 'rgba(215,138,29,0.25)' }}>
-              <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>⚠ 継承フィールドあり</p>
-              <p className="text-xs mt-1" style={{ color: '#9a6213' }}>{inheritedCount}件のフィールドが前回施策から継承されています。生成前に確認を推奨します。</p>
+              <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>⚠ 継承項目あり</p>
+              <p className="text-xs mt-1" style={{ color: '#9a6213' }}>{inheritedCount}件の項目が前回施策から継承されています。生成前に確認を推奨します。</p>
             </div>
           )}
         </div>

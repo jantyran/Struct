@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { getDb } from "./db";
+import { systemPermissionsForUser } from "./permissions";
 
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "local-secret-key-struct-2026");
 
@@ -27,8 +28,9 @@ export async function getSession() {
     const { payload } = await jwtVerify(token, SECRET);
     const userId = payload.userId as string;
     const db = getDb();
-    const user = db.prepare('SELECT id, email, name FROM users WHERE id = ?').get(userId) as any;
-    return user;
+    const user = db.prepare('SELECT id, email, name, avatar_url, system_role FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return null;
+    return { ...user, system_permissions: systemPermissionsForUser(db, user.id) };
   } catch (error) {
     return null;
   }

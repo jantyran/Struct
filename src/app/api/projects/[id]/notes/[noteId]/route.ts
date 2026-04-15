@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { requireProjectPermission } from '@/lib/permissions';
 import type { ProjectNote } from '@/types';
 
 interface Params { params: { id: string; noteId: string } }
@@ -25,6 +26,9 @@ export async function PATCH(req: Request, { params }: Params) {
 
   const project = await checkProjectAccess(params.id, user.id);
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!requireProjectPermission(getDb(), params.id, user.id, 'edit_notes')) {
+    return NextResponse.json({ error: 'ノート編集権限がありません' }, { status: 403 });
+  }
 
   let body: { title?: string; body?: string; pinned?: boolean };
   try {
@@ -69,6 +73,9 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const project = await checkProjectAccess(params.id, user.id);
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!requireProjectPermission(getDb(), params.id, user.id, 'edit_notes')) {
+    return NextResponse.json({ error: 'ノート編集権限がありません' }, { status: 403 });
+  }
 
   try {
     const db = getDb();

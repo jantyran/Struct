@@ -139,6 +139,8 @@ export interface Project {
   phase_key: string;
   status: ProjectStatus;
   cloned_from: string | null;
+  primary_assignee_id?: string | null;
+  primary_assignee?: ProjectUser | null;
   /** @deprecated コアフィールドは custom_fields に移行済み。後方互換のため残存 */
   target?: string;
   start_date?: string;
@@ -149,8 +151,89 @@ export interface Project {
   created_at: string;
   updated_at: string;
   ownerId: string;
-  members?: Array<{ user: { email: string, name: string | null }, role: string }>;
+  owner?: ProjectUser;
+  members?: ProjectMember[];
   invitations?: Array<{ email: string, role: string, status: string }>;
+  assignable_users?: ProjectUser[];
+  registered_users?: ProjectUser[];
+  project_role_definitions?: ProjectRoleDefinition[];
+  current_permissions?: ProjectAccessPermissions;
+}
+
+export interface ProjectUser {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar_url?: string | null;
+}
+
+export interface ProjectMember {
+  id: string;
+  user: ProjectUser;
+  role: string;
+}
+
+export type SystemPermissionKey =
+  | 'manage_users'
+  | 'manage_system_roles'
+  | 'manage_project_roles'
+  | 'manage_project_settings'
+  | 'manage_global_assets'
+  | 'manage_ai_settings'
+  | 'view_all_projects'
+  | 'edit_all_projects'
+  | 'delete_any_project';
+
+export type SystemPermissions = Record<SystemPermissionKey, boolean>;
+
+export interface ProjectAccessPermissions {
+  is_owner: boolean;
+  project_role: string | null;
+  system_permissions: SystemPermissions;
+  can_view: boolean;
+  can_edit: boolean;
+  can_manage_members: boolean;
+  can_delete: boolean;
+  can_view_items: boolean;
+  can_edit_items: boolean;
+  can_view_content: boolean;
+  can_generate_content: boolean;
+  can_view_notes: boolean;
+  can_edit_notes: boolean;
+}
+
+export interface RoleDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  permissions: SystemPermissions;
+  is_system: boolean;
+  sort_order: number;
+}
+
+export type ProjectRolePermissionKey =
+  | 'can_view'
+  | 'can_edit'
+  | 'can_manage_members'
+  | 'can_delete'
+  | 'can_view_items'
+  | 'can_edit_items'
+  | 'can_view_content'
+  | 'can_generate_content'
+  | 'can_view_notes'
+  | 'can_edit_notes';
+
+export type ProjectRolePermissions = Record<ProjectRolePermissionKey, boolean>;
+
+export interface ProjectRoleDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  permissions: ProjectRolePermissions;
+  is_system: boolean;
+  sort_order: number;
 }
 
 export interface CustomField {

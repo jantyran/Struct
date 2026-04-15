@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
+import { projectAccessForUser, projectRoleDefinitions, requireProjectPermission } from '@/lib/permissions';
 import type { CustomField } from '@/types';
 
 interface Params { params: { id: string } }
@@ -11,7 +12,7 @@ interface Params { params: { id: string } }
 async function checkProjectAccess(projectId: string, userId: string) {
   const db = getDb();
   return db.prepare(`
-    SELECT DISTINCT p.* FROM projects p
+    SELECT DISTINCT p.*, m.role AS member_role FROM projects p
     LEFT JOIN project_members m ON p.id = m.project_id
     WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
   `).get(projectId, userId, userId);
@@ -29,12 +30,17 @@ export async function GET(_req: Request, { params }: Params) {
     const db = getDb();
 
     const project = db.prepare(`
-      SELECT p.* FROM projects p
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id) as any;
+      SELECT p.*, owner.email AS owner_email, owner.name AS owner_name, owner.avatar_url AS owner_avatar_url,
+        lead.email AS primary_assignee_email, lead.name AS primary_assignee_name, lead.avatar_url AS primary_assignee_avatar_url
+      FROM projects p
+      JOIN users owner ON p.owner_id = owner.id
+      LEFT JOIN users lead ON p.primary_assignee_id = lead.id
+      WHERE p.id = ?
+    `).get(params.id) as any;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const currentPermissions = projectAccessForUser(db, params.id, user.id);
+    if (!currentPermissions?.can_view) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as CustomField[];
     const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(project.owner_id) as any;
@@ -43,17 +49,45 @@ export async function GET(_req: Request, { params }: Params) {
     const syncedFields = syncCustomFieldsWithDefinition(params.id, fields, currentDefinition);
 
     const members = db.prepare(`
-      SELECT m.*, u.email, u.name FROM project_members m
+      SELECT m.*, u.email, u.name, u.avatar_url FROM project_members m
       JOIN users u ON m.user_id = u.id
       WHERE m.project_id = ?
     `).all(params.id);
     const invitations = db.prepare("SELECT * FROM invitations WHERE project_id = ? AND status = 'PENDING'").all(params.id);
+    const registeredUsers = currentPermissions.can_manage_members
+      ? db.prepare(`
+          SELECT id, email, name, avatar_url
+          FROM users
+          ORDER BY COALESCE(NULLIF(name, ''), email) ASC
+        `).all()
+      : [];
+    const assignableUsers = [
+      { id: project.owner_id, email: project.owner_email, name: project.owner_name, avatar_url: project.owner_avatar_url },
+      ...members.map((m: any) => ({ id: m.user_id, email: m.email, name: m.name, avatar_url: m.avatar_url })),
+    ];
 
     return NextResponse.json({
       ...project,
-      custom_fields: syncedFields,
-      members: members.map((m: any) => ({ user: { email: m.email, name: m.name }, role: m.role })),
-      invitations
+      custom_fields: currentPermissions.can_view_items ? syncedFields : [],
+      owner: { id: project.owner_id, email: project.owner_email, name: project.owner_name, avatar_url: project.owner_avatar_url },
+      primary_assignee: project.primary_assignee_id
+        ? {
+            id: project.primary_assignee_id,
+            email: project.primary_assignee_email,
+            name: project.primary_assignee_name,
+            avatar_url: project.primary_assignee_avatar_url,
+          }
+        : null,
+      members: members.map((m: any) => ({
+        id: m.id,
+        user: { id: m.user_id, email: m.email, name: m.name, avatar_url: m.avatar_url },
+        role: m.role,
+      })),
+      invitations,
+      assignable_users: assignableUsers,
+      registered_users: registeredUsers,
+      project_role_definitions: projectRoleDefinitions(db),
+      current_permissions: currentPermissions,
     });
   } catch (err) {
     console.error('GET /api/projects/[id] failed', err);
@@ -67,12 +101,15 @@ export async function PUT(request: Request, { params }: Params) {
     const db = getDb();
     const projectAccess = await checkProjectAccess(params.id, user.id);
     if (!projectAccess) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const currentPermissions = projectAccessForUser(db, params.id, user.id);
+    if (!currentPermissions?.can_edit) return NextResponse.json({ error: '編集権限がありません' }, { status: 403 });
 
     const body = await request.json() as {
       name?: string;
       type?: string;
       phase_key?: string;
       status?: string;
+      primary_assignee_id?: string | null;
       custom_fields?: Array<{
         id?: string;
         template_id?: string;
@@ -90,6 +127,20 @@ export async function PUT(request: Request, { params }: Params) {
         section?: string;
       }>;
     };
+    const nextPrimaryAssigneeId = body.primary_assignee_id === undefined
+      ? (projectAccess as any).primary_assignee_id ?? null
+      : body.primary_assignee_id;
+
+    if (nextPrimaryAssigneeId) {
+      const assignable = db.prepare(`
+        SELECT 1 FROM projects p
+        LEFT JOIN project_members m ON p.id = m.project_id AND m.user_id = ?
+        WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
+      `).get(nextPrimaryAssigneeId, params.id, nextPrimaryAssigneeId, nextPrimaryAssigneeId);
+      if (!assignable) {
+        return NextResponse.json({ error: '主担当はプロジェクトメンバーから選択してください' }, { status: 400 });
+      }
+    }
 
     const tx = db.transaction(() => {
       db.prepare(`
@@ -98,6 +149,7 @@ export async function PUT(request: Request, { params }: Params) {
           type = COALESCE(?, type),
           phase_key = COALESCE(?, phase_key),
           status = COALESCE(?, status),
+          primary_assignee_id = ?,
           updated_at = datetime('now')
         WHERE id = ?
       `).run(
@@ -105,10 +157,12 @@ export async function PUT(request: Request, { params }: Params) {
         body.type ?? null,
         body.phase_key ?? null,
         body.status ?? null,
+        nextPrimaryAssigneeId,
         params.id
       );
 
       if (body.custom_fields) {
+        if (!currentPermissions.can_edit_items) throw new Error('NO_ITEM_EDIT_PERMISSION');
         const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get((projectAccess as any).owner_id) as any;
         const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
         const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? (projectAccess as any).type));
@@ -139,6 +193,9 @@ export async function PUT(request: Request, { params }: Params) {
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id);
     return NextResponse.json({ ...updated as any, custom_fields: fields });
   } catch (err) {
+    if ((err as Error).message === 'NO_ITEM_EDIT_PERMISSION') {
+      return NextResponse.json({ error: '項目編集権限がありません' }, { status: 403 });
+    }
     console.error(err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
@@ -150,7 +207,7 @@ export async function DELETE(_req: Request, { params }: Params) {
     const db = getDb();
     const project = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(params.id) as any;
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    if (project.owner_id !== user.id) return NextResponse.json({ error: 'Only owners can delete projects' }, { status: 403 });
+    if (!requireProjectPermission(db, params.id, user.id, 'delete_project')) return NextResponse.json({ error: '削除権限がありません' }, { status: 403 });
 
     db.prepare('DELETE FROM projects WHERE id = ?').run(params.id);
     return NextResponse.json({ success: true });

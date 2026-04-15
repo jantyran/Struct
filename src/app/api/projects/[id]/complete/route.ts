@@ -12,6 +12,7 @@ import { requireSession } from '@/lib/auth';
 import type { ProjectWithFields, GlobalAssets } from '@/types';
 import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 import { normalizeAISettingsRow } from '@/lib/ai/settings';
+import { requireProjectPermission } from '@/lib/permissions';
 
 interface Params { params: { id: string } }
 
@@ -33,6 +34,9 @@ export async function POST(_req: Request, { params }: Params) {
     `).get(params.id, user.id, user.id) as any;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
+      return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
+    }
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
