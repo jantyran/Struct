@@ -19,11 +19,19 @@ export interface ProjectPhase {
   name: string;
 }
 
+export interface SectionFieldPlacement {
+  id: string;
+  field_id: string;
+  layout: FieldLayout;
+}
+
 export interface SectionDefinition {
   id: string;
   name: string;
   /** hex color, e.g. '#0f9ab1' */
   color: string;
+  /** セクション内の表示順・列幅 */
+  items: SectionFieldPlacement[];
 }
 
 export interface ProjectFieldTemplate {
@@ -32,10 +40,11 @@ export interface ProjectFieldTemplate {
   label: string;
   type: FieldType;
   options: string;
+  /** @deprecated UI配置は sections.items で管理する */
   layout?: FieldLayout;
   /** true = 組み込みフィールド（元コアフィールド）。UIで削除不可 */
   is_builtin?: boolean;
-  /** セクション名。同じ名前のフィールドをグループ表示する */
+  /** @deprecated UI配置は sections.items で管理する */
   section?: string;
 }
 

@@ -1,9 +1,20 @@
-import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition } from '@/types';
+import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement } from '@/types';
 
 /** デフォルトセクション定義 */
 export const DEFAULT_SECTIONS: SectionDefinition[] = [
-  { id: 'section-basic', name: '基本情報', color: '#0f9ab1' },
-  { id: 'section-detail', name: '詳細', color: '#6366f1' },
+  { id: 'section-basic', name: '基本情報', color: '#0f9ab1', items: [] },
+  { id: 'section-detail', name: '詳細', color: '#6366f1', items: [] },
+];
+
+const SECTION_COLOR_PRESETS = [
+  '#0f9ab1',
+  '#6366f1',
+  '#10b981',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#ec4899',
+  '#64748b',
 ];
 
 /**
@@ -271,11 +282,24 @@ function safeJson<T>(value: unknown, fallback: T): T {
   }
 }
 
+function normalizeLayout(value: unknown): 'half' | 'full' {
+  return value === 'full' ? 'full' : 'half';
+}
+
+function normalizeSectionFieldPlacement(item: Partial<SectionFieldPlacement>, index: number): SectionFieldPlacement {
+  return {
+    id: item.id || `section-item-${index + 1}`,
+    field_id: typeof item.field_id === 'string' ? item.field_id : '',
+    layout: normalizeLayout(item.layout),
+  };
+}
+
 function normalizeSection(section: Partial<SectionDefinition>, index: number): SectionDefinition {
   return {
     id: section.id || `section-${index + 1}`,
     name: section.name?.trim() || `セクション ${index + 1}`,
     color: typeof section.color === 'string' && section.color ? section.color : DEFAULT_SECTIONS[index % DEFAULT_SECTIONS.length]?.color ?? '#0f9ab1',
+    items: safeArray<Partial<SectionFieldPlacement>>((section as SectionDefinition).items).map(normalizeSectionFieldPlacement),
   };
 }
 
@@ -294,10 +318,56 @@ function normalizeFieldTemplate(field: Partial<ProjectFieldTemplate>, index: num
     label: field.label?.trim() || `項目 ${index + 1}`,
     type: field.type || 'text',
     options: typeof field.options === 'string' && field.options ? field.options : '{}',
-    layout: field.layout === 'full' ? 'full' : 'half',
+    layout: normalizeLayout(field.layout),
     is_builtin: field.is_builtin === true,
     section: typeof field.section === 'string' ? field.section : (field.is_builtin ? '基本情報' : ''),
   };
+}
+
+function appendMissingSections(sections: SectionDefinition[], names: string[]): SectionDefinition[] {
+  const existingNames = new Set(sections.map((section) => section.name));
+  const nextSections = [...sections];
+
+  names.forEach((name) => {
+    if (!name || existingNames.has(name)) return;
+    const color = SECTION_COLOR_PRESETS[nextSections.length % SECTION_COLOR_PRESETS.length] ?? '#0f9ab1';
+    nextSections.push({
+      id: `section-${nextSections.length + 1}`,
+      name,
+      color,
+      items: [],
+    });
+    existingNames.add(name);
+  });
+
+  return nextSections;
+}
+
+function buildSectionItemsFromLegacyFields(fields: ProjectFieldTemplate[], sections: SectionDefinition[]): SectionDefinition[] {
+  return sections.map((section) => ({
+    ...section,
+    items: fields
+      .filter((field) => (field.section ?? '') === section.name)
+      .map((field, index) => ({
+        id: `${section.id}-item-${index + 1}`,
+        field_id: field.id,
+        layout: normalizeLayout(field.layout),
+      })),
+  }));
+}
+
+function sanitizeSectionItems(sections: SectionDefinition[], fields: ProjectFieldTemplate[]): SectionDefinition[] {
+  const knownFieldIds = new Set(fields.map((field) => field.id));
+  const seenFieldIds = new Set<string>();
+
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => {
+      if (!item.field_id || !knownFieldIds.has(item.field_id) || seenFieldIds.has(item.field_id)) return false;
+      seenFieldIds.add(item.field_id);
+      return true;
+    }),
+  }));
 }
 
 /**
@@ -314,7 +384,7 @@ function mergeBuiltinTemplates(storedTemplates: Partial<ProjectFieldTemplate>[])
     return {
       ...def,
       label: stored.label?.trim() || def.label,
-      layout: stored.layout === 'full' ? 'full' : def.layout,
+      layout: normalizeLayout(stored.layout ?? def.layout),
       section: typeof stored.section === 'string' ? stored.section : def.section,
     };
   });
@@ -345,12 +415,23 @@ function normalizeTypeDefinition(
 
   // 初回（storedが空）かつデフォルト種別の場合、カスタム初期値を補完
   const defaultCustoms = customs.length === 0 ? (DEFAULT_CUSTOM_TEMPLATES[definition.key ?? ''] ?? []) : customs;
+  const normalizedFieldTemplates = [...builtins, ...defaultCustoms];
 
   // セクション定義を正規化（保存済みがあればそれを使用、なければデフォルト）
   const storedSections = safeArray<Partial<SectionDefinition>>(definition.sections);
-  const normalizedSections = storedSections.length > 0
+  const sectionNamesFromLegacyFields = Array.from(new Set(
+    normalizedFieldTemplates
+      .map((field) => field.section?.trim() || '')
+      .filter(Boolean)
+  ));
+  const baseSections = storedSections.length > 0
     ? storedSections.map(normalizeSection)
     : [...DEFAULT_SECTIONS];
+  const normalizedSections = appendMissingSections(baseSections, sectionNamesFromLegacyFields);
+  const hasExplicitSectionItems = storedSections.some((section) => Object.prototype.hasOwnProperty.call(section, 'items'));
+  const sectionsWithItems = hasExplicitSectionItems
+    ? sanitizeSectionItems(normalizedSections, normalizedFieldTemplates)
+    : buildSectionItemsFromLegacyFields(normalizedFieldTemplates, normalizedSections);
 
   return {
     id: definition.id || `project-type-${index + 1}`,
@@ -359,8 +440,8 @@ function normalizeTypeDefinition(
     description: definition.description ?? '',
     is_default: definition.is_default === true,
     phases: safeArray<Partial<ProjectPhase>>(definition.phases).map(normalizePhase),
-    sections: normalizedSections,
-    field_templates: [...builtins, ...defaultCustoms],
+    sections: sectionsWithItems,
+    field_templates: normalizedFieldTemplates,
     content_template_ids: contentTemplateIds.length > 0
       ? contentTemplateIds
       : legacyContentTemplates.length > 0

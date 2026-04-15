@@ -607,6 +607,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [tab, setTab] = useState<'fields' | 'assets'>('fields');
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
+  const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
 
   const loadProject = useCallback(async () => {
     setLoadError('');
@@ -681,6 +682,29 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     });
   }, [project?.type, projectTypes, contentTemplates]);
 
+  useEffect(() => {
+    if (!project) return;
+    const currentType = projectTypes.find((definition) => definition.key === project.type);
+    const fields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
+    const fieldsBySection = fields.reduce<Record<string, typeof fields>>((acc, field) => {
+      const sectionName = field.section?.trim() || '詳細';
+      if (!acc[sectionName]) acc[sectionName] = [];
+      acc[sectionName].push(field);
+      return acc;
+    }, {});
+    const definedSections = currentType?.sections ?? [];
+    const definedSectionNames = definedSections.map((section) => section.name);
+    const extraSectionNames = Array.from(new Set(fields.map((field) => field.section?.trim() || '詳細')))
+      .filter((name) => !definedSectionNames.includes(name));
+    const nextSectionOrder = [...definedSectionNames.filter((name) => fieldsBySection[name]), ...extraSectionNames];
+
+    setOpenFieldSections((current) => {
+      const filtered = current.filter((name) => nextSectionOrder.includes(name));
+      if (filtered.length > 0) return filtered;
+      return nextSectionOrder[0] ? [nextSectionOrder[0]] : [];
+    });
+  }, [project, projectTypes]);
+
   async function save(p: ProjectWithFields) {
     setSaving(true);
     await fetch(withBasePath(`/api/projects/${id}`), {
@@ -704,6 +728,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     const fields = [...project.custom_fields];
     fields[idx] = f;
     setProject({ ...project, custom_fields: fields });
+  }
+
+  function toggleFieldSection(sectionName: string) {
+    setOpenFieldSections((current) =>
+      current.includes(sectionName)
+        ? current.filter((name) => name !== sectionName)
+        : [...current, sectionName]
+    );
   }
 
   async function crawlField(fieldId: string) {
@@ -1064,34 +1096,49 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               ) : (
                 sectionOrder.map(sec => {
                   const secColor = sectionColorMap[sec];
+                  const isOpen = openFieldSections.includes(sec);
                   return (
                     <section key={sec}>
-                      <div className="flex items-center gap-2 mb-3">
-                        {secColor && (
-                          <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />
-                        )}
-                        <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{sec}</h2>
-                      </div>
                       <div className="card overflow-hidden">
                         {secColor && (
                           <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />
                         )}
-                        <div className="p-5 grid grid-cols-2 gap-4">
-                          {(fieldsBySection[sec] ?? []).map((f) => {
-                            const globalIdx = allFields.findIndex(af => af.id === f.id);
-                            return (
-                              <div key={f.id} className={f.layout === 'full' ? 'col-span-2' : ''}>
-                                <CustomFieldRow
-                                  field={f}
-                                  globalAssetObjects={globalAssetObjects}
-                                  onChange={nf => updateField(globalIdx, nf)}
-                                  onCrawl={() => crawlField(f.id)}
-                                  crawling={crawlingFieldId === f.id}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleFieldSection(sec)}
+                          className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {secColor && (
+                              <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />
+                            )}
+                            <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{sec}</h2>
+                            <span className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>
+                              {(fieldsBySection[sec] ?? []).length}件
+                            </span>
+                          </div>
+                          <span className="text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>
+                            {isOpen ? '▲ 閉じる' : '▼ 開く'}
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="px-5 pb-5 grid grid-cols-2 gap-4">
+                            {(fieldsBySection[sec] ?? []).map((f) => {
+                              const globalIdx = allFields.findIndex(af => af.id === f.id);
+                              return (
+                                <div key={f.id} className={f.layout === 'full' ? 'col-span-2' : ''}>
+                                  <CustomFieldRow
+                                    field={f}
+                                    globalAssetObjects={globalAssetObjects}
+                                    onChange={nf => updateField(globalIdx, nf)}
+                                    onCrawl={() => crawlField(f.id)}
+                                    crawling={crawlingFieldId === f.id}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </section>
                   );

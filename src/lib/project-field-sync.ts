@@ -58,7 +58,13 @@ function deriveFieldState(template: ProjectFieldTemplate, existing?: Partial<Cus
   };
 }
 
-function toCustomFieldRecord(projectId: string, template: ProjectFieldTemplate, valueSeed?: Partial<CustomField>, sortOrder = 0): CustomField {
+function toCustomFieldRecord(
+  projectId: string,
+  template: ProjectFieldTemplate,
+  valueSeed?: Partial<CustomField>,
+  sortOrder = 0,
+  placement?: { layout?: unknown; section?: string }
+): CustomField {
   const derivedState = deriveFieldState(template, valueSeed);
   return {
     id: valueSeed?.id || uuidv4(),
@@ -69,13 +75,13 @@ function toCustomFieldRecord(projectId: string, template: ProjectFieldTemplate, 
     type: template.type,
     value: derivedState.value,
     options: derivedState.options,
-    layout: normalizeLayout(template.layout),
+    layout: normalizeLayout(placement?.layout ?? template.layout),
     inherited: valueSeed?.inherited ?? 0,
     inherited_from: valueSeed?.inherited_from ?? null,
     crawled_content: valueSeed?.crawled_content ?? null,
     sort_order: sortOrder,
     is_builtin: template.is_builtin ? 1 : 0,
-    section: typeof template.section === 'string' ? template.section : '',
+    section: placement?.section ?? (typeof template.section === 'string' ? template.section : ''),
   };
 }
 
@@ -85,6 +91,33 @@ function matchExistingField(template: ProjectFieldTemplate, existingFields: Cust
     existingFields.find((field) => field.key === template.key) ||
     existingFields.find((field) => field.label === template.label)
   );
+}
+
+function buildTemplatePlacements(definition: ProjectTypeDefinition) {
+  const templateMap = new Map(definition.field_templates.map((template) => [template.id, template]));
+  const seen = new Set<string>();
+  const placed = definition.sections.flatMap((section) =>
+    section.items.flatMap((item) => {
+      const template = templateMap.get(item.field_id);
+      if (!template || seen.has(template.id)) return [];
+      seen.add(template.id);
+      return [{
+        template,
+        section: section.name,
+        layout: normalizeLayout(item.layout),
+      }];
+    })
+  );
+
+  const unplaced = definition.field_templates
+    .filter((template) => !seen.has(template.id))
+    .map((template) => ({
+      template,
+      section: typeof template.section === 'string' ? template.section : '',
+      layout: normalizeLayout(template.layout),
+    }));
+
+  return [...placed, ...unplaced];
 }
 
 export function syncCustomFieldsWithDefinition(projectId: string, existingFields: CustomField[], definition: ProjectTypeDefinition | null | undefined): CustomField[] {
@@ -101,9 +134,9 @@ export function syncCustomFieldsWithDefinition(projectId: string, existingFields
       .sort((a, b) => a.sort_order - b.sort_order);
   }
 
-  return definition.field_templates.map((template, index) => {
+  return buildTemplatePlacements(definition).map(({ template, section, layout }, index) => {
     const matched = matchExistingField(template, existingFields);
-    return toCustomFieldRecord(projectId, template, matched, index);
+    return toCustomFieldRecord(projectId, template, matched, index, { section, layout });
   });
 }
 

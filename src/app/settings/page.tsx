@@ -25,6 +25,12 @@ const settingSections = [
     description: 'プロジェクト種別、フェーズ、初期項目テンプレート、使用する生成コンテンツの選択を管理します。',
     meta: '種別設計 / パス設計 / 項目設計 / コンテンツ選択',
   },
+  {
+    href: '/settings/password',
+    title: 'パスワード変更',
+    description: '現在のパスワードを確認したうえで、ログイン用パスワードを更新します。',
+    meta: 'セキュリティ / パスワード再設定',
+  },
 ];
 
 export default function SettingsPage() {
