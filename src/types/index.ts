@@ -20,7 +20,7 @@ export interface ProjectPhase {
 }
 
 /** セクションに配置できるアイテムの種別 */
-export type SectionItemKind = 'field' | 'project_type' | 'phase';
+export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list';
 
 /** 情報ウィジェットの仮想 field_id プレフィックス */
 export const WIDGET_FIELD_ID_PREFIX = '__widget:';
@@ -29,7 +29,19 @@ export const WIDGET_FIELD_ID_PREFIX = '__widget:';
 export const SECTION_INFO_WIDGETS: { kind: SectionItemKind; label: string; description: string }[] = [
   { kind: 'project_type', label: 'プロジェクト種別', description: '種別名・キーを表示' },
   { kind: 'phase', label: '進行フェーズ', description: '現在のフェーズをパス形式で表示' },
+  { kind: 'note_list', label: 'ノート一覧', description: 'プロジェクトのノートをインライン表示' },
 ];
+
+export interface ProjectNote {
+  id: string;
+  project_id: string;
+  title: string;
+  body: string;
+  pinned: number; // 0 | 1
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface SectionFieldPlacement {
   id: string;

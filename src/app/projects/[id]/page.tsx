@@ -1,10 +1,100 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+/** Markdownをレンダリングするビューア */
+function MarkdownViewer({ content, className }: { content: string; className?: string }) {
+  return (
+    <div className={`md-body ${className ?? ''}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+/**
+ * ノート編集コンポーネント: テキストエリアとプレビューをタブ切り替え
+ */
+function NoteEditor({
+  title,
+  body,
+  onTitleChange,
+  onBodyChange,
+  onSave,
+  onCancel,
+  saveLabel = '保存',
+}: {
+  title: string;
+  body: string;
+  onTitleChange: (v: string) => void;
+  onBodyChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saveLabel?: string;
+}) {
+  const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
+
+  return (
+    <div className="space-y-3">
+      <input
+        className="field-input text-sm font-semibold"
+        placeholder="タイトル"
+        value={title}
+        onChange={e => onTitleChange(e.target.value)}
+        autoFocus={editorTab === 'write'}
+      />
+
+      {/* 編集/プレビュー タブ */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex border-b" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(241,250,252,0.6)' }}>
+          {([{ k: 'write', l: '編集' }, { k: 'preview', l: 'プレビュー' }] as const).map(t => (
+            <button
+              key={t.k}
+              type="button"
+              onClick={() => setEditorTab(t.k)}
+              className="px-4 py-2 text-xs font-medium transition-colors"
+              style={editorTab === t.k
+                ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', marginBottom: -1, backgroundColor: 'white' }
+                : { color: 'var(--text-muted)', borderBottom: '2px solid transparent', marginBottom: -1 }}
+            >
+              {t.l}
+            </button>
+          ))}
+        </div>
+
+        {editorTab === 'write' ? (
+          <textarea
+            className="w-full p-3 text-sm resize-none focus:outline-none"
+            style={{ minHeight: 200, color: 'var(--text-primary)', backgroundColor: 'white', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13, lineHeight: 1.7 }}
+            placeholder="Markdownで記述できます（見出し、リスト、太字など）"
+            value={body}
+            onChange={e => onBodyChange(e.target.value)}
+          />
+        ) : (
+          <div className="p-4 min-h-[200px] bg-white">
+            {body.trim() ? (
+              <MarkdownViewer content={body} />
+            ) : (
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>プレビューする内容がありません</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 justify-end">
+        <button onClick={onCancel} className="btn-secondary text-sm">キャンセル</button>
+        <button onClick={onSave} className="btn-primary text-sm">{saveLabel}</button>
+      </div>
+    </div>
+  );
+}
 
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
@@ -595,6 +685,8 @@ function SectionInfoWidget({
   projectType,
   phases,
   typeLabel,
+  notes,
+  onNotesTabClick,
 }: {
   kind: string;
   layout: 'half' | 'full';
@@ -602,6 +694,8 @@ function SectionInfoWidget({
   projectType: ProjectTypeDefinition | undefined;
   phases: ProjectPhase[];
   typeLabel: string;
+  notes?: ProjectNote[];
+  onNotesTabClick?: () => void;
 }) {
   const colClass = layout === 'full' ? 'col-span-2' : '';
   const cardStyle = { borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.62)' };
@@ -630,6 +724,34 @@ function SectionInfoWidget({
     );
   }
 
+  if (kind === 'note_list') {
+    const pinnedNotes = (notes ?? []).filter(n => n.pinned === 1).slice(0, 3);
+    return (
+      <div className={`${colClass} rounded-xl border p-3`} style={cardStyle}>
+        <div className="flex items-center justify-between mb-2">
+          <p className="field-label">ノート</p>
+          {onNotesTabClick && (
+            <button onClick={onNotesTabClick} className="text-xs transition-colors" style={{ color: 'var(--accent)' }}>
+              すべて表示 →
+            </button>
+          )}
+        </div>
+        {pinnedNotes.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>ピン留めされたノートはありません</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {pinnedNotes.map(note => (
+              <li key={note.id} className="text-xs truncate" style={{ color: 'var(--text-primary)' }}>
+                <span className="mr-1" style={{ color: 'var(--accent)' }}>📌</span>
+                {note.title || '（無題）'}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -653,25 +775,32 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'fields' | 'assets'>('fields');
+  const [tab, setTab] = useState<'fields' | 'assets' | 'notes'>('fields');
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
+  const [notes, setNotes] = useState<ProjectNote[]>([]);
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState<{ title: string; body: string }>({ title: '', body: '' });
+  const [noteCreating, setNoteCreating] = useState(false);
 
   const loadProject = useCallback(async () => {
     setLoadError('');
-    const [projectRes, assetsRes] = await Promise.all([
+    const [projectRes, assetsRes, notesRes] = await Promise.all([
       fetch(withBasePath(`/api/projects/${id}`)),
       fetch(withBasePath(`/api/projects/${id}/assets`)),
+      fetch(withBasePath(`/api/projects/${id}/notes`)),
     ]);
     const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
       fetch(withBasePath('/api/project-types')),
       fetch(withBasePath('/api/global-assets')),
       fetch(withBasePath('/api/content-templates')),
     ]);
-    const [pr, ar, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
+    const [pr, ar, notesData, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
       projectRes.json(),
       assetsRes.json(),
+      notesRes.ok ? notesRes.json() : Promise.resolve([]),
       projectTypesRes.json(),
       globalAssetsRes.json(),
       contentTemplatesRes.json(),
@@ -700,6 +829,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
     setProject(normalizeProject(pr as ProjectWithFields));
     setAssets(Array.isArray(ar) ? ar as GeneratedAsset[] : []);
+    setNotes(Array.isArray(notesData) ? notesData as ProjectNote[] : []);
     setProjectTypes(Array.isArray(projectTypesPayload.project_types) ? projectTypesPayload.project_types as ProjectTypeDefinition[] : []);
     setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects as GlobalAssetObject[] : []);
     setContentTemplates(Array.isArray(contentTemplatesPayload.content_templates) ? contentTemplatesPayload.content_templates as ProjectContentTemplate[] : []);
@@ -858,6 +988,49 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     if (!confirm('このプロジェクトを削除しますか？')) return;
     await fetch(withBasePath(`/api/projects/${id}`), { method: 'DELETE' });
     router.push(withBasePath('/'));
+  }
+
+  async function loadNotes() {
+    setNoteLoading(true);
+    try {
+      const res = await fetch(withBasePath(`/api/projects/${id}/notes`));
+      if (res.ok) setNotes(await res.json());
+    } finally {
+      setNoteLoading(false);
+    }
+  }
+
+  async function createNote() {
+    if (!noteDraft.title.trim() && !noteDraft.body.trim()) return;
+    const res = await fetch(withBasePath(`/api/projects/${id}/notes`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(noteDraft),
+    });
+    if (res.ok) {
+      const created = await res.json() as ProjectNote;
+      setNotes(prev => [created, ...prev]);
+      setNoteDraft({ title: '', body: '' });
+      setNoteCreating(false);
+    }
+  }
+
+  async function updateNote(noteId: string, patch: Partial<Pick<ProjectNote, 'title' | 'body' | 'pinned'>>) {
+    const res = await fetch(withBasePath(`/api/projects/${id}/notes/${noteId}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (res.ok) {
+      const updated = await res.json() as ProjectNote;
+      setNotes(prev => prev.map(n => n.id === noteId ? updated : n));
+    }
+  }
+
+  async function deleteNote(noteId: string) {
+    if (!confirm('このノートを削除しますか？')) return;
+    const res = await fetch(withBasePath(`/api/projects/${id}/notes/${noteId}`), { method: 'DELETE' });
+    if (res.ok) setNotes(prev => prev.filter(n => n.id !== noteId));
   }
 
   if (authLoading || !user) return (
@@ -1101,9 +1274,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* タブ切り替え */}
           <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-            {[{ k: 'fields' as const, l: 'プロジェクト情報' }, { k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }].map(t => (
+            {([
+              { k: 'fields' as const, l: 'プロジェクト情報' },
+              { k: 'notes' as const, l: `ノート (${notes.length})` },
+              { k: 'assets' as const, l: `生成コンテンツ (${assets.length})` },
+            ]).map(t => (
               <button key={t.k} onClick={() => setTab(t.k)}
-                className={`text-sm px-3 py-1.5 rounded-xl transition-colors ${tab === t.k ? '' : ''}`}
+                className="text-sm px-3 py-1.5 rounded-xl transition-colors"
                 style={tab === t.k
                   ? { backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(15,154,177,0.18)' }
                   : { color: 'var(--text-muted)' }}
@@ -1113,7 +1290,109 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             ))}
           </div>
 
-          {tab === 'fields' ? (
+          {tab === 'notes' ? (
+            <section className="space-y-4">
+              {/* 新規作成フォーム */}
+              {noteCreating ? (
+                <div className="card p-4">
+                  <NoteEditor
+                    title={noteDraft.title}
+                    body={noteDraft.body}
+                    onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
+                    onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
+                    onSave={createNote}
+                    onCancel={() => { setNoteCreating(false); setNoteDraft({ title: '', body: '' }); }}
+                    saveLabel="作成"
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setNoteCreating(true)}
+                  className="btn-secondary w-full justify-center text-sm"
+                >
+                  + 新しいノートを作成
+                </button>
+              )}
+
+              {/* ノート一覧 */}
+              {noteLoading ? (
+                <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>読み込み中...</p>
+              ) : notes.length === 0 ? (
+                <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                  <p className="text-sm">ノートはありません</p>
+                  <p className="text-xs mt-1">「新しいノートを作成」から追加してください</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notes.map(note => (
+                    <div key={note.id} className="card overflow-hidden">
+                      {noteEditingId === note.id ? (
+                        /* 編集モード */
+                        <div className="p-4">
+                          <NoteEditor
+                            title={noteDraft.title}
+                            body={noteDraft.body}
+                            onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
+                            onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
+                            onSave={async () => {
+                              await updateNote(note.id, { title: noteDraft.title, body: noteDraft.body });
+                              setNoteEditingId(null);
+                            }}
+                            onCancel={() => setNoteEditingId(null)}
+                          />
+                        </div>
+                      ) : (
+                        /* 表示モード */
+                        <div className="p-4">
+                          <div className="flex items-start justify-between gap-2 mb-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {note.pinned === 1 && <span className="text-sm shrink-0">📌</span>}
+                              <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                                {note.title || '（無題）'}
+                              </h3>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => updateNote(note.id, { pinned: note.pinned === 1 ? 0 : 1 })}
+                                title={note.pinned === 1 ? 'ピン留めを外す' : 'ピン留め'}
+                                className="p-1 rounded transition-colors text-sm"
+                                style={{ color: note.pinned === 1 ? 'var(--accent)' : 'var(--text-muted)', opacity: note.pinned === 1 ? 1 : 0.4 }}
+                              >
+                                📌
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setNoteEditingId(note.id);
+                                  setNoteDraft({ title: note.title, body: note.body });
+                                }}
+                                className="px-2 py-1 rounded transition-colors text-xs"
+                                style={{ color: 'var(--text-secondary)' }}
+                              >
+                                編集
+                              </button>
+                              <button
+                                onClick={() => deleteNote(note.id)}
+                                className="px-2 py-1 rounded transition-colors text-xs"
+                                style={{ color: '#b34a4a' }}
+                              >
+                                削除
+                              </button>
+                            </div>
+                          </div>
+                          {note.body && (
+                            <MarkdownViewer content={note.body} className="text-sm" />
+                          )}
+                          <p className="text-xs mt-3" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                            更新: {new Date(note.updated_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : tab === 'fields' ? (
             <>
               {/* セクション別フィールド表示 */}
               {(() => {
@@ -1158,6 +1437,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                     projectType={currentProjectType}
                                     phases={currentPhases}
                                     typeLabel={typeLabel}
+                                    notes={notes}
+                                    onNotesTabClick={() => setTab('notes')}
                                   />
                                 );
                               }
