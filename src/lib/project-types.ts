@@ -1,4 +1,5 @@
 import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement } from '@/types';
+import { WIDGET_FIELD_ID_PREFIX } from '@/types';
 
 /** デフォルトセクション定義 */
 export const DEFAULT_SECTIONS: SectionDefinition[] = [
@@ -287,10 +288,12 @@ function normalizeLayout(value: unknown): 'half' | 'full' {
 }
 
 function normalizeSectionFieldPlacement(item: Partial<SectionFieldPlacement>, index: number): SectionFieldPlacement {
+  const kind = item.kind ?? 'field';
   return {
     id: item.id || `section-item-${index + 1}`,
     field_id: typeof item.field_id === 'string' ? item.field_id : '',
     layout: normalizeLayout(item.layout),
+    kind,
   };
 }
 
@@ -358,16 +361,33 @@ function buildSectionItemsFromLegacyFields(fields: ProjectFieldTemplate[], secti
 
 function sanitizeSectionItems(sections: SectionDefinition[], fields: ProjectFieldTemplate[]): SectionDefinition[] {
   const knownFieldIds = new Set(fields.map((field) => field.id));
+  // フィールドはグローバルで重複排除（同一フィールドを複数セクションに配置不可）
   const seenFieldIds = new Set<string>();
 
-  return sections.map((section) => ({
-    ...section,
-    items: section.items.filter((item) => {
-      if (!item.field_id || !knownFieldIds.has(item.field_id) || seenFieldIds.has(item.field_id)) return false;
-      seenFieldIds.add(item.field_id);
-      return true;
-    }),
-  }));
+  return sections.map((section) => {
+    // 情報ウィジェットはセクション内での重複のみ排除（複数セクションには配置可能）
+    const seenWidgetsInSection = new Set<string>();
+
+    return {
+      ...section,
+      items: section.items.filter((item) => {
+        const kind = item.kind ?? 'field';
+
+        if (kind !== 'field') {
+          // 情報ウィジェット: 同一セクション内での重複のみ弾く
+          const key = `${WIDGET_FIELD_ID_PREFIX}${kind}`;
+          if (seenWidgetsInSection.has(key)) return false;
+          seenWidgetsInSection.add(key);
+          return true;
+        }
+
+        // 通常フィールド: 全セクションで重複排除
+        if (!item.field_id || !knownFieldIds.has(item.field_id) || seenFieldIds.has(item.field_id)) return false;
+        seenFieldIds.add(item.field_id);
+        return true;
+      }),
+    };
+  });
 }
 
 /**

@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { FieldLayout, GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement } from '@/types';
-import { FIELD_TYPE_LABELS } from '@/types';
+import type { FieldLayout, GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement, SectionItemKind } from '@/types';
+import { FIELD_TYPE_LABELS, SECTION_INFO_WIDGETS, WIDGET_FIELD_ID_PREFIX } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { createProjectTypeDefinition, defaultProjectTypeDefinitions, DEFAULT_SECTIONS } from '@/lib/project-types';
@@ -58,18 +58,49 @@ type PlacementDragState = {
 
 type DefinitionPanelKey = 'basic' | 'phases' | 'sections' | 'fields' | 'content';
 
-function createSectionItem(fieldId: string, layout: FieldLayout = 'half'): SectionFieldPlacement {
+function createSectionItem(fieldId: string, layout: FieldLayout = 'half', kind: SectionItemKind = 'field'): SectionFieldPlacement {
   return {
     id: uuidv4(),
     field_id: fieldId,
     layout,
+    kind,
   };
 }
 
-function extractPlacedFieldIds(sections: SectionDefinition[]) {
-  return new Set(sections.flatMap((section) => section.items.map((item) => item.field_id)));
+/** 情報ウィジェット用の仮想 field_id を返す */
+function widgetFieldId(kind: SectionItemKind): string {
+  return `${WIDGET_FIELD_ID_PREFIX}${kind}`;
 }
 
+/** セクションに配置済みのフィールドIDセットを返す（情報ウィジェットは除外） */
+function extractPlacedFieldIds(sections: SectionDefinition[]) {
+  return new Set(
+    sections.flatMap((section) =>
+      section.items.filter((item) => (item.kind ?? 'field') === 'field').map((item) => item.field_id)
+    )
+  );
+}
+
+function addItemToSection(
+  sections: SectionDefinition[],
+  fieldId: string,
+  targetSectionId: string,
+  targetIndex?: number,
+  fallbackLayout: FieldLayout = 'half',
+  kind: SectionItemKind = 'field'
+) {
+  return sections.map((section) => {
+    if (section.id !== targetSectionId) return section;
+    // 同一セクション内での重複チェック（情報ウィジェットはセクション内1つまで、フィールドはグローバルで1つ）
+    if (section.items.some((item) => item.field_id === fieldId)) return section;
+    const nextItems = [...section.items];
+    const insertAt = typeof targetIndex === 'number' ? Math.max(0, Math.min(targetIndex, nextItems.length)) : nextItems.length;
+    nextItems.splice(insertAt, 0, createSectionItem(fieldId, fallbackLayout, kind));
+    return { ...section, items: nextItems };
+  });
+}
+
+/** 後方互換エイリアス */
 function addFieldToSection(
   sections: SectionDefinition[],
   fieldId: string,
@@ -77,14 +108,7 @@ function addFieldToSection(
   targetIndex?: number,
   fallbackLayout: FieldLayout = 'half'
 ) {
-  return sections.map((section) => {
-    if (section.id !== targetSectionId) return section;
-    if (section.items.some((item) => item.field_id === fieldId)) return section;
-    const nextItems = [...section.items];
-    const insertAt = typeof targetIndex === 'number' ? Math.max(0, Math.min(targetIndex, nextItems.length)) : nextItems.length;
-    nextItems.splice(insertAt, 0, createSectionItem(fieldId, fallbackLayout));
-    return { ...section, items: nextItems };
-  });
+  return addItemToSection(sections, fieldId, targetSectionId, targetIndex, fallbackLayout, 'field');
 }
 
 function movePlacementBetweenSections(
@@ -94,6 +118,17 @@ function movePlacementBetweenSections(
   targetIndex?: number
 ) {
   let movedItem: SectionFieldPlacement | null = null;
+  let sourceSectionId: string | null = null;
+  let sourceItemIndex = -1;
+
+  // ドラッグ元のセクション・インデックスを記録
+  sections.forEach((section) => {
+    const idx = section.items.findIndex((item) => item.id === placementId);
+    if (idx !== -1) {
+      sourceSectionId = section.id;
+      sourceItemIndex = idx;
+    }
+  });
 
   const cleanedSections = sections.map((section) => ({
     ...section,
@@ -109,7 +144,13 @@ function movePlacementBetweenSections(
   return cleanedSections.map((section) => {
     if (section.id !== targetSectionId) return section;
     const nextItems = [...section.items];
-    const insertAt = typeof targetIndex === 'number' ? Math.max(0, Math.min(targetIndex, nextItems.length)) : nextItems.length;
+    let insertAt = typeof targetIndex === 'number' ? targetIndex : nextItems.length;
+    // 同一セクション内の並び替え: ドラッグ元がターゲットより前にあった場合、
+    // 要素削除後にインデックスが 1 ずれるため補正する
+    if (sourceSectionId === targetSectionId && sourceItemIndex !== -1 && sourceItemIndex < insertAt) {
+      insertAt -= 1;
+    }
+    insertAt = Math.max(0, Math.min(insertAt, nextItems.length));
     nextItems.splice(insertAt, 0, movedItem as SectionFieldPlacement);
     return { ...section, items: nextItems };
   });
@@ -514,7 +555,7 @@ function PlacementChip({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragOver={(e) => e.preventDefault()}
-      onDrop={onDropBefore}
+      onDrop={(e) => { e.stopPropagation(); onDropBefore(); }}
       className={`rounded-xl border transition-all ${compact ? 'px-2.5 py-2' : 'p-3'} ${layout === 'full' ? 'col-span-2' : 'col-span-1'} ${dragging ? 'opacity-60 scale-[0.99]' : ''}`}
       style={{
         borderColor: attached ? `${color}66` : 'rgba(148,163,184,0.45)',
@@ -542,6 +583,105 @@ function PlacementChip({
             <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
               {supplementary}
             </p>
+          )}
+        </div>
+        {!compact && onLayoutChange && (
+          <div className="shrink-0 flex items-start gap-2">
+            <div className="w-24">
+              <select
+                className="field-input text-xs w-full"
+                value={layout}
+                onChange={(e) => onLayoutChange(e.target.value as FieldLayout)}
+              >
+                <option value="half">2列</option>
+                <option value="full">1列</option>
+              </select>
+            </div>
+            {onRemove && (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors"
+                style={{ color: 'var(--danger)', backgroundColor: 'transparent', border: 'none' }}
+                title="このセクションから外す"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 情報ウィジェット種別ごとのアイコンとカラー */
+const INFO_WIDGET_STYLE: Record<string, { icon: string; color: string }> = {
+  project_type: { icon: '🏷', color: '#8b5cf6' },
+  phase: { icon: '→', color: '#f59e0b' },
+};
+
+function InfoWidgetChip({
+  kind,
+  label,
+  description,
+  layout,
+  color,
+  dragging,
+  onDragStart,
+  onDropBefore,
+  onDragEnd,
+  onRemove,
+  onLayoutChange,
+  compact = false,
+}: {
+  kind: SectionItemKind;
+  label: string;
+  description: string;
+  layout: FieldLayout;
+  color: string;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDropBefore: () => void;
+  onDragEnd?: () => void;
+  onRemove?: () => void;
+  onLayoutChange?: (layout: FieldLayout) => void;
+  compact?: boolean;
+}) {
+  const style = INFO_WIDGET_STYLE[kind] ?? { icon: '◈', color: '#64748b' };
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => { e.stopPropagation(); onDropBefore(); }}
+      className={`rounded-xl border transition-all ${compact ? 'px-2.5 py-2' : 'p-3'} ${layout === 'full' ? 'col-span-2' : 'col-span-1'} ${dragging ? 'opacity-60 scale-[0.99]' : ''}`}
+      style={{
+        borderColor: `${color}55`,
+        backgroundColor: `${color}12`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm cursor-grab select-none shrink-0" style={{ color: 'var(--text-muted)' }}>⋮⋮</span>
+            <span className="text-sm shrink-0" style={{ color: style.color }}>{style.icon}</span>
+            <p className="text-sm font-medium truncate min-w-0" style={{ color: 'var(--text-primary)' }}>{label}</p>
+            {!compact && (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0"
+                style={{ backgroundColor: `${style.color}18`, color: style.color, border: `1px solid ${style.color}44` }}
+              >
+                情報
+              </span>
+            )}
+          </div>
+          {!compact && description && (
+            <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>{description}</p>
+          )}
+          {compact && description && (
+            <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{description}</p>
           )}
         </div>
         {!compact && onLayoutChange && (
@@ -685,6 +825,29 @@ function SectionPlacementPanel({
           }}
         >
           {section.items.map((item, itemIndex) => {
+            const itemKind = item.kind ?? 'field';
+
+            if (itemKind !== 'field') {
+              const widgetDef = SECTION_INFO_WIDGETS.find((w) => w.kind === itemKind);
+              if (!widgetDef) return null;
+              return (
+                <InfoWidgetChip
+                  key={item.id}
+                  kind={itemKind}
+                  label={widgetDef.label}
+                  description={widgetDef.description}
+                  layout={item.layout}
+                  color={section.color}
+                  dragging={draggingPlacement?.source === 'section' && draggingPlacement.placementId === item.id}
+                  onDragStart={() => onDragStart(item.field_id, itemIndex, item.id)}
+                  onDragEnd={onDragEnd}
+                  onDropBefore={() => onDropBeforeItem(itemIndex)}
+                  onLayoutChange={(layout) => onLayoutChange(item.field_id, layout)}
+                  onRemove={() => onRemoveItem(item.id)}
+                />
+              );
+            }
+
             const field = fieldMap.get(item.field_id);
             if (!field) return null;
             return (
@@ -764,6 +927,9 @@ export default function ProjectTypesPage() {
   const [openDefinitionPanels, setOpenDefinitionPanels] = useState<Record<string, DefinitionPanelKey[]>>({});
   const [openSectionGuideIds, setOpenSectionGuideIds] = useState<string[]>([]);
   const [openAssignedFieldPaletteIds, setOpenAssignedFieldPaletteIds] = useState<string[]>([]);
+  const [openAssignedWidgetPaletteIds, setOpenAssignedWidgetPaletteIds] = useState<string[]>([]);
+  const [openBuiltinFieldDefinitionIds, setOpenBuiltinFieldDefinitionIds] = useState<string[]>([]);
+  const [pendingFieldScrollTarget, setPendingFieldScrollTarget] = useState<string | null>(null);
   const [draggingPhase, setDraggingPhase] = useState<{ definitionId: string; index: number } | null>(null);
   const [draggingSection, setDraggingSection] = useState<{ definitionId: string; index: number } | null>(null);
   const [draggingPlacement, setDraggingPlacement] = useState<PlacementDragState | null>(null);
@@ -884,6 +1050,22 @@ export default function ProjectTypesPage() {
     );
   }
 
+  function toggleAssignedWidgetPalette(definitionId: string) {
+    setOpenAssignedWidgetPaletteIds((current) =>
+      current.includes(definitionId)
+        ? current.filter((id) => id !== definitionId)
+        : [...current, definitionId]
+    );
+  }
+
+  function toggleBuiltinFields(definitionId: string) {
+    setOpenBuiltinFieldDefinitionIds((current) =>
+      current.includes(definitionId)
+        ? current.filter((id) => id !== definitionId)
+        : [...current, definitionId]
+    );
+  }
+
   function updateFieldTemplatesAndSections(
     definition: ProjectTypeDefinition,
     nextFieldTemplates: ProjectFieldTemplate[],
@@ -892,7 +1074,8 @@ export default function ProjectTypesPage() {
     const validFieldIds = new Set(nextFieldTemplates.map((field) => field.id));
     const sanitizedSections = (nextSections ?? definition.sections).map((section) => ({
       ...section,
-      items: section.items.filter((item) => validFieldIds.has(item.field_id)),
+      // 情報ウィジェット（kind !== 'field'）はフィールドIDチェックを除外して保持
+      items: section.items.filter((item) => (item.kind ?? 'field') !== 'field' || validFieldIds.has(item.field_id)),
     }));
 
     return {
@@ -901,6 +1084,14 @@ export default function ProjectTypesPage() {
       sections: sanitizedSections,
     };
   }
+
+  useEffect(() => {
+    if (!pendingFieldScrollTarget) return;
+    const element = document.getElementById(pendingFieldScrollTarget);
+    if (!element) return;
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setPendingFieldScrollTarget(null);
+  }, [definitions, pendingFieldScrollTarget]);
 
   if (authLoading) {
     return <div className="p-6 max-w-6xl mx-auto"><div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div></div>;
@@ -1076,6 +1267,15 @@ export default function ProjectTypesPage() {
                     const unassignedFields = definition.field_templates.filter((field) => !placedFieldIds.has(field.id));
                     const assignedFields = definition.field_templates.filter((field) => placedFieldIds.has(field.id));
 
+                    // 情報パレット: 配置済みウィジェット種別を収集
+                    const placedWidgetKinds = new Set(
+                      (definition.sections ?? []).flatMap((s) =>
+                        s.items.filter((item) => (item.kind ?? 'field') !== 'field').map((item) => item.kind as string)
+                      )
+                    );
+                    const unplacedWidgets = SECTION_INFO_WIDGETS.filter((w) => !placedWidgetKinds.has(w.kind));
+                    const placedWidgets = SECTION_INFO_WIDGETS.filter((w) => placedWidgetKinds.has(w.kind));
+
                     return (
                       <>
                         {openSectionGuideIds.includes(definition.id) && (
@@ -1111,24 +1311,42 @@ export default function ProjectTypesPage() {
                                     draggingSection={draggingSection?.definitionId === definition.id && draggingSection.index === secIndex}
                                     onDropToSection={() => {
                                       if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
-                                      const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
-                                      updateDefinition(index, {
-                                        ...definition,
-                                        sections: draggingPlacement.source === 'palette'
-                                          ? addFieldToSection(definition.sections, draggingPlacement.fieldId, sec.id, undefined, draggedField?.layout || 'half')
-                                          : movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, undefined),
-                                      });
+                                      if (draggingPlacement.source === 'palette') {
+                                        const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                        const widgetKind = isWidget
+                                          ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                          : 'field';
+                                        const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, undefined, draggedField?.layout || 'half', widgetKind),
+                                        });
+                                      } else {
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, undefined),
+                                        });
+                                      }
                                       setDraggingPlacement(null);
                                     }}
                                     onDropBeforeItem={(itemIndex) => {
                                       if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
-                                      const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
-                                      updateDefinition(index, {
-                                        ...definition,
-                                        sections: draggingPlacement.source === 'palette'
-                                          ? addFieldToSection(definition.sections, draggingPlacement.fieldId, sec.id, itemIndex, draggedField?.layout || 'half')
-                                          : movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, itemIndex),
-                                      });
+                                      if (draggingPlacement.source === 'palette') {
+                                        const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                        const widgetKind = isWidget
+                                          ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                          : 'field';
+                                        const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, itemIndex, draggedField?.layout || 'half', widgetKind),
+                                        });
+                                      } else {
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, itemIndex),
+                                        });
+                                      }
                                       setDraggingPlacement(null);
                                     }}
                                     onRemoveItem={(placementId) => {
@@ -1254,6 +1472,97 @@ export default function ProjectTypesPage() {
                                       )
                                     )}
                                   </div>
+
+                                </div>
+
+                                {/* 情報パレット独立ボックス */}
+                                <div
+                                  className="rounded-xl border overflow-hidden"
+                                  style={{ borderColor: 'rgba(148,163,184,0.3)', backgroundColor: 'rgba(248,251,253,0.85)' }}
+                                >
+                                  <div className="px-4 py-3 border-b" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
+                                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>情報パレット</p>
+                                  </div>
+
+                                  <div className="px-4 py-3 space-y-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置</p>
+                                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{unplacedWidgets.length} 件</span>
+                                    </div>
+                                    {unplacedWidgets.length === 0 ? (
+                                      <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
+                                        未配置なし
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {unplacedWidgets.map((widget) => (
+                                          <InfoWidgetChip
+                                            key={widget.kind}
+                                            kind={widget.kind}
+                                            label={widget.label}
+                                            description={widget.description}
+                                            layout="half"
+                                            color={(INFO_WIDGET_STYLE[widget.kind] ?? { color: '#64748b' }).color}
+                                            compact
+                                            dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === widgetFieldId(widget.kind)}
+                                            onDragStart={() => setDraggingPlacement({
+                                              definitionId: definition.id,
+                                              source: 'palette',
+                                              fieldId: widgetFieldId(widget.kind),
+                                              sourceSectionId: null,
+                                              sourceIndex: -1,
+                                            })}
+                                            onDragEnd={() => setDraggingPlacement(null)}
+                                            onDropBefore={() => {}}
+                                          />
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="border-t px-4 py-3 space-y-3" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleAssignedWidgetPalette(definition.id)}
+                                      className="w-full flex items-center justify-between gap-3 text-left"
+                                    >
+                                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み</p>
+                                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                        {openAssignedWidgetPaletteIds.includes(definition.id) ? '▲' : '▼'}
+                                      </span>
+                                    </button>
+                                    {openAssignedWidgetPaletteIds.includes(definition.id) && (
+                                      placedWidgets.length === 0 ? (
+                                        <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
+                                          配置済みなし
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          {placedWidgets.map((widget) => (
+                                            <InfoWidgetChip
+                                              key={`${widget.kind}-placed`}
+                                              kind={widget.kind}
+                                              label={widget.label}
+                                              description={widget.description}
+                                              layout="half"
+                                              color={(INFO_WIDGET_STYLE[widget.kind] ?? { color: '#64748b' }).color}
+                                              compact
+                                              dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === widgetFieldId(widget.kind)}
+                                              onDragStart={() => setDraggingPlacement({
+                                                definitionId: definition.id,
+                                                source: 'palette',
+                                                fieldId: widgetFieldId(widget.kind),
+                                                sourceSectionId: null,
+                                                sourceIndex: -1,
+                                              })}
+                                              onDragEnd={() => setDraggingPlacement(null)}
+                                              onDropBefore={() => {}}
+                                            />
+                                          ))}
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -1271,12 +1580,16 @@ export default function ProjectTypesPage() {
                   onToggle={() => toggleDefinitionPanel(definition.id, 'fields')}
                   action={
                     <button
-                      onClick={() => updateDefinition(index, {
-                        ...updateFieldTemplatesAndSections(definition, [
-                          ...definition.field_templates,
-                          { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}', layout: 'half', section: '' },
-                        ]),
-                      })}
+                      onClick={() => {
+                        const nextField = { id: uuidv4(), key: `field_${definition.field_templates.length + 1}`, label: `項目 ${definition.field_templates.length + 1}`, type: 'text', options: '{}', layout: 'half', section: '' } as ProjectFieldTemplate;
+                        updateDefinition(index, {
+                          ...updateFieldTemplatesAndSections(definition, [
+                            ...definition.field_templates,
+                            nextField,
+                          ]),
+                        });
+                        setPendingFieldScrollTarget(`field-row-${definition.id}-${nextField.id}`);
+                      }}
                       className="btn-secondary text-xs py-1 px-3"
                     >
                       + 項目追加
@@ -1286,22 +1599,71 @@ export default function ProjectTypesPage() {
                   {definition.field_templates.length === 0 ? (
                     <div className="text-sm" style={{ color: 'var(--text-muted)' }}>この種別に初期項目はありません。</div>
                   ) : (
-                    definition.field_templates.map((field, fieldIndex) => (
-                      <FieldTemplateRow
-                        key={field.id}
-                        field={field}
-                        globalAssetObjects={globalAssetObjects}
-                        onChange={(nextField) => {
-                          const fieldTemplates = [...definition.field_templates];
-                          fieldTemplates[fieldIndex] = nextField;
-                          updateDefinition(index, updateFieldTemplatesAndSections(definition, fieldTemplates));
-                        }}
-                        onRemove={() => updateDefinition(index, updateFieldTemplatesAndSections(
-                          definition,
-                          definition.field_templates.filter((_, currentFieldIndex) => currentFieldIndex !== fieldIndex)
-                        ))}
-                      />
-                    ))
+                    (() => {
+                      const builtinFields = definition.field_templates.filter((field) => field.is_builtin);
+                      const customFields = definition.field_templates.filter((field) => !field.is_builtin);
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="border-y" style={{ borderColor: 'var(--border)' }}>
+                            <button
+                              type="button"
+                              onClick={() => toggleBuiltinFields(definition.id)}
+                              className="w-full py-3 flex items-center justify-between gap-3 text-left"
+                            >
+                              <p className="text-sm font-semibold">組み込み項目</p>
+                              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                {openBuiltinFieldDefinitionIds.includes(definition.id) ? '▲ 閉じる' : `▼ ${builtinFields.length}件`}
+                              </span>
+                            </button>
+                            {openBuiltinFieldDefinitionIds.includes(definition.id) && (
+                              <div className="py-4 space-y-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                                {builtinFields.map((field) => {
+                                  const fieldIndex = definition.field_templates.findIndex((currentField) => currentField.id === field.id);
+                                  return (
+                                    <div key={field.id} id={`field-row-${definition.id}-${field.id}`}>
+                                      <FieldTemplateRow
+                                        field={field}
+                                        globalAssetObjects={globalAssetObjects}
+                                        onChange={(nextField) => {
+                                          const fieldTemplates = [...definition.field_templates];
+                                          fieldTemplates[fieldIndex] = nextField;
+                                          updateDefinition(index, updateFieldTemplatesAndSections(definition, fieldTemplates));
+                                        }}
+                                        onRemove={() => {}}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-3">
+                            {customFields.map((field) => {
+                              const fieldIndex = definition.field_templates.findIndex((currentField) => currentField.id === field.id);
+                              return (
+                                <div key={field.id} id={`field-row-${definition.id}-${field.id}`}>
+                                  <FieldTemplateRow
+                                    field={field}
+                                    globalAssetObjects={globalAssetObjects}
+                                    onChange={(nextField) => {
+                                      const fieldTemplates = [...definition.field_templates];
+                                      fieldTemplates[fieldIndex] = nextField;
+                                      updateDefinition(index, updateFieldTemplatesAndSections(definition, fieldTemplates));
+                                    }}
+                                    onRemove={() => updateDefinition(index, updateFieldTemplatesAndSections(
+                                      definition,
+                                      definition.field_templates.filter((_, currentFieldIndex) => currentFieldIndex !== fieldIndex)
+                                    ))}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()
                   )}
                 </DefinitionAccordionSection>
 

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
@@ -585,6 +585,55 @@ function AssetCard({
 }
 
 // ============================================================
+// セクション内情報ウィジェット（project_type / phase）
+// CustomFieldRow と同じカードスタイル: ラベル（field-label）+ 値テキスト
+// ============================================================
+function SectionInfoWidget({
+  kind,
+  layout,
+  project,
+  projectType,
+  phases,
+  typeLabel,
+}: {
+  kind: string;
+  layout: 'half' | 'full';
+  project: ProjectWithFields;
+  projectType: ProjectTypeDefinition | undefined;
+  phases: ProjectPhase[];
+  typeLabel: string;
+}) {
+  const colClass = layout === 'full' ? 'col-span-2' : '';
+  const cardStyle = { borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.62)' };
+
+  if (kind === 'project_type') {
+    return (
+      <div className={`${colClass} rounded-xl border p-3 space-y-1`} style={cardStyle}>
+        <p className="field-label">プロジェクト種別</p>
+        <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{typeLabel || '—'}</p>
+        {projectType?.description && (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{projectType.description}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (kind === 'phase') {
+    const currentPhase = phases.find((p) => p.key === project.phase_key);
+    return (
+      <div className={`${colClass} rounded-xl border p-3 space-y-1`} style={cardStyle}>
+        <p className="field-label">進行フェーズ</p>
+        <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+          {currentPhase?.name || (phases.length === 0 ? '—' : '未設定')}
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ============================================================
 // メインページ
 // ============================================================
 export default function ProjectPage({ params }: { params: { id: string } }) {
@@ -1066,74 +1115,57 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
           {tab === 'fields' ? (
             <>
-              {/* 種別セレクター（常に最上部） */}
-              <section>
-                <h2 className="section-title mb-3">プロジェクト種別</h2>
-                <div className="card p-4">
-                  <select
-                    className="field-input"
-                    value={project.type}
-                    onChange={e => {
-                      const nextType = e.target.value as typeof project.type;
-                      const nextDefinition = projectTypes.find((definition) => definition.key === nextType);
-                      const nextPhaseKey = nextDefinition?.phases.find((phase) => phase.key === project.phase_key)
-                        ? project.phase_key
-                        : (nextDefinition?.phases[0]?.key || '');
-                      setProject({ ...project, type: nextType, phase_key: nextPhaseKey });
-                    }}
-                  >
-                    {projectTypes.map((definition) => <option key={definition.id} value={definition.key}>{definition.name}</option>)}
-                  </select>
-                </div>
-              </section>
-
               {/* セクション別フィールド表示 */}
-              {allFields.length === 0 ? (
-                <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-                  <p className="text-sm">このプロジェクト種別にはフィールドがありません</p>
-                  <p className="text-xs mt-1">プロジェクト種別設定でフィールドを追加してください</p>
-                </div>
-              ) : (
-                sectionOrder.map(sec => {
-                  const secColor = sectionColorMap[sec];
-                  const isOpen = openFieldSections.includes(sec);
+              {(() => {
+                // template_id → CustomField のマップ（情報ウィジェットと混在するitems順レンダリング用）
+                const fieldByTemplateId = new Map<string, CustomField>(
+                  allFields.filter(f => f.template_id).map(f => [f.template_id!, f])
+                );
+
+                type RenderItem =
+                  | { type: 'field'; field: CustomField; layout: string; key: string }
+                  | { type: 'widget'; kind: string; layout: string; key: string };
+
+                const renderSection = (
+                  secId: string,
+                  secName: string,
+                  secColor: string | undefined,
+                  renderItems: RenderItem[]
+                ) => {
+                  if (renderItems.length === 0) return null;
+                  const isOpen = openFieldSections.includes(secName);
                   return (
-                    <section key={sec}>
+                    <section key={secId}>
                       <div className="card overflow-hidden">
-                        {secColor && (
-                          <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => toggleFieldSection(sec)}
-                          className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left"
-                        >
+                        {secColor && <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />}
+                        <button type="button" onClick={() => toggleFieldSection(secName)} className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left">
                           <div className="flex items-center gap-2 min-w-0">
-                            {secColor && (
-                              <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />
-                            )}
-                            <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{sec}</h2>
-                            <span className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>
-                              {(fieldsBySection[sec] ?? []).length}件
-                            </span>
+                            {secColor && <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />}
+                            <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{secName}</h2>
                           </div>
-                          <span className="text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>
-                            {isOpen ? '▲ 閉じる' : '▼ 開く'}
-                          </span>
+                          <span className="text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>{isOpen ? '▲ 閉じる' : '▼ 開く'}</span>
                         </button>
                         {isOpen && (
                           <div className="px-5 pb-5 grid grid-cols-2 gap-4">
-                            {(fieldsBySection[sec] ?? []).map((f) => {
+                            {renderItems.map(item => {
+                              if (item.type === 'widget') {
+                                return (
+                                  <SectionInfoWidget
+                                    key={item.key}
+                                    kind={item.kind}
+                                    layout={item.layout as 'half' | 'full'}
+                                    project={project}
+                                    projectType={currentProjectType}
+                                    phases={currentPhases}
+                                    typeLabel={typeLabel}
+                                  />
+                                );
+                              }
+                              const f = item.field;
                               const globalIdx = allFields.findIndex(af => af.id === f.id);
                               return (
-                                <div key={f.id} className={f.layout === 'full' ? 'col-span-2' : ''}>
-                                  <CustomFieldRow
-                                    field={f}
-                                    globalAssetObjects={globalAssetObjects}
-                                    onChange={nf => updateField(globalIdx, nf)}
-                                    onCrawl={() => crawlField(f.id)}
-                                    crawling={crawlingFieldId === f.id}
-                                  />
+                                <div key={item.key} className={item.layout === 'full' ? 'col-span-2' : ''}>
+                                  <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} />
                                 </div>
                               );
                             })}
@@ -1142,8 +1174,44 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       </div>
                     </section>
                   );
-                })
-              )}
+                };
+
+                return (
+                  <>
+                    {/* 定義済みセクション: items順に描画（フィールド＋情報ウィジェット） */}
+                    {definedSections.map(secDef => {
+                      const items: RenderItem[] = secDef.items.flatMap((item): RenderItem[] => {
+                        const kind = item.kind ?? 'field';
+                        if (kind !== 'field') {
+                          return [{ type: 'widget', kind, layout: item.layout, key: item.id }];
+                        }
+                        const field = fieldByTemplateId.get(item.field_id);
+                        if (!field) return [];
+                        return [{ type: 'field', field, layout: item.layout, key: item.id }];
+                      });
+                      // items未設定のセクション（レガシー）: section名でフィールドを検索
+                      const fallback = secDef.items.length === 0
+                        ? (fieldsBySection[secDef.name] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }))
+                        : [];
+                      return renderSection(secDef.id, secDef.name, secDef.color, [...items, ...fallback]);
+                    })}
+
+                    {/* 定義外セクション（レガシーフィールド） */}
+                    {extraSectionNames.map(sec => {
+                      const items = (fieldsBySection[sec] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }));
+                      return renderSection(`extra-${sec}`, sec, undefined, items);
+                    })}
+
+                    {/* セクション定義も対象フィールドもない場合 */}
+                    {definedSections.length === 0 && extraSectionNames.length === 0 && (
+                      <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-sm">このプロジェクト種別にはフィールドがありません</p>
+                        <p className="text-xs mt-1">プロジェクト種別設定でフィールドを追加してください</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* AI補完サジェスト */}
               {suggestions.length > 0 && (
