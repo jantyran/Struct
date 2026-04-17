@@ -2,9 +2,28 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
-  const user = await requireSession();
+  let user;
+  try {
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // パスワード変更試行のレートリミット: ユーザーごとに 5回/分 まで
+  const rl = checkRateLimit(`password:${user.id}`, 5, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "リクエストが多すぎます。しばらくしてから再試行してください。" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
+  }
+
   const { currentPassword, nextPassword } = await request.json();
 
   if (!currentPassword || !nextPassword) {

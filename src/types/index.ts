@@ -270,6 +270,49 @@ export interface GeneratedAsset {
   created_at: string;
 }
 
+export type TodoStatus = 'todo' | 'in_progress' | 'done';
+export type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface Todo {
+  id: string;
+  project_id: string;
+  parent_id: string | null;
+  title: string;
+  description: string;
+  status: TodoStatus;
+  priority: TodoPriority;
+  assignee_id: string | null;
+  assignee?: { id: string; name: string | null; email: string } | null;
+  phase_key: string;
+  start_date: string;
+  due_date: string;
+  sort_order: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  subtasks?: Todo[];
+}
+
+export const TODO_STATUS_LABELS: Record<TodoStatus, string> = {
+  todo: '未着手',
+  in_progress: '進行中',
+  done: '完了',
+};
+
+export const TODO_PRIORITY_LABELS: Record<TodoPriority, string> = {
+  low: '低',
+  medium: '中',
+  high: '高',
+  urgent: '緊急',
+};
+
+export const TODO_PRIORITY_COLORS: Record<TodoPriority, string> = {
+  low: '#6b7280',
+  medium: '#3b82f6',
+  high: '#f59e0b',
+  urgent: '#ef4444',
+};
+
 export interface CloneOptions {
   new_name: string;
   include_values: boolean;

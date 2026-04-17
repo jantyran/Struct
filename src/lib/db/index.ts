@@ -175,6 +175,27 @@ function initSchema(db: Database.Database) {
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
+
+    -- タスク（Todo）
+    CREATE TABLE IF NOT EXISTS todos (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      parent_id TEXT,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'todo',
+      priority TEXT NOT NULL DEFAULT 'medium',
+      assignee_id TEXT,
+      phase_key TEXT DEFAULT '',
+      start_date TEXT DEFAULT '',
+      due_date TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      created_by TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_id) REFERENCES todos(id) ON DELETE CASCADE
+    );
   `);
 
   ensureColumn(db, 'global_assets', 'objects', `TEXT DEFAULT '[]'`);

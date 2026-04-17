@@ -1,12 +1,13 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import TodoTab from '@/components/TodoTab';
 
 /** Markdownをレンダリングするビューア */
 function MarkdownViewer({ content, className }: { content: string; className?: string }) {
@@ -783,10 +784,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'fields' | 'assets' | 'notes' | 'members'>('fields');
+  const [tab, setTab] = useState<'fields' | 'assets' | 'notes' | 'members' | 'tasks'>('fields');
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [notes, setNotes] = useState<ProjectNote[]>([]);
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
@@ -799,20 +801,22 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
   const loadProject = useCallback(async () => {
     setLoadError('');
-    const [projectRes, assetsRes, notesRes] = await Promise.all([
+    const [projectRes, assetsRes, notesRes, todosRes] = await Promise.all([
       fetch(withBasePath(`/api/projects/${id}`)),
       fetch(withBasePath(`/api/projects/${id}/assets`)),
       fetch(withBasePath(`/api/projects/${id}/notes`)),
+      fetch(withBasePath(`/api/projects/${id}/todos`)),
     ]);
     const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
       fetch(withBasePath('/api/project-types')),
       fetch(withBasePath('/api/global-assets')),
       fetch(withBasePath('/api/content-templates')),
     ]);
-    const [pr, ar, notesData, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
+    const [pr, ar, notesData, todosData, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
       projectRes.json(),
       assetsRes.json(),
       notesRes.ok ? notesRes.json() : Promise.resolve([]),
+      todosRes.ok ? todosRes.json() : Promise.resolve([]),
       projectTypesRes.json(),
       globalAssetsRes.json(),
       contentTemplatesRes.json(),
@@ -842,6 +846,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     setProject(normalizeProject(pr as ProjectWithFields));
     setAssets(Array.isArray(ar) ? ar as GeneratedAsset[] : []);
     setNotes(Array.isArray(notesData) ? notesData as ProjectNote[] : []);
+    setTodos(Array.isArray(todosData) ? todosData as Todo[] : []);
     setProjectTypes(Array.isArray(projectTypesPayload.project_types) ? projectTypesPayload.project_types as ProjectTypeDefinition[] : []);
     setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects as GlobalAssetObject[] : []);
     setContentTemplates(Array.isArray(contentTemplatesPayload.content_templates) ? contentTemplatesPayload.content_templates as ProjectContentTemplate[] : []);
@@ -1359,6 +1364,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
             {([
               ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
+              ...(canViewItems ? [{ k: 'tasks' as const, l: `タスク (${todos.flatMap(t => [t, ...(t.subtasks ?? [])]).length})` }] : []),
               ...(canViewItems ? [{ k: 'members' as const, l: `メンバー (${assignableUsers.length})` }] : []),
               ...(canViewNotes ? [{ k: 'notes' as const, l: `ノート (${notes.length})` }] : []),
               ...(canViewContent ? [{ k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }] : []),
@@ -1374,7 +1380,18 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             ))}
           </div>
 
-          {tab === 'notes' && canViewNotes ? (
+          {tab === 'tasks' && canViewItems ? (
+            <section className="space-y-4">
+              <TodoTab
+                projectId={id}
+                todos={todos}
+                assignableUsers={project.assignable_users ?? []}
+                phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
+                canEdit={canEditItems}
+                onTodosChange={setTodos}
+              />
+            </section>
+          ) : tab === 'notes' && canViewNotes ? (
             <section className="space-y-4">
               {/* 新規作成フォーム */}
               {noteCreating ? (

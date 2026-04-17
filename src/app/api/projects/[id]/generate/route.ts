@@ -42,10 +42,12 @@ export async function POST(request: Request, { params }: Params) {
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
-    let globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+    // GlobalAssets はプロジェクトオーナーの設定を参照する（呼び出しユーザーではなく）
+    const ownerId = project.owner_id;
+    let globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(ownerId) as any;
     if (!globalAssetsRow) {
       const assetsId = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(assetsId, user.id);
+      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(assetsId, ownerId);
       globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(assetsId) as any;
     }
 
