@@ -6,8 +6,14 @@ import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
     if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
       return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
@@ -18,14 +24,21 @@ export async function GET() {
       settings: maskAISettings(settings),
       has_api_key: Boolean(settings.api_key),
     });
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  } catch (err) {
+    console.error('GET /api/ai-settings failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
     if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
       return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
@@ -45,7 +58,8 @@ export async function PUT(request: Request) {
       settings: maskAISettings(settings),
       has_api_key: Boolean(settings.api_key),
     });
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  } catch (err) {
+    console.error('PUT /api/ai-settings failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

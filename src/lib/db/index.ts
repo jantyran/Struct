@@ -4,7 +4,7 @@ import { mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { BUILTIN_FIELD_TEMPLATES } from '@/lib/project-types';
 import { seedProjectRoles, seedSystemRoles } from '@/lib/permissions';
-import { DEFAULT_ORGANIZATION_SLUG, ensureDefaultOrganization } from '@/lib/organization-settings';
+import { buildOrganizationSettingsScopeKey, DEFAULT_ORGANIZATION_SLUG, ensureDefaultOrganization } from '@/lib/organization-settings';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 mkdirSync(DATA_DIR, { recursive: true });
@@ -50,6 +50,15 @@ function initSchema(db: Database.Database) {
       name TEXT NOT NULL,
       slug TEXT UNIQUE NOT NULL,
       status TEXT DEFAULT 'active',
+      address_street TEXT DEFAULT '',
+      address_city TEXT DEFAULT '',
+      address_state TEXT DEFAULT '',
+      address_postal_code TEXT DEFAULT '',
+      address_country TEXT DEFAULT '',
+      default_language TEXT DEFAULT 'ja',
+      default_locale TEXT DEFAULT 'ja-JP',
+      default_time_zone TEXT DEFAULT 'Asia/Tokyo',
+      currency_locale TEXT DEFAULT 'ja-JP',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -245,6 +254,15 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'users', 'avatar_url', `TEXT DEFAULT ''`);
   ensureColumn(db, 'users', 'organization_id', `TEXT`);
   ensureColumn(db, 'users', 'system_role', `TEXT DEFAULT 'USER'`);
+  ensureColumn(db, 'organizations', 'address_street', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organizations', 'address_city', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organizations', 'address_state', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organizations', 'address_postal_code', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organizations', 'address_country', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organizations', 'default_language', `TEXT DEFAULT 'ja'`);
+  ensureColumn(db, 'organizations', 'default_locale', `TEXT DEFAULT 'ja-JP'`);
+  ensureColumn(db, 'organizations', 'default_time_zone', `TEXT DEFAULT 'Asia/Tokyo'`);
+  ensureColumn(db, 'organizations', 'currency_locale', `TEXT DEFAULT 'ja-JP'`);
   ensureColumn(db, 'projects', 'organization_id', `TEXT`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
   ensureColumn(db, 'projects', 'primary_assignee_id', `TEXT`);
@@ -275,17 +293,13 @@ function ensureOrganizationModel(db: Database.Database) {
     WHERE organization_id IS NULL OR organization_id = ''
   `).run(defaultOrganization.id);
 
-  const existingByOrganization = db.prepare('SELECT id FROM organization_settings WHERE organization_id = ?').get(defaultOrganization.id) as { id: string } | undefined;
-  if (existingByOrganization) return;
-
   const existingLegacy = db.prepare('SELECT id FROM organization_settings WHERE scope_key = ?').get(DEFAULT_ORGANIZATION_SLUG) as { id: string } | undefined;
   if (existingLegacy) {
     db.prepare(`
       UPDATE organization_settings
       SET organization_id = ?, scope_key = ?
       WHERE id = ?
-    `).run(defaultOrganization.id, DEFAULT_ORGANIZATION_SLUG, existingLegacy.id);
-    return;
+    `).run(defaultOrganization.id, buildOrganizationSettingsScopeKey(defaultOrganization.id), existingLegacy.id);
   }
 
   const legacy = db.prepare(`
@@ -299,36 +313,50 @@ function ensureOrganizationModel(db: Database.Database) {
     LIMIT 1
   `).get() as any;
 
-  if (legacy) {
-    db.prepare(`
-      INSERT INTO organization_settings (
-        id, organization_id, scope_key, company_name, company_description, brand_voice,
-        brand_guidelines, products, objects, project_types, content_templates,
-        ai_settings, updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      uuidv4(),
-      defaultOrganization.id,
-      DEFAULT_ORGANIZATION_SLUG,
-      legacy.company_name ?? '',
-      legacy.company_description ?? '',
-      legacy.brand_voice ?? '',
-      legacy.brand_guidelines ?? '',
-      legacy.products ?? '[]',
-      legacy.objects ?? '[]',
-      legacy.project_types ?? '[]',
-      legacy.content_templates ?? '[]',
-      legacy.ai_settings ?? '{}',
-      legacy.updated_at ?? new Date().toISOString(),
-    );
-    return;
-  }
+  const organizations = db.prepare('SELECT id FROM organizations ORDER BY datetime(COALESCE(created_at, \'1970-01-01\')) ASC, rowid ASC').all() as Array<{ id: string }>;
 
-  db.prepare(`
-    INSERT INTO organization_settings (id, organization_id, scope_key)
-    VALUES (?, ?, ?)
-  `).run(uuidv4(), defaultOrganization.id, DEFAULT_ORGANIZATION_SLUG);
+  for (const organization of organizations) {
+    const existingByOrganization = db.prepare('SELECT id FROM organization_settings WHERE organization_id = ?').get(organization.id) as { id: string } | undefined;
+    if (existingByOrganization) {
+      db.prepare(`
+        UPDATE organization_settings
+        SET scope_key = ?
+        WHERE id = ?
+      `).run(buildOrganizationSettingsScopeKey(organization.id), existingByOrganization.id);
+      continue;
+    }
+
+    if (legacy && organization.id === defaultOrganization.id) {
+      db.prepare(`
+        INSERT INTO organization_settings (
+          id, organization_id, scope_key, company_name, company_description, brand_voice,
+          brand_guidelines, products, objects, project_types, content_templates,
+          ai_settings, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        uuidv4(),
+        organization.id,
+        buildOrganizationSettingsScopeKey(organization.id),
+        legacy.company_name ?? '',
+        legacy.company_description ?? '',
+        legacy.brand_voice ?? '',
+        legacy.brand_guidelines ?? '',
+        legacy.products ?? '[]',
+        legacy.objects ?? '[]',
+        legacy.project_types ?? '[]',
+        legacy.content_templates ?? '[]',
+        legacy.ai_settings ?? '{}',
+        legacy.updated_at ?? new Date().toISOString(),
+      );
+      continue;
+    }
+
+    db.prepare(`
+      INSERT INTO organization_settings (id, organization_id, scope_key)
+      VALUES (?, ?, ?)
+    `).run(uuidv4(), organization.id, buildOrganizationSettingsScopeKey(organization.id));
+  }
 }
 
 /**

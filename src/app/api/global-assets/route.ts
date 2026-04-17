@@ -6,19 +6,32 @@ import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
     const assets = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(assets));
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('GET /api/global-assets failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
     if (!hasSystemPermission(db, user.id, 'manage_global_assets')) {
       return NextResponse.json({ error: 'Global Assets 管理権限がありません' }, { status: 403 });
@@ -50,6 +63,7 @@ export async function PUT(request: Request) {
     const updated = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(updated));
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('PUT /api/global-assets failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
