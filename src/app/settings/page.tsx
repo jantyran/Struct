@@ -69,6 +69,12 @@ const settingSections = [
     description: '現在のパスワードを確認したうえで、ログイン用パスワードを更新します。',
     meta: 'セキュリティ / パスワード再設定',
   },
+  {
+    href: '/settings/developer',
+    title: '開発設定',
+    description: 'フィールドキー・タイプ・IDなど、デバッグや構造確認用のUI表示オプションをカスタマイズします。設定はブラウザに保存されます。',
+    meta: '項目キー / フィールドタイプ / フィールドID / 表示カスタマイズ',
+  },
 ];
 
 export default function SettingsPage() {

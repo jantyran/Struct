@@ -3,6 +3,7 @@ import './globals.css';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/components/AuthContext';
+import { DevSettingsProvider } from '@/components/DevSettingsContext';
 import { withBasePath } from '@/lib/paths';
 
 function Sidebar() {
@@ -116,12 +117,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="flex h-screen overflow-hidden">
         <AuthProvider>
-          <div className="flex h-full w-full">
-            <Sidebar />
-            <main className="flex-1 overflow-y-auto" style={{ background: 'transparent' }}>
-              {children}
-            </main>
-          </div>
+          <DevSettingsProvider>
+            <div className="flex h-full w-full">
+              <Sidebar />
+              <main className="flex-1 overflow-y-auto" style={{ background: 'transparent' }}>
+                {children}
+              </main>
+            </div>
+          </DevSettingsProvider>
         </AuthProvider>
       </body>
     </html>

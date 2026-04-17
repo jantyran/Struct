@@ -5,6 +5,7 @@ import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldTy
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import { useDevSettings } from '@/components/DevSettingsContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import TodoTab from '@/components/TodoTab';
@@ -316,12 +317,15 @@ function ChildFieldValueInput({
 // ============================================================
 // プロジェクトフィールド入力
 // ============================================================
-function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling }: {
+function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling, showFieldKeys, showFieldTypes, showFieldIds }: {
   field: CustomField;
   globalAssetObjects: GlobalAssetObject[];
   onChange: (f: CustomField) => void;
   onCrawl: () => void;
   crawling: boolean;
+  showFieldKeys: boolean;
+  showFieldTypes: boolean;
+  showFieldIds: boolean;
 }) {
   const isInherited = field.inherited === 1;
   const options = parseFieldOptions(field.options);
@@ -346,19 +350,24 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
-            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              {FIELD_TYPE_LABELS[field.type] || field.type}
-            </span>
-            {(field.type === 'reference' || field.type === 'reference_multi') && (
+            {showFieldTypes && (
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {FIELD_TYPE_LABELS[field.type] || field.type}
+              </span>
+            )}
+            {showFieldTypes && (field.type === 'reference' || field.type === 'reference_multi') && (
               <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                 ・ {referenceObject?.name || '未設定'}
               </span>
             )}
           </div>
         </div>
-        <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          キー: {field.key}
-        </div>
+        {(showFieldKeys || showFieldIds) && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            {showFieldKeys && <span>キー: {field.key}</span>}
+            {showFieldIds && <span>ID: {field.id}</span>}
+          </div>
+        )}
       </div>
 
       {field.type === 'group' && (
@@ -770,6 +779,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
   const { user, loading: authLoading, checkSession } = useAuth();
+  const { settings: devSettings } = useDevSettings();
   const [project, setProject] = useState<ProjectWithFields | null>(null);
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
   const [projectTypes, setProjectTypes] = useState<ProjectTypeDefinition[]>([]);
@@ -1677,7 +1687,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                               const globalIdx = allFields.findIndex(af => af.id === f.id);
                               return (
                                 <div key={item.key} className={item.layout === 'full' ? 'col-span-2' : ''}>
-                                  <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} />
+                                  <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} showFieldKeys={devSettings.showFieldKeys} showFieldTypes={devSettings.showFieldTypes} showFieldIds={devSettings.showFieldIds} />
                                 </div>
                               );
                             })}
