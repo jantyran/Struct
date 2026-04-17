@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { deriveLegacyGlobalAssetColumns, normalizeGlobalAssets, normalizeGlobalAssetsRow, serializeGlobalAssetObjects } from '@/lib/global-assets';
-import { DEFAULT_ORGANIZATION_SCOPE, getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
   try {
-    await requireSession();
+    const user = await requireSession();
     const db = getDb();
-    const assets = getOrganizationSettingsRow(db);
+    const assets = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(assets));
   } catch (err) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,7 +25,7 @@ export async function PUT(request: Request) {
     }
     const body = normalizeGlobalAssets(await request.json());
     const legacy = deriveLegacyGlobalAssetColumns(body.objects);
-    getOrganizationSettingsRow(db);
+    getOrganizationSettingsRow(db, user.organization_id);
 
     db.prepare(`
       UPDATE organization_settings SET
@@ -36,7 +36,7 @@ export async function PUT(request: Request) {
         products = ?,
         objects = ?,
         updated_at = datetime('now')
-      WHERE scope_key = ?
+      WHERE organization_id = ?
     `).run(
       legacy.company_name,
       legacy.company_description,
@@ -44,10 +44,10 @@ export async function PUT(request: Request) {
       legacy.brand_guidelines,
       legacy.products,
       serializeGlobalAssetObjects(body.objects),
-      DEFAULT_ORGANIZATION_SCOPE
+      user.organization_id
     );
 
-    const updated = getOrganizationSettingsRow(db);
+    const updated = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(updated));
   } catch (err) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

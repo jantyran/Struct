@@ -4,7 +4,7 @@ import { mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { BUILTIN_FIELD_TEMPLATES } from '@/lib/project-types';
 import { seedProjectRoles, seedSystemRoles } from '@/lib/permissions';
-import { DEFAULT_ORGANIZATION_SCOPE } from '@/lib/organization-settings';
+import { DEFAULT_ORGANIZATION_SLUG, ensureDefaultOrganization } from '@/lib/organization-settings';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 mkdirSync(DATA_DIR, { recursive: true });
@@ -39,8 +39,19 @@ function initSchema(db: Database.Database) {
       password_hash TEXT NOT NULL,
       name TEXT,
       avatar_url TEXT DEFAULT '',
+      organization_id TEXT,
       system_role TEXT DEFAULT 'USER',
       created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- 組織
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
 
     -- プロジェクト（所有者 owner_id で管理）
@@ -50,6 +61,7 @@ function initSchema(db: Database.Database) {
       type TEXT NOT NULL DEFAULT 'campaign',
       phase_key TEXT DEFAULT '',
       status TEXT NOT NULL DEFAULT 'draft',
+      organization_id TEXT,
       owner_id TEXT NOT NULL,
       primary_assignee_id TEXT,
       cloned_from TEXT,
@@ -135,6 +147,7 @@ function initSchema(db: Database.Database) {
     -- 組織設定（単一組織前提の正本）
     CREATE TABLE IF NOT EXISTS organization_settings (
       id TEXT PRIMARY KEY,
+      organization_id TEXT UNIQUE,
       scope_key TEXT UNIQUE NOT NULL,
       company_name TEXT DEFAULT '',
       company_description TEXT DEFAULT '',
@@ -220,6 +233,7 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'global_assets', 'content_templates', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'global_assets', 'ai_settings', `TEXT DEFAULT '{}'`);
   ensureColumn(db, 'organization_settings', 'company_name', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organization_settings', 'organization_id', `TEXT`);
   ensureColumn(db, 'organization_settings', 'company_description', `TEXT DEFAULT ''`);
   ensureColumn(db, 'organization_settings', 'brand_voice', `TEXT DEFAULT ''`);
   ensureColumn(db, 'organization_settings', 'brand_guidelines', `TEXT DEFAULT ''`);
@@ -229,7 +243,9 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'organization_settings', 'content_templates', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'organization_settings', 'ai_settings', `TEXT DEFAULT '{}'`);
   ensureColumn(db, 'users', 'avatar_url', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'users', 'organization_id', `TEXT`);
   ensureColumn(db, 'users', 'system_role', `TEXT DEFAULT 'USER'`);
+  ensureColumn(db, 'projects', 'organization_id', `TEXT`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
   ensureColumn(db, 'projects', 'primary_assignee_id', `TEXT`);
   ensureColumn(db, 'custom_fields', 'template_id', `TEXT`);
@@ -238,15 +254,39 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
   seedSystemRoles(db);
   seedProjectRoles(db);
-  ensureOrganizationSettings(db);
+  ensureOrganizationModel(db);
 
   // 既存プロジェクトのコアカラム値を custom_fields に移行
   migrateProjectCoreFields(db);
 }
 
-function ensureOrganizationSettings(db: Database.Database) {
-  const existing = db.prepare('SELECT id FROM organization_settings WHERE scope_key = ?').get(DEFAULT_ORGANIZATION_SCOPE) as { id: string } | undefined;
-  if (existing) return;
+function ensureOrganizationModel(db: Database.Database) {
+  const defaultOrganization = ensureDefaultOrganization(db);
+
+  db.prepare(`
+    UPDATE users
+    SET organization_id = ?
+    WHERE organization_id IS NULL OR organization_id = ''
+  `).run(defaultOrganization.id);
+
+  db.prepare(`
+    UPDATE projects
+    SET organization_id = ?
+    WHERE organization_id IS NULL OR organization_id = ''
+  `).run(defaultOrganization.id);
+
+  const existingByOrganization = db.prepare('SELECT id FROM organization_settings WHERE organization_id = ?').get(defaultOrganization.id) as { id: string } | undefined;
+  if (existingByOrganization) return;
+
+  const existingLegacy = db.prepare('SELECT id FROM organization_settings WHERE scope_key = ?').get(DEFAULT_ORGANIZATION_SLUG) as { id: string } | undefined;
+  if (existingLegacy) {
+    db.prepare(`
+      UPDATE organization_settings
+      SET organization_id = ?, scope_key = ?
+      WHERE id = ?
+    `).run(defaultOrganization.id, DEFAULT_ORGANIZATION_SLUG, existingLegacy.id);
+    return;
+  }
 
   const legacy = db.prepare(`
     SELECT ga.*
@@ -262,14 +302,15 @@ function ensureOrganizationSettings(db: Database.Database) {
   if (legacy) {
     db.prepare(`
       INSERT INTO organization_settings (
-        id, scope_key, company_name, company_description, brand_voice,
+        id, organization_id, scope_key, company_name, company_description, brand_voice,
         brand_guidelines, products, objects, project_types, content_templates,
         ai_settings, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       uuidv4(),
-      DEFAULT_ORGANIZATION_SCOPE,
+      defaultOrganization.id,
+      DEFAULT_ORGANIZATION_SLUG,
       legacy.company_name ?? '',
       legacy.company_description ?? '',
       legacy.brand_voice ?? '',
@@ -285,9 +326,9 @@ function ensureOrganizationSettings(db: Database.Database) {
   }
 
   db.prepare(`
-    INSERT INTO organization_settings (id, scope_key)
-    VALUES (?, ?)
-  `).run(uuidv4(), DEFAULT_ORGANIZATION_SCOPE);
+    INSERT INTO organization_settings (id, organization_id, scope_key)
+    VALUES (?, ?, ?)
+  `).run(uuidv4(), defaultOrganization.id, DEFAULT_ORGANIZATION_SLUG);
 }
 
 /**

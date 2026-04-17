@@ -15,6 +15,10 @@
   - 組織レベル設定への移行目的
   - 現状の不整合
   - 保存先 / API / 移行方針
+- `refactors/organization-model-refactor.md`
+  - `organization` を親に持つ次段リファクタの要件定義
+  - 推奨DB設計
+  - 移行フェーズと難易度見積もり
 
 ## 現在のアプリ要約
 

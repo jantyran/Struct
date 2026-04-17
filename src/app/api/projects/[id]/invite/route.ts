@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: "招待メールアドレスが必要です" }, { status: 400 });
     }
 
-    const project = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(params.id) as any;
+    const project = db.prepare('SELECT owner_id FROM projects WHERE id = ? AND organization_id = ?').get(params.id, user.organization_id) as any;
     if (!project || project.owner_id !== user.id) {
       return NextResponse.json({ error: "オーナーのみ招待可能です" }, { status: 403 });
     }

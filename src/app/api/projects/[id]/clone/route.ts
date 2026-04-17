@@ -18,8 +18,8 @@ export async function POST(request: Request, { params }: Params) {
     const source = db.prepare(`
       SELECT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id) as any;
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id) as any;
 
     if (!source) return NextResponse.json({ error: 'Source project not found' }, { status: 404 });
 
@@ -29,13 +29,14 @@ export async function POST(request: Request, { params }: Params) {
 
     const tx = db.transaction(() => {
       db.prepare(`
-        INSERT INTO projects (id, name, type, phase_key, status, owner_id, primary_assignee_id, cloned_from)
-        VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)
+        INSERT INTO projects (id, name, type, phase_key, status, organization_id, owner_id, primary_assignee_id, cloned_from)
+        VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)
       `).run(
         newId,
         body.new_name.trim(),
         source.type,
         source.phase_key || '',
+        source.organization_id || user.organization_id,
         user.id,
         user.id,
         params.id,

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 import { getDb } from "./db";
 import { systemPermissionsForUser } from "./permissions";
+import { getUserOrganizationId } from "./organization-settings";
 
 function getSecret(): Uint8Array {
   const jwtSecret = process.env.JWT_SECRET;
@@ -65,9 +66,10 @@ export async function getSession() {
     const { payload } = await jwtVerify(token, getSecret());
     const userId = payload.userId as string;
     const db = getDb();
-    const user = db.prepare('SELECT id, email, name, avatar_url, system_role FROM users WHERE id = ?').get(userId) as any;
+    const user = db.prepare('SELECT id, email, name, avatar_url, system_role, organization_id FROM users WHERE id = ?').get(userId) as any;
     if (!user) return null;
-    return { ...user, system_permissions: systemPermissionsForUser(db, user.id) };
+    const organizationId = user.organization_id || getUserOrganizationId(db, user.id);
+    return { ...user, organization_id: organizationId, system_permissions: systemPermissionsForUser(db, user.id) };
   } catch (error) {
     return null;
   }

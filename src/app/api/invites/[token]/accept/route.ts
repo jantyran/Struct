@@ -26,6 +26,14 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: "この招待は別のメールアドレス宛です" }, { status: 403 });
     }
 
+    const project = db.prepare('SELECT organization_id FROM projects WHERE id = ?').get(invitation.project_id) as { organization_id?: string | null } | undefined;
+    if (!project) {
+      return NextResponse.json({ error: "対象プロジェクトが見つかりません" }, { status: 404 });
+    }
+    if (project.organization_id !== user.organization_id) {
+      return NextResponse.json({ error: "別組織のプロジェクト招待は受諾できません" }, { status: 403 });
+    }
+
     // トランザクションで処理
     const tx = db.transaction(() => {
       db.prepare(`

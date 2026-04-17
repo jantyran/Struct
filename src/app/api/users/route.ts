@@ -11,11 +11,11 @@ export async function GET() {
     const db = getDb();
     const canManageUsers = hasSystemPermission(db, currentUser.id, 'manage_users');
     const users = db.prepare(`
-      SELECT id, email, name, avatar_url, system_role, created_at
+      SELECT id, email, name, avatar_url, system_role, organization_id, created_at
       FROM users
-      ${canManageUsers ? '' : 'WHERE id = ?'}
+      ${canManageUsers ? 'WHERE organization_id = ?' : 'WHERE id = ?'}
       ORDER BY COALESCE(NULLIF(name, ''), email) ASC
-    `).all(...(canManageUsers ? [] : [currentUser.id]));
+    `).all(...(canManageUsers ? [currentUser.organization_id] : [currentUser.id]));
 
     return NextResponse.json({
       users,
@@ -34,8 +34,11 @@ export async function PATCH(request: Request) {
     const canManageUsers = hasSystemPermission(db, currentUser.id, 'manage_users');
     const body = await request.json() as { user_id?: string; name?: string; avatar_url?: string; system_role?: string };
     const targetUserId = canManageUsers && body.user_id ? body.user_id : currentUser.id;
-    const target = db.prepare('SELECT id, system_role FROM users WHERE id = ?').get(targetUserId) as { id: string; system_role: string } | undefined;
+    const target = db.prepare('SELECT id, system_role, organization_id FROM users WHERE id = ?').get(targetUserId) as { id: string; system_role: string; organization_id?: string | null } | undefined;
     if (!target) return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 });
+    if (canManageUsers && target.organization_id !== currentUser.organization_id) {
+      return NextResponse.json({ error: '別組織のユーザーは編集できません' }, { status: 403 });
+    }
 
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const avatarUrl = typeof body.avatar_url === 'string' ? body.avatar_url.trim() : '';
@@ -51,7 +54,7 @@ export async function PATCH(request: Request) {
     `).run(name, avatarUrl, nextSystemRole, targetUserId);
 
     const updated = db.prepare(`
-      SELECT id, email, name, avatar_url, system_role
+      SELECT id, email, name, avatar_url, system_role, organization_id
       FROM users
       WHERE id = ?
     `).get(targetUserId);
@@ -100,21 +103,22 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(password, 10);
     const tx = db.transaction(() => {
       db.prepare(`
-        INSERT INTO users (id, email, password_hash, name, avatar_url, system_role)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO users (id, email, password_hash, name, avatar_url, organization_id, system_role)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         email,
         passwordHash,
         body.name?.trim() || null,
         body.avatar_url?.trim() || '',
+        currentUser.organization_id,
         systemRole,
       );
     });
     tx();
 
     const created = db.prepare(`
-      SELECT id, email, name, avatar_url, system_role, created_at
+      SELECT id, email, name, avatar_url, system_role, organization_id, created_at
       FROM users
       WHERE id = ?
     `).get(id);
@@ -142,8 +146,11 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '自分自身は削除できません' }, { status: 400 });
     }
 
-    const target = db.prepare('SELECT id, system_role FROM users WHERE id = ?').get(userId) as { id: string; system_role: string } | undefined;
+    const target = db.prepare('SELECT id, system_role, organization_id FROM users WHERE id = ?').get(userId) as { id: string; system_role: string; organization_id?: string | null } | undefined;
     if (!target) return NextResponse.json({ error: 'ユーザーが見つかりません' }, { status: 404 });
+    if (target.organization_id !== currentUser.organization_id) {
+      return NextResponse.json({ error: '別組織のユーザーは削除できません' }, { status: 403 });
+    }
 
     if (target.system_role === 'SYSTEM_ADMIN') {
       const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE system_role = 'SYSTEM_ADMIN'").get() as { count: number };

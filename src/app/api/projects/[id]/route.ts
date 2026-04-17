@@ -12,11 +12,12 @@ interface Params { params: { id: string } }
 
 async function checkProjectAccess(projectId: string, userId: string) {
   const db = getDb();
+  const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
   return db.prepare(`
     SELECT DISTINCT p.*, m.role AS member_role FROM projects p
     LEFT JOIN project_members m ON p.id = m.project_id
-    WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-  `).get(projectId, userId, userId);
+    WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+  `).get(projectId, user?.organization_id ?? null, userId, userId);
 }
 
 export async function GET(_req: Request, { params }: Params) {
@@ -36,15 +37,15 @@ export async function GET(_req: Request, { params }: Params) {
       FROM projects p
       JOIN users owner ON p.owner_id = owner.id
       LEFT JOIN users lead ON p.primary_assignee_id = lead.id
-      WHERE p.id = ?
-    `).get(params.id) as any;
+      WHERE p.id = ? AND p.organization_id = ?
+    `).get(params.id, user.organization_id) as any;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const currentPermissions = projectAccessForUser(db, params.id, user.id);
     if (!currentPermissions?.can_view) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as CustomField[];
-    const settingsRow = getOrganizationSettingsRow(db);
+    const settingsRow = getOrganizationSettingsRow(db, user.organization_id);
     const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
     const currentDefinition = definitions.find((definition) => definition.key === project.type);
     const syncedFields = syncCustomFieldsWithDefinition(params.id, fields, currentDefinition);
@@ -59,8 +60,9 @@ export async function GET(_req: Request, { params }: Params) {
       ? db.prepare(`
           SELECT id, email, name, avatar_url
           FROM users
+          WHERE organization_id = ?
           ORDER BY COALESCE(NULLIF(name, ''), email) ASC
-        `).all()
+        `).all(user.organization_id)
       : [];
     const assignableUsers = [
       { id: project.owner_id, email: project.owner_email, name: project.owner_name, avatar_url: project.owner_avatar_url },
@@ -136,8 +138,8 @@ export async function PUT(request: Request, { params }: Params) {
       const assignable = db.prepare(`
         SELECT 1 FROM projects p
         LEFT JOIN project_members m ON p.id = m.project_id AND m.user_id = ?
-        WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-      `).get(nextPrimaryAssigneeId, params.id, nextPrimaryAssigneeId, nextPrimaryAssigneeId);
+        WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+      `).get(nextPrimaryAssigneeId, params.id, user.organization_id, nextPrimaryAssigneeId, nextPrimaryAssigneeId);
       if (!assignable) {
         return NextResponse.json({ error: '主担当はプロジェクトメンバーから選択してください' }, { status: 400 });
       }
@@ -164,7 +166,7 @@ export async function PUT(request: Request, { params }: Params) {
 
       if (body.custom_fields) {
         if (!currentPermissions.can_edit_items) throw new Error('NO_ITEM_EDIT_PERMISSION');
-        const settingsRow = getOrganizationSettingsRow(db);
+        const settingsRow = getOrganizationSettingsRow(db, user.organization_id);
         const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
         const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? (projectAccess as any).type));
         const incomingFields = body.custom_fields.map((f, idx) => ({
@@ -206,7 +208,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   try {
     const user = await requireSession();
     const db = getDb();
-    const project = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(params.id) as any;
+    const project = db.prepare('SELECT owner_id FROM projects WHERE id = ? AND organization_id = ?').get(params.id, user.organization_id) as any;
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'delete_project')) return NextResponse.json({ error: '削除権限がありません' }, { status: 403 });
 

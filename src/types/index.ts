@@ -134,6 +134,7 @@ export interface GlobalAssets {
 
 export interface Project {
   id: string;
+  organization_id?: string;
   name: string;
   type: ProjectType;
   phase_key: string;
@@ -162,6 +163,7 @@ export interface Project {
 
 export interface ProjectUser {
   id: string;
+  organization_id?: string | null;
   email: string;
   name: string | null;
   avatar_url?: string | null;

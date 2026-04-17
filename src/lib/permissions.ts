@@ -265,15 +265,17 @@ export function normalizeProjectMemberRole(role: unknown) {
 
 export function projectAccessForUser(db: Database.Database, projectId: string, userId: string) {
   const systemPermissions = systemPermissionsForUser(db, userId);
+  const userRow = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
   const row = db.prepare(`
-    SELECT p.owner_id, m.role, pr.permissions AS project_role_permissions
+    SELECT p.owner_id, p.organization_id, m.role, pr.permissions AS project_role_permissions
     FROM projects p
     LEFT JOIN project_members m ON p.id = m.project_id AND m.user_id = ?
     LEFT JOIN project_role_definitions pr ON pr.key = m.role
     WHERE p.id = ?
-  `).get(userId, projectId) as { owner_id: string; role?: string | null; project_role_permissions?: string | null } | undefined;
+  `).get(userId, projectId) as { owner_id: string; organization_id?: string | null; role?: string | null; project_role_permissions?: string | null } | undefined;
 
   if (!row) return null;
+  if (userRow?.organization_id && row.organization_id && row.organization_id !== userRow.organization_id) return null;
   const isOwner = row.owner_id === userId;
   const isMember = Boolean(row.role);
   const projectPermissions = parseProjectRolePermissions(row.project_role_permissions);

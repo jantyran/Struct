@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { normalizeContentTemplates, normalizeContentTemplatesRow, serializeContentTemplates } from '@/lib/content-templates';
-import { DEFAULT_ORGANIZATION_SCOPE, getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
   try {
-    await requireSession();
+    const user = await requireSession();
     const db = getDb();
-    const row = getOrganizationSettingsRow(db);
+    const row = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json({ content_templates: normalizeContentTemplatesRow(row) });
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,16 +25,16 @@ export async function PUT(request: Request) {
     }
     const body = await request.json() as { content_templates?: unknown };
     const templates = normalizeContentTemplates(body.content_templates as any[]);
-    getOrganizationSettingsRow(db);
+    getOrganizationSettingsRow(db, user.organization_id);
 
     db.prepare(`
       UPDATE organization_settings SET
         content_templates = ?,
         updated_at = datetime('now')
-      WHERE scope_key = ?
-    `).run(serializeContentTemplates(templates), DEFAULT_ORGANIZATION_SCOPE);
+      WHERE organization_id = ?
+    `).run(serializeContentTemplates(templates), user.organization_id);
 
-    const updated = getOrganizationSettingsRow(db);
+    const updated = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json({ content_templates: normalizeContentTemplatesRow(updated) });
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

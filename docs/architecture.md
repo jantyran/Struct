@@ -305,6 +305,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 ### 7.2 organization_settings
 
 - `id`
+- `organization_id`
 - `scope_key`
 - `company_name`
 - `company_description`
@@ -747,3 +748,16 @@ AI には次の情報を渡します。
 - `JWT_SECRET` は本番では必ず明示設定する
 - AI 設定は組織単位で保存する
 - システムロールとプロジェクトロールの初期データは `src/lib/permissions.ts` で定義し、DB 初期化時にシードする
+### 7.1.5 organizations
+
+- `id`
+- `name`
+- `slug`
+- `status`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- 現在は単一組織前提で 1 レコードを持つ
+- `users.organization_id` と `projects.organization_id` と `organization_settings.organization_id` の親になる

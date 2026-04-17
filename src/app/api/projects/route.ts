@@ -15,13 +15,13 @@ export async function GET() {
 
     const canViewAll = hasSystemPermission(db, user.id, 'view_all_projects') || hasSystemPermission(db, user.id, 'edit_all_projects');
     const projects = canViewAll
-      ? db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all()
+      ? db.prepare('SELECT * FROM projects WHERE organization_id = ? ORDER BY updated_at DESC').all(user.organization_id)
       : db.prepare(`
           SELECT DISTINCT p.* FROM projects p
           LEFT JOIN project_members m ON p.id = m.project_id
-          WHERE p.owner_id = ? OR m.user_id = ?
+          WHERE p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
           ORDER BY p.updated_at DESC
-        `).all(user.id, user.id);
+        `).all(user.organization_id, user.id, user.id);
 
     return NextResponse.json(projects);
   } catch (err) {
@@ -60,18 +60,19 @@ export async function POST(request: Request) {
 
     const id = uuidv4();
     const tx = db.transaction(() => {
-      const settingsRow = getOrganizationSettingsRow(db);
+      const settingsRow = getOrganizationSettingsRow(db, user.organization_id);
       const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
       const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? 'campaign'));
 
       db.prepare(`
-        INSERT INTO projects (id, name, type, phase_key, owner_id, primary_assignee_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (id, name, type, phase_key, organization_id, owner_id, primary_assignee_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         body.name.trim(),
         body.type ?? 'campaign',
         body.phase_key ?? '',
+        user.organization_id,
         user.id,
         user.id
       );

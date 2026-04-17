@@ -33,8 +33,8 @@ export async function POST(request: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id) as any;
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id) as any;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: Params) {
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
-    const globalAssetsRow = getOrganizationSettingsRow(db);
+    const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
 
     const typedProject: ProjectWithFields = {
       ...project,

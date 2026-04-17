@@ -9,11 +9,12 @@ interface Params { params: { id: string } }
 
 async function checkProjectAccess(projectId: string, userId: string) {
   const db = getDb();
+  const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
   return db.prepare(`
     SELECT DISTINCT p.* FROM projects p
     LEFT JOIN project_members m ON p.id = m.project_id
-    WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-  `).get(projectId, userId, userId);
+    WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+  `).get(projectId, user?.organization_id ?? null, userId, userId);
 }
 
 /** ノート一覧取得 */

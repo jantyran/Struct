@@ -11,12 +11,13 @@ function normalizeRole(role: unknown) {
 }
 
 function getProjectManager(db: ReturnType<typeof getDb>, projectId: string, userId: string) {
+  const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
   return db.prepare(`
-    SELECT p.owner_id, m.role AS member_role
+    SELECT p.owner_id, p.organization_id, m.role AS member_role
     FROM projects p
     LEFT JOIN project_members m ON p.id = m.project_id AND m.user_id = ?
-    WHERE p.id = ?
-  `).get(userId, projectId) as { owner_id: string; member_role?: string } | undefined;
+    WHERE p.id = ? AND p.organization_id = ?
+  `).get(userId, projectId, user?.organization_id ?? null) as { owner_id: string; organization_id?: string | null; member_role?: string } | undefined;
 }
 
 function canManageMembers(db: ReturnType<typeof getDb>, project: { owner_id: string; member_role?: string } | undefined, projectId: string, userId: string) {
@@ -63,9 +64,12 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'ユーザーを選択してください' }, { status: 400 });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE id = ?').get(userId) as { id: string } | undefined;
+    const existingUser = db.prepare('SELECT id, organization_id FROM users WHERE id = ?').get(userId) as { id: string; organization_id?: string | null } | undefined;
     if (!existingUser) {
       return NextResponse.json({ error: '登録済みユーザーが見つかりません' }, { status: 404 });
+    }
+    if (existingUser.organization_id !== user.organization_id) {
+      return NextResponse.json({ error: '別組織のユーザーは追加できません' }, { status: 400 });
     }
     if (existingUser.id === project?.owner_id) {
       return NextResponse.json({ error: 'オーナーは既にプロジェクトに含まれています' }, { status: 400 });

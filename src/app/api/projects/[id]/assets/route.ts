@@ -14,8 +14,8 @@ export async function GET(_req: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT DISTINCT p.id FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id);
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'view_content')) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -40,8 +40,8 @@ export async function DELETE(request: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT DISTINCT p.id FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id);
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
@@ -67,8 +67,8 @@ export async function PATCH(request: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT DISTINCT p.id FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id);
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });

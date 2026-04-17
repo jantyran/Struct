@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { attachSessionCookie, createSessionToken } from "@/lib/auth";
 import { seedSystemRoles } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { getDefaultOrganizationId } from "@/lib/organization-settings";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
@@ -34,12 +35,14 @@ export async function POST(request: Request) {
 
   const id = uuidv4();
   const passwordHash = await bcrypt.hash(password, 10);
+  const organizationId = getDefaultOrganizationId(db);
 
-  db.prepare('INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)').run(
+  db.prepare('INSERT INTO users (id, email, password_hash, name, organization_id) VALUES (?, ?, ?, ?, ?)').run(
     id,
     email.toLowerCase(),
     passwordHash,
-    name || null
+    name || null,
+    organizationId
   );
 
   seedSystemRoles(db);
