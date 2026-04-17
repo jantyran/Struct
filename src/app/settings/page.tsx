@@ -8,22 +8,39 @@ import { useAuth } from '@/components/AuthContext';
 
 const settingSections = [
   {
+    href: '/settings/organization',
+    title: '組織設定全体',
+    description: 'この組織で使っている設定を横断して一覧で確認します。',
+    meta: 'Org情報 / AI / Assets / 種別 / 生成 / ユーザー / ロール',
+    permission: 'manage_organization_settings',
+  },
+  {
+    href: '/settings/organization/basic',
+    title: '組織基本設定',
+    description: '組織名、住所、既定言語、ロケール、タイムゾーンを管理します。',
+    meta: 'Company Information / 組織名 / 住所 / Locale / Time Zone',
+    permission: 'manage_organization_settings',
+  },
+  {
     href: '/settings/ai',
     title: 'AI設定',
     description: '使用するAIプロバイダ、モデル、APIキーを管理します。',
     meta: 'Anthropic / OpenAI / モデル切替',
+    permission: 'manage_ai_settings',
   },
   {
     href: '/settings/content-templates',
     title: '生成コンテンツ設定',
     description: '生成対象のコンテンツ定義と生成指示を管理します。',
     meta: '生成物ライブラリ / 指示設計 / 再利用',
+    permission: 'manage_project_settings',
   },
   {
     href: '/project-types',
     title: 'プロジェクト設定',
     description: 'プロジェクト種別、フェーズ、初期項目テンプレート、使用する生成コンテンツの選択を管理します。',
     meta: '種別設計 / パス設計 / 項目設計 / コンテンツ選択',
+    permission: 'manage_project_settings',
   },
   {
     href: '/settings/users',

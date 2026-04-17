@@ -8,6 +8,7 @@ import { withBasePath } from '@/lib/paths';
 import type { RoleDefinition, SystemPermissionKey, SystemPermissions } from '@/types';
 
 const PERMISSIONS: Array<{ key: SystemPermissionKey; label: string; description: string }> = [
+  { key: 'manage_organization_settings', label: '組織設定管理', description: '組織設定全体と組織基本設定を表示・変更' },
   { key: 'manage_users', label: 'ユーザー管理', description: '全ユーザーの表示名、アバター、システムロールを変更' },
   { key: 'manage_system_roles', label: 'システムロール管理', description: 'システムロールと権限定義を変更' },
   { key: 'manage_project_roles', label: 'プロジェクトロール管理', description: 'プロジェクトメンバーに付与するロールと権限を変更' },

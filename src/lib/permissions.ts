@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 
 export const SYSTEM_PERMISSION_KEYS = [
+  'manage_organization_settings',
   'manage_users',
   'manage_system_roles',
   'manage_project_roles',
@@ -32,6 +33,7 @@ export const DEFAULT_SYSTEM_ROLES = [
     name: 'マネージャー',
     description: '全プロジェクトの閲覧・編集と主要設定を管理できます。',
     permissions: {
+      manage_organization_settings: true,
       manage_users: false,
       manage_system_roles: false,
       manage_project_roles: true,
@@ -48,6 +50,7 @@ export const DEFAULT_SYSTEM_ROLES = [
     name: '一般ユーザー',
     description: '自分が所有または参加しているプロジェクトを利用できます。',
     permissions: {
+      manage_organization_settings: false,
       manage_users: false,
       manage_system_roles: false,
       manage_project_roles: false,

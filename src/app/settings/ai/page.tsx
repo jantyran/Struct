@@ -22,6 +22,7 @@ const EMPTY_SETTINGS: AISettings = {
 export default function AISettingsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const canManageAISettings = Boolean(user?.system_permissions?.manage_ai_settings);
   const [settings, setSettings] = useState<AISettings>(EMPTY_SETTINGS);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -34,12 +35,24 @@ export default function AISettingsPage() {
       router.push(withBasePath('/login'));
       return;
     }
+    if (!user.system_permissions?.manage_ai_settings) {
+      router.push(withBasePath('/settings'));
+      return;
+    }
 
     (async () => {
       const res = await fetch(withBasePath('/api/ai-settings'));
-      const payload = await res.json();
       if (res.status === 401) {
         router.push(withBasePath('/login'));
+        return;
+      }
+      if (res.status === 403) {
+        router.push(withBasePath('/settings'));
+        return;
+      }
+      const payload = await res.json();
+      if (!res.ok) {
+        setError(payload.error || 'AI設定の取得に失敗しました。');
         return;
       }
 
@@ -79,6 +92,10 @@ export default function AISettingsPage() {
       router.push(withBasePath('/login'));
       return;
     }
+    if (res.status === 403) {
+      router.push(withBasePath('/settings'));
+      return;
+    }
 
     if (!res.ok) {
       setError(payload.error || 'AI設定の保存に失敗しました。');
@@ -96,6 +113,26 @@ export default function AISettingsPage() {
       <div className="p-6 max-w-4xl mx-auto">
         <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
           読み込み中...
+        </div>
+      </div>
+    );
+  }
+
+  if (!canManageAISettings) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="card p-6 space-y-4">
+          <div>
+            <h1 className="text-xl font-bold">AI設定</h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+              AI設定管理権限がないため、このページは表示できません。
+            </p>
+          </div>
+          <div>
+            <button onClick={() => router.push(withBasePath('/settings'))} className="btn-secondary">
+              ← 設定へ戻る
+            </button>
+          </div>
         </div>
       </div>
     );
