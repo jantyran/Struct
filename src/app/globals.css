@@ -119,9 +119,10 @@ body {
 /* 表示専用コンテナ: クリック不可・入力不可のデータ表示領域 */
 .surface-read {
   @apply rounded-xl;
-  background: rgba(241, 248, 252, 0.58);
-  border: 1px solid rgba(216, 231, 239, 0.5);
+  background: rgba(241, 248, 252, 0.72);
+  border: 1px solid rgba(216, 231, 239, 0.65);
   padding: 0.75rem;
+  box-shadow: 0 1px 3px rgba(44, 112, 134, 0.05);
 }
 
 /* クリック可能カード: カード全体がリンクになる場合の拡張スタイル */

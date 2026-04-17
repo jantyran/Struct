@@ -420,7 +420,7 @@ export default function OrganizationOverviewPage() {
           </button>
         }
       >
-        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+        <div className="divide-y divide-slate-200/70">
           {filtered.globalAssets.map((object) => (
             <div key={object.id} className="py-3 flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -461,7 +461,7 @@ export default function OrganizationOverviewPage() {
           </button>
         }
       >
-        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+        <div className="divide-y divide-slate-200/70">
           {filtered.projectTypes.map((definition) => (
             <div key={definition.id} className="py-3 flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -497,7 +497,7 @@ export default function OrganizationOverviewPage() {
           </button>
         }
       >
-        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+        <div className="divide-y divide-slate-200/70">
           {filtered.contentTemplates.map((template) => (
             <div key={template.id} className="py-3 flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -530,7 +530,7 @@ export default function OrganizationOverviewPage() {
             </button>
           }
         >
-          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+          <div className="divide-y divide-slate-200/70">
             {filtered.users.map((member) => (
               <div key={member.id} className="py-3 flex items-center justify-between gap-4">
                 <div className="min-w-0">
@@ -559,7 +559,7 @@ export default function OrganizationOverviewPage() {
             </button>
           }
         >
-          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+          <div className="divide-y divide-slate-200/70">
             {filtered.systemRoles.map((role) => (
               <div key={role.id} className="py-3 flex items-center justify-between gap-4">
                 <div className="min-w-0">
@@ -591,7 +591,7 @@ export default function OrganizationOverviewPage() {
             </button>
           }
         >
-          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+          <div className="divide-y divide-slate-200/70">
             {filtered.projectRoles.map((role) => (
               <div key={role.id} className="py-3 flex items-center justify-between gap-4">
                 <div className="min-w-0">

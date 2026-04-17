@@ -168,36 +168,41 @@ function ProjectCard({
   return (
     <Link
       href={withBasePath(`/projects/${project.id}`)}
-      className="card card-link p-5 flex flex-col gap-3"
-      style={{ borderColor: 'var(--border)' }}
+      className="card card-link flex flex-col"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className={`text-xs font-medium ${typeColors[project.type] ?? 'text-slate-500'}`}>
+      {/* カード本文 */}
+      <div className="p-5 flex flex-col gap-2.5 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <span className={`text-[11px] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>
             {typeLabel}
           </span>
-          <h3 className="font-semibold text-sm mt-0.5 leading-snug">{project.name}</h3>
+          <span className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 font-medium ${statusColors[project.status] ?? statusColors.draft}`}>
+            {statusLabels[project.status] ?? project.status}
+          </span>
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${statusColors[project.status] ?? statusColors.draft}`}>
-          {statusLabels[project.status] ?? project.status}
-        </span>
+
+        <h3 className="font-semibold text-sm leading-snug">{project.name}</h3>
+
+        {project.target && (
+          <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            {project.target}
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-auto pt-1">
+          {project.start_date && (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {project.start_date}{project.end_date && ` 〜 ${project.end_date}`}
+            </p>
+          )}
+          {project.cloned_from && (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>⬡ クローン</p>
+          )}
+        </div>
       </div>
 
-      {project.target && <p className="text-xs line-clamp-2" style={{ color: 'var(--text-secondary)' }}>▶ {project.target}</p>}
-
-      {project.start_date && (
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {project.start_date}{project.end_date && ` 〜 ${project.end_date}`}
-        </p>
-      )}
-
-      {project.cloned_from && (
-        <p className="text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
-          <span>⬡</span> クローン
-        </p>
-      )}
-
-      <div className="flex gap-2 mt-auto pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+      {/* フッター */}
+      <div className="flex gap-2 px-4 pb-4 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
         <span className="btn-primary text-xs flex-1 justify-center py-1.5">
           開く →
         </span>
@@ -284,7 +289,7 @@ export default function Dashboard() {
           <div>
             <p className="section-title mb-2">Workspace Overview</p>
             <h1 className="text-2xl font-bold tracking-tight">ダッシュボード</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>マーケティング施策の構造を定義・資産化する</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>マーケティング施策の構造を定義・資産化する</p>
           </div>
           <button onClick={() => setShowNew(true)} className="btn-primary">
             + 新規プロジェクト
@@ -295,23 +300,22 @@ export default function Dashboard() {
       {/* 統計 */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: '総プロジェクト', value: stats.total, color: 'text-cyan-700' },
-          { label: 'アクティブ', value: stats.active, color: 'text-emerald-700' },
-          { label: '下書き', value: stats.draft, color: 'text-amber-700' },
+          { label: '総プロジェクト', value: stats.total, color: 'text-cyan-700', accent: 'border-l-cyan-400' },
+          { label: 'アクティブ', value: stats.active, color: 'text-emerald-700', accent: 'border-l-emerald-400' },
+          { label: '下書き', value: stats.draft, color: 'text-amber-700', accent: 'border-l-amber-400' },
         ].map(s => (
-          <div key={s.label} className="surface-read">
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+          <div key={s.label} className={`card p-4 border-l-4 ${s.accent}`}>
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
+            <p className={`text-2xl font-bold mt-1.5 ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* フィルター */}
-      <div className="flex gap-2 mb-5">
+      <div className="flex flex-wrap gap-2 mb-5">
         {filterChips.map(f => (
           <button key={f.v} onClick={() => setFilter(f.v)}
-            className={`text-xs px-3 py-1.5 rounded-xl border transition-colors ${filter === f.v ? 'bg-cyan-50 text-cyan-700' : 'bg-white/70 text-slate-500 hover:text-slate-800'}`}
-            style={{ borderColor: filter === f.v ? 'rgba(15,154,177,0.35)' : 'var(--border)' }}>
+            className={`tab-btn${filter === f.v ? ' active' : ''}`}>
             {f.l}
           </button>
         ))}

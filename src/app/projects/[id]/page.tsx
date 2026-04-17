@@ -1578,7 +1578,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   </div>
                 )}
 
-                <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                <div className="divide-y divide-slate-200/70">
                   {project.owner && (
                     <div className="py-3 flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>

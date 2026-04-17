@@ -224,7 +224,7 @@ export default function UsersSettingsPage() {
             {canManageUsers ? 'システム管理者は全ユーザーのプロフィールとシステムロールを変更できます。' : '自分のユーザー情報だけ表示しています。'}
           </p>
         </div>
-        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+        <div className="divide-y divide-slate-200/70">
           {users.map((item) => (
             <div key={item.id} className="py-3 flex items-center gap-3">
               {item.avatar_url ? (
