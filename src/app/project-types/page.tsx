@@ -8,6 +8,12 @@ import { FIELD_TYPE_LABELS, SECTION_INFO_WIDGETS, WIDGET_FIELD_ID_PREFIX } from 
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { createProjectTypeDefinition, defaultProjectTypeDefinitions, DEFAULT_SECTIONS } from '@/lib/project-types';
+import {
+  createStoredAIReferenceSettings,
+  getProjectTypeAIReferenceOptions,
+  normalizeSelectedAIReferenceKeys,
+  resolveProjectTypeReferenceSelection,
+} from '@/lib/ai/reference-sources';
 
 function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   const next = [...items];
@@ -70,6 +76,79 @@ function createSectionItem(fieldId: string, layout: FieldLayout = 'half', kind: 
 /** 情報ウィジェット用の仮想 field_id を返す */
 function widgetFieldId(kind: SectionItemKind): string {
   return `${WIDGET_FIELD_ID_PREFIX}${kind}`;
+}
+
+function ProjectAIReferenceChecklist({
+  definition,
+  template,
+  globalAssetObjects,
+  onChange,
+}: {
+  definition: ProjectTypeDefinition;
+  template: ProjectContentTemplate;
+  globalAssetObjects: GlobalAssetObject[];
+  onChange: (settings: ProjectTypeDefinition['ai_reference_overrides']) => void;
+}) {
+  const options = getProjectTypeAIReferenceOptions(definition, globalAssetObjects);
+  const availableKeys = options.map((option) => option.key);
+  const selectedKeys = normalizeSelectedAIReferenceKeys(
+    resolveProjectTypeReferenceSelection(definition, template, globalAssetObjects),
+    availableKeys,
+  );
+  const selectedSet = new Set(selectedKeys);
+  const grouped = {
+    base: options.filter((option) => option.group === 'base'),
+    globalAssets: options.filter((option) => option.group === 'global_assets'),
+    fields: options.filter((option) => option.group === 'fields'),
+  };
+  const sections: Array<[string, typeof grouped.base]> = [
+    ['共通情報', grouped.base],
+    ['Global Assets', grouped.globalAssets],
+    ['プロジェクト項目', grouped.fields],
+  ];
+
+  function updateSelection(key: string, checked: boolean) {
+    const nextSelected = checked
+      ? [...selectedKeys, key]
+      : selectedKeys.filter((currentKey) => currentKey !== key);
+    onChange({
+      ...(definition.ai_reference_overrides ?? {}),
+      [template.id]: createStoredAIReferenceSettings(nextSelected, availableKeys),
+    });
+  }
+
+  return (
+    <div className="mt-3 rounded-md border p-4 space-y-4" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(248,251,253,0.7)' }}>
+      <div>
+        <p className="text-sm font-semibold">AI参照設定</p>
+        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+          この種別で {template.name} を生成するときに AI が参照してよい情報です。新しい項目は自動でオンになります。
+        </p>
+      </div>
+
+      {sections
+        .filter(([, items]) => items.length > 0)
+        .map(([label, items]) => (
+          <div key={label} className="space-y-2">
+            <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</p>
+            {items.map((option) => (
+              <label key={option.key} className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedSet.has(option.key)}
+                  onChange={(e) => updateSelection(option.key, e.target.checked)}
+                  className="mt-1 accent-violet-500"
+                />
+                <span>
+                  <span className="font-medium">{option.label}</span>
+                  <span className="block text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{option.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        ))}
+    </div>
+  );
 }
 
 /** セクションに配置済みのフィールドIDセットを返す（情報ウィジェットは除外） */
@@ -918,6 +997,7 @@ function DefinitionAccordionSection({
 export default function ProjectTypesPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const canManageProjectSettings = Boolean(user?.system_permissions?.manage_project_settings);
   const [definitions, setDefinitions] = useState<ProjectTypeDefinition[]>(defaultProjectTypeDefinitions());
   const [globalAssetObjects, setGlobalAssetObjects] = useState<GlobalAssetObject[]>([]);
   const [contentTemplates, setContentTemplates] = useState<ProjectContentTemplate[]>([]);
@@ -941,6 +1021,10 @@ export default function ProjectTypesPage() {
       router.push(withBasePath('/login'));
       return;
     }
+    if (!user.system_permissions?.manage_project_settings) {
+      router.push(withBasePath('/settings'));
+      return;
+    }
 
     (async () => {
       const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
@@ -956,6 +1040,13 @@ export default function ProjectTypesPage() {
 
       if (projectTypesRes.status === 401 || globalAssetsRes.status === 401 || contentTemplatesRes.status === 401) {
         router.push(withBasePath('/login'));
+        return;
+      }
+      if (projectTypesRes.status === 403 || globalAssetsRes.status === 403 || contentTemplatesRes.status === 403) {
+        router.push(withBasePath('/settings'));
+        return;
+      }
+      if (!projectTypesRes.ok || !globalAssetsRes.ok || !contentTemplatesRes.ok) {
         return;
       }
 
@@ -978,6 +1069,13 @@ export default function ProjectTypesPage() {
 
     if (res.status === 401) {
       router.push(withBasePath('/login'));
+      return;
+    }
+    if (res.status === 403) {
+      router.push(withBasePath('/settings'));
+      return;
+    }
+    if (!res.ok) {
       return;
     }
 
@@ -1104,6 +1202,26 @@ export default function ProjectTypesPage() {
 
   if (authLoading) {
     return <div className="p-6 max-w-6xl mx-auto"><div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div></div>;
+  }
+
+  if (!user || !canManageProjectSettings) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto">
+        <div className="card p-6 space-y-4">
+          <div>
+            <h1 className="text-xl font-bold">プロジェクト設定</h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+              プロジェクト設定管理権限がないため、このページは表示できません。
+            </p>
+          </div>
+          <div>
+            <button onClick={() => router.push(withBasePath('/settings'))} className="btn-secondary">
+              ← 設定へ戻る
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1709,23 +1827,36 @@ export default function ProjectTypesPage() {
                     <div className="text-sm" style={{ color: 'var(--text-muted)' }}>生成コンテンツ設定に登録された定義がありません。</div>
                   ) : (
                     contentTemplates.map((template) => (
-                      <label key={template.id} className="flex items-start gap-3 rounded-md border p-3 cursor-pointer" style={{ borderColor: 'var(--border)' }}>
-                        <input
-                          type="checkbox"
-                          checked={definition.content_template_ids.includes(template.id)}
-                          onChange={(e) => updateDefinition(index, {
-                            ...definition,
-                            content_template_ids: e.target.checked
-                              ? [...definition.content_template_ids, template.id]
-                              : definition.content_template_ids.filter((id) => id !== template.id),
-                          })}
-                          className="mt-1 accent-violet-500"
-                        />
-                        <div>
-                          <p className="text-sm font-medium">{template.name}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{template.instruction}</p>
-                        </div>
-                      </label>
+                      <div key={template.id} className="rounded-md border p-3" style={{ borderColor: 'var(--border)' }}>
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={definition.content_template_ids.includes(template.id)}
+                            onChange={(e) => updateDefinition(index, {
+                              ...definition,
+                              content_template_ids: e.target.checked
+                                ? [...definition.content_template_ids, template.id]
+                                : definition.content_template_ids.filter((id) => id !== template.id),
+                            })}
+                            className="mt-1 accent-violet-500"
+                          />
+                          <div>
+                            <p className="text-sm font-medium">{template.name}</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{template.instruction}</p>
+                          </div>
+                        </label>
+                        {definition.content_template_ids.includes(template.id) && (
+                          <ProjectAIReferenceChecklist
+                            definition={definition}
+                            template={template}
+                            globalAssetObjects={globalAssetObjects}
+                            onChange={(nextOverrides) => updateDefinition(index, {
+                              ...definition,
+                              ai_reference_overrides: nextOverrides,
+                            })}
+                          />
+                        )}
+                      </div>
                     ))
                   )}
                 </DefinitionAccordionSection>

@@ -11,6 +11,7 @@ import { normalizeContentTemplatesRow } from '@/lib/content-templates';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { requireProjectPermission } from '@/lib/permissions';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { normalizeSelectedAIReferenceKeys, resolveProjectTypeReferenceSelection, getProjectReferenceOptionKeys } from '@/lib/ai/reference-sources';
 
 interface Params { params: { id: string } }
 
@@ -42,28 +43,33 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
+    const notes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];
+    const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as any[];
 
     const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
+
+    const projectTypes = normalizeProjectTypeDefinitionsRow(globalAssetsRow);
+    const contentTemplates = normalizeContentTemplatesRow(globalAssetsRow);
+    const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
 
     const typedProject: ProjectWithFields = {
       ...project,
       custom_fields: fields.map(f => ({
         ...f,
+        template_id: f.template_id || currentProjectType?.field_templates.find((fieldTemplate) => fieldTemplate.key === f.key)?.id,
         options: f.options || '{}',
         value: f.value || '',
         is_builtin: f.is_builtin ?? 0,
         section: f.section ?? '',
       })),
+      project_notes: notes,
+      generated_assets: generatedAssets,
       cloned_from: project.cloned_from,
     };
 
     const typedGlobal: GlobalAssets = normalizeGlobalAssetsRow(globalAssetsRow);
     const aiSettings = normalizeAISettingsRow(globalAssetsRow);
-    const projectTypes = normalizeProjectTypeDefinitionsRow(globalAssetsRow);
-    const contentTemplates = normalizeContentTemplatesRow(globalAssetsRow);
-    const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
 
-    const context = buildProjectContext(typedProject, typedGlobal);
     const results = [];
 
     for (const assetType of body.asset_types) {
@@ -71,6 +77,15 @@ export async function POST(request: Request, { params }: Params) {
         currentProjectType?.content_template_ids.includes(template.id) && template.key === assetType
       );
       if (!contentTemplate) continue;
+
+      const resolvedReferenceSettings = currentProjectType
+        ? resolveProjectTypeReferenceSelection(currentProjectType, contentTemplate, typedGlobal.objects)
+        : contentTemplate.ai_reference;
+      const selectedSourceKeys = normalizeSelectedAIReferenceKeys(
+        resolvedReferenceSettings,
+        getProjectReferenceOptionKeys(typedProject, typedGlobal.objects),
+      );
+      const context = buildProjectContext(typedProject, typedGlobal, { selectedSourceKeys });
 
       const prompt = buildContentPrompt(contentTemplate, context, body.additional_instruction || '');
       const content = await generateText(prompt, SYSTEM_PROMPT, 4096, aiSettings);

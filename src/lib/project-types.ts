@@ -1,5 +1,6 @@
 import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement } from '@/types';
 import { WIDGET_FIELD_ID_PREFIX } from '@/types';
+import { normalizeAIReferenceSettings } from '@/lib/ai/reference-sources';
 
 /** デフォルトセクション定義 */
 export const DEFAULT_SECTIONS: SectionDefinition[] = [
@@ -467,6 +468,10 @@ function normalizeTypeDefinition(
       : legacyContentTemplates.length > 0
         ? legacyContentTemplates.map((template, i) => template.id || `content-template-${i + 1}`)
         : fallbackContentTemplateIds,
+    ai_reference_overrides: Object.fromEntries(
+      Object.entries((definition.ai_reference_overrides ?? {}) as Record<string, unknown>)
+        .map(([templateId, settings]) => [templateId, normalizeAIReferenceSettings(settings)])
+    ),
   };
 }
 
@@ -502,6 +507,7 @@ export function createProjectTypeDefinition(seed: Partial<ProjectTypeDefinition>
       sections: seed.sections || [],
       field_templates: seed.field_templates || [],
       content_template_ids: seed.content_template_ids || [],
+      ai_reference_overrides: seed.ai_reference_overrides || {},
     },
     0
   );

@@ -13,6 +13,11 @@ export interface AISettings {
   base_url: string;
 }
 
+export interface AIReferenceSettings {
+  selected_source_keys: string[];
+  known_source_keys: string[];
+}
+
 export interface ProjectPhase {
   id: string;
   key: string;
@@ -86,6 +91,7 @@ export interface ProjectContentTemplate {
   mandatory_elements: string;
   example_structure: string;
   instruction: string;
+  ai_reference?: AIReferenceSettings;
 }
 
 export interface ProjectTypeDefinition {
@@ -99,6 +105,7 @@ export interface ProjectTypeDefinition {
   /** 組み込み + カスタムフィールドテンプレートを統合管理 */
   field_templates: ProjectFieldTemplate[];
   content_template_ids: string[];
+  ai_reference_overrides?: Record<string, AIReferenceSettings>;
   is_default?: boolean;
 }
 
@@ -176,6 +183,7 @@ export interface ProjectMember {
 }
 
 export type SystemPermissionKey =
+  | 'manage_organization_settings'
   | 'manage_users'
   | 'manage_system_roles'
   | 'manage_project_roles'
@@ -260,6 +268,8 @@ export interface CustomField {
 
 export interface ProjectWithFields extends Project {
   custom_fields: CustomField[];
+  project_notes?: ProjectNote[];
+  generated_assets?: GeneratedAsset[];
 }
 
 export interface GeneratedAsset {
