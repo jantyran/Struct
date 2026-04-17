@@ -1,24 +1,15 @@
 import { NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
-import { createContentTemplate, normalizeContentTemplates, normalizeContentTemplatesRow, serializeContentTemplates } from '@/lib/content-templates';
-
-async function ensureSettingsRow(userId: string) {
-  const db = getDb();
-  let row = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(userId) as any;
-  if (!row) {
-    const id = uuidv4();
-    db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(id, userId);
-    row = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(id);
-  }
-  return row;
-}
+import { normalizeContentTemplates, normalizeContentTemplatesRow, serializeContentTemplates } from '@/lib/content-templates';
+import { DEFAULT_ORGANIZATION_SCOPE, getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
   try {
-    const user = await requireSession();
-    const row = await ensureSettingsRow(user.id);
+    await requireSession();
+    const db = getDb();
+    const row = getOrganizationSettingsRow(db);
     return NextResponse.json({ content_templates: normalizeContentTemplatesRow(row) });
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -28,19 +19,22 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const user = await requireSession();
-    await ensureSettingsRow(user.id);
     const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_project_settings')) {
+      return NextResponse.json({ error: 'プロジェクト設定管理権限がありません' }, { status: 403 });
+    }
     const body = await request.json() as { content_templates?: unknown };
     const templates = normalizeContentTemplates(body.content_templates as any[]);
+    getOrganizationSettingsRow(db);
 
     db.prepare(`
-      UPDATE global_assets SET
+      UPDATE organization_settings SET
         content_templates = ?,
         updated_at = datetime('now')
-      WHERE user_id = ?
-    `).run(serializeContentTemplates(templates), user.id);
+      WHERE scope_key = ?
+    `).run(serializeContentTemplates(templates), DEFAULT_ORGANIZATION_SCOPE);
 
-    const updated = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+    const updated = getOrganizationSettingsRow(db);
     return NextResponse.json({ content_templates: normalizeContentTemplatesRow(updated) });
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

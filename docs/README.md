@@ -11,6 +11,10 @@
   - API 構成
   - AI 生成フロー
   - 今後の実装予定
+- `refactors/organization-settings-refactor.md`
+  - 組織レベル設定への移行目的
+  - 現状の不整合
+  - 保存先 / API / 移行方針
 
 ## 現在のアプリ要約
 

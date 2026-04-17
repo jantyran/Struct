@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
 import { generateText } from '@/lib/ai/client';
 import {
   buildProjectContext,
@@ -13,6 +12,7 @@ import type { ProjectWithFields, GlobalAssets } from '@/types';
 import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 import { normalizeAISettingsRow } from '@/lib/ai/settings';
 import { requireProjectPermission } from '@/lib/permissions';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
 interface Params { params: { id: string } }
 
@@ -40,12 +40,7 @@ export async function POST(_req: Request, { params }: Params) {
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
-    let globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
-    if (!globalAssetsRow) {
-      const assetsId = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(assetsId, user.id);
-      globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(assetsId) as any;
-    }
+    const globalAssetsRow = getOrganizationSettingsRow(db);
 
     const typedProject: ProjectWithFields = {
       ...project,

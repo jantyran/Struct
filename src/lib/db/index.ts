@@ -4,6 +4,7 @@ import { mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { BUILTIN_FIELD_TEMPLATES } from '@/lib/project-types';
 import { seedProjectRoles, seedSystemRoles } from '@/lib/permissions';
+import { DEFAULT_ORGANIZATION_SCOPE } from '@/lib/organization-settings';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 mkdirSync(DATA_DIR, { recursive: true });
@@ -114,7 +115,7 @@ function initSchema(db: Database.Database) {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
-    -- Global Assets（ユーザーごとに1つ）
+    -- Global Assets（レガシー。組織設定移行元として残す）
     CREATE TABLE IF NOT EXISTS global_assets (
       id TEXT PRIMARY KEY,
       user_id TEXT UNIQUE NOT NULL,
@@ -129,6 +130,22 @@ function initSchema(db: Database.Database) {
       ai_settings TEXT DEFAULT '{}',
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- 組織設定（単一組織前提の正本）
+    CREATE TABLE IF NOT EXISTS organization_settings (
+      id TEXT PRIMARY KEY,
+      scope_key TEXT UNIQUE NOT NULL,
+      company_name TEXT DEFAULT '',
+      company_description TEXT DEFAULT '',
+      brand_voice TEXT DEFAULT '',
+      brand_guidelines TEXT DEFAULT '',
+      products TEXT DEFAULT '[]',
+      objects TEXT DEFAULT '[]',
+      project_types TEXT DEFAULT '[]',
+      content_templates TEXT DEFAULT '[]',
+      ai_settings TEXT DEFAULT '{}',
+      updated_at TEXT DEFAULT (datetime('now'))
     );
 
     -- カスタムフィールド（組み込み + ユーザー定義を統合管理）
@@ -202,6 +219,15 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'global_assets', 'project_types', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'global_assets', 'content_templates', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'global_assets', 'ai_settings', `TEXT DEFAULT '{}'`);
+  ensureColumn(db, 'organization_settings', 'company_name', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organization_settings', 'company_description', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organization_settings', 'brand_voice', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organization_settings', 'brand_guidelines', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'organization_settings', 'products', `TEXT DEFAULT '[]'`);
+  ensureColumn(db, 'organization_settings', 'objects', `TEXT DEFAULT '[]'`);
+  ensureColumn(db, 'organization_settings', 'project_types', `TEXT DEFAULT '[]'`);
+  ensureColumn(db, 'organization_settings', 'content_templates', `TEXT DEFAULT '[]'`);
+  ensureColumn(db, 'organization_settings', 'ai_settings', `TEXT DEFAULT '{}'`);
   ensureColumn(db, 'users', 'avatar_url', `TEXT DEFAULT ''`);
   ensureColumn(db, 'users', 'system_role', `TEXT DEFAULT 'USER'`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
@@ -212,9 +238,56 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
   seedSystemRoles(db);
   seedProjectRoles(db);
+  ensureOrganizationSettings(db);
 
   // 既存プロジェクトのコアカラム値を custom_fields に移行
   migrateProjectCoreFields(db);
+}
+
+function ensureOrganizationSettings(db: Database.Database) {
+  const existing = db.prepare('SELECT id FROM organization_settings WHERE scope_key = ?').get(DEFAULT_ORGANIZATION_SCOPE) as { id: string } | undefined;
+  if (existing) return;
+
+  const legacy = db.prepare(`
+    SELECT ga.*
+    FROM global_assets ga
+    LEFT JOIN users u ON u.id = ga.user_id
+    ORDER BY
+      CASE WHEN u.system_role = 'SYSTEM_ADMIN' THEN 0 ELSE 1 END,
+      datetime(COALESCE(ga.updated_at, '1970-01-01')) DESC,
+      datetime(COALESCE(u.created_at, '1970-01-01')) ASC
+    LIMIT 1
+  `).get() as any;
+
+  if (legacy) {
+    db.prepare(`
+      INSERT INTO organization_settings (
+        id, scope_key, company_name, company_description, brand_voice,
+        brand_guidelines, products, objects, project_types, content_templates,
+        ai_settings, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      uuidv4(),
+      DEFAULT_ORGANIZATION_SCOPE,
+      legacy.company_name ?? '',
+      legacy.company_description ?? '',
+      legacy.brand_voice ?? '',
+      legacy.brand_guidelines ?? '',
+      legacy.products ?? '[]',
+      legacy.objects ?? '[]',
+      legacy.project_types ?? '[]',
+      legacy.content_templates ?? '[]',
+      legacy.ai_settings ?? '{}',
+      legacy.updated_at ?? new Date().toISOString(),
+    );
+    return;
+  }
+
+  db.prepare(`
+    INSERT INTO organization_settings (id, scope_key)
+    VALUES (?, ?)
+  `).run(uuidv4(), DEFAULT_ORGANIZATION_SCOPE);
 }
 
 /**

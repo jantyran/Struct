@@ -110,7 +110,6 @@ export async function POST(request: Request) {
         body.avatar_url?.trim() || '',
         systemRole,
       );
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(uuidv4(), id);
     });
     tx();
 

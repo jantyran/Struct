@@ -1,21 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
-import { v4 as uuidv4 } from 'uuid';
 import { deriveLegacyGlobalAssetColumns, normalizeGlobalAssets, normalizeGlobalAssetsRow, serializeGlobalAssetObjects } from '@/lib/global-assets';
+import { DEFAULT_ORGANIZATION_SCOPE, getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
   try {
-    const user = await requireSession();
+    await requireSession();
     const db = getDb();
-    let assets = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
-
-    if (!assets) {
-      const id = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(id, user.id);
-      assets = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(id);
-    }
-
+    const assets = getOrganizationSettingsRow(db);
     return NextResponse.json(normalizeGlobalAssetsRow(assets));
   } catch (err) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -26,11 +20,15 @@ export async function PUT(request: Request) {
   try {
     const user = await requireSession();
     const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_global_assets')) {
+      return NextResponse.json({ error: 'Global Assets 管理権限がありません' }, { status: 403 });
+    }
     const body = normalizeGlobalAssets(await request.json());
     const legacy = deriveLegacyGlobalAssetColumns(body.objects);
+    getOrganizationSettingsRow(db);
 
     db.prepare(`
-      UPDATE global_assets SET
+      UPDATE organization_settings SET
         company_name = ?,
         company_description = ?,
         brand_voice = ?,
@@ -38,7 +36,7 @@ export async function PUT(request: Request) {
         products = ?,
         objects = ?,
         updated_at = datetime('now')
-      WHERE user_id = ?
+      WHERE scope_key = ?
     `).run(
       legacy.company_name,
       legacy.company_description,
@@ -46,10 +44,10 @@ export async function PUT(request: Request) {
       legacy.brand_guidelines,
       legacy.products,
       serializeGlobalAssetObjects(body.objects),
-      user.id
+      DEFAULT_ORGANIZATION_SCOPE
     );
 
-    const updated = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+    const updated = getOrganizationSettingsRow(db);
     return NextResponse.json(normalizeGlobalAssetsRow(updated));
   } catch (err) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

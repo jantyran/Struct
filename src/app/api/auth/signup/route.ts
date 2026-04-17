@@ -42,8 +42,6 @@ export async function POST(request: Request) {
     name || null
   );
 
-  // 初回ログイン用のGlobalAssets作成
-  db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(uuidv4(), id);
   seedSystemRoles(db);
 
   const token = await createSessionToken(id);

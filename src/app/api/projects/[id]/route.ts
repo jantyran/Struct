@@ -6,6 +6,7 @@ import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
 import { projectAccessForUser, projectRoleDefinitions, requireProjectPermission } from '@/lib/permissions';
 import type { CustomField } from '@/types';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
 interface Params { params: { id: string } }
 
@@ -43,7 +44,7 @@ export async function GET(_req: Request, { params }: Params) {
     if (!currentPermissions?.can_view) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as CustomField[];
-    const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(project.owner_id) as any;
+    const settingsRow = getOrganizationSettingsRow(db);
     const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
     const currentDefinition = definitions.find((definition) => definition.key === project.type);
     const syncedFields = syncCustomFieldsWithDefinition(params.id, fields, currentDefinition);
@@ -163,7 +164,7 @@ export async function PUT(request: Request, { params }: Params) {
 
       if (body.custom_fields) {
         if (!currentPermissions.can_edit_items) throw new Error('NO_ITEM_EDIT_PERMISSION');
-        const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get((projectAccess as any).owner_id) as any;
+        const settingsRow = getOrganizationSettingsRow(db);
         const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
         const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? (projectAccess as any).type));
         const incomingFields = body.custom_fields.map((f, idx) => ({

@@ -6,6 +6,7 @@ import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
 import { hasSystemPermission } from '@/lib/permissions';
 import type { CustomField } from '@/types';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
 export async function GET() {
   try {
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
 
     const id = uuidv4();
     const tx = db.transaction(() => {
-      const settingsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+      const settingsRow = getOrganizationSettingsRow(db);
       const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
       const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? 'campaign'));
 

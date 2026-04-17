@@ -27,7 +27,7 @@ Struct は、`MKTキャンペーン運用デスク` として使う認証付き�
 - AI 生成
   - AI プロバイダを設定画面から切り替え
   - `Gemini` / `OpenAI` / `Anthropic` に対応
-  - API キー、モデル、Base URL をユーザー単位で保持
+  - API キー、モデル、Base URL は組織レベル設定として保持
   - プロジェクト詳細から追加指示付きで生成可能
 - 共同作業
   - オーナーによる招待 URL 発行
@@ -157,7 +157,7 @@ NEXT_PUBLIC_BASE_PATH=
 
 #### 技術方針
 
-- AI への指示には、既存の AI 設定（Gemini / OpenAI / Anthropic）を流用
+- AI への指示には、既存の組織レベル AI 設定（Gemini / OpenAI / Anthropic）を流用
 - Struct の内部スキーマ（フィールド型定義・セクション構造）を System Prompt として注入し、有効な JSON を生成させる
 - 生成結果は既存の API エンドポイント（`/api/project-types`, `/api/objects` 等）へそのまま投入できる形式に正規化
 - 設定の「Undo」に対応するため、適用前のスナップショットを DB に保存するロールバック機構を用意

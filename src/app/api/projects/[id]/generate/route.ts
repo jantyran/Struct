@@ -10,6 +10,7 @@ import { normalizeAISettingsRow } from '@/lib/ai/settings';
 import { normalizeContentTemplatesRow } from '@/lib/content-templates';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { requireProjectPermission } from '@/lib/permissions';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
 interface Params { params: { id: string } }
 
@@ -42,14 +43,7 @@ export async function POST(request: Request, { params }: Params) {
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
-    // GlobalAssets はプロジェクトオーナーの設定を参照する（呼び出しユーザーではなく）
-    const ownerId = project.owner_id;
-    let globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(ownerId) as any;
-    if (!globalAssetsRow) {
-      const assetsId = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(assetsId, ownerId);
-      globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(assetsId) as any;
-    }
+    const globalAssetsRow = getOrganizationSettingsRow(db);
 
     const typedProject: ProjectWithFields = {
       ...project,

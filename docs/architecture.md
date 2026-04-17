@@ -3,11 +3,11 @@
 ## 1. 概要
 
 Struct は `MKTキャンペーン運用デスク` として使う、認証付きのキャンペーン管理アプリです。  
-キャンペーンやイベントの進行、構造化データ、生成コンテンツ、AI 利用設定をユーザー単位またはプロジェクト単位で管理します。
+キャンペーンやイベントの進行、構造化データ、生成コンテンツ、AI 利用設定を組織単位またはプロジェクト単位で管理します。
 
 アプリは次の 3 系統の情報を扱います。
 
-- ユーザー単位の設定とマスターデータ
+- 組織単位の設定とマスターデータ
   - Global Assets
   - プロジェクト種別定義
   - 生成コンテンツ定義
@@ -302,7 +302,30 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `system_role`
 - `created_at`
 
-### 7.2 global_assets
+### 7.2 organization_settings
+
+- `id`
+- `scope_key`
+- `company_name`
+- `company_description`
+- `brand_voice`
+- `brand_guidelines`
+- `products`
+- `objects`
+- `project_types`
+- `content_templates`
+- `ai_settings`
+- `updated_at`
+
+補足:
+
+- `scope_key = default` を現在の組織設定として扱う
+- `objects` は Global Assets オブジェクト定義とレコードの JSON
+- `project_types` はプロジェクト種別定義の JSON
+- `content_templates` は生成コンテンツ定義の JSON
+- `ai_settings` は AI 設定の JSON
+
+### 7.3 global_assets
 
 - `id`
 - `user_id`
@@ -314,11 +337,8 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 補足:
 
-- `objects` は Global Assets オブジェクト定義とレコードの JSON
-- `project_types` はプロジェクト種別定義の JSON
-- `content_templates` は生成コンテンツ定義の JSON
-- `ai_settings` は AI 設定の JSON
-- 1 ユーザー 1 レコード前提
+- レガシー移行元として残している
+- 新規の設定参照先としては使わない
 
 `project_types` の主な構成:
 
@@ -333,7 +353,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
   - 項目そのものの定義を保持
   - UI 配置情報は `sections.items` 側で扱う
 
-### 7.3 GlobalAssetObject
+### 7.4 GlobalAssetObject
 
 - `id`
 - `key`
@@ -725,5 +745,5 @@ AI には次の情報を渡します。
 - `group` / `group_list` の `value` も JSON 文字列で保持する
 - 招待 URL はレガシー招待機能でのみ `NEXT_PUBLIC_BASE_URL` に依存する
 - `JWT_SECRET` は本番では必ず明示設定する
-- AI 設定はユーザー単位で保存するため、サーバー全体の共通 API キー前提ではない
+- AI 設定は組織単位で保存する
 - システムロールとプロジェクトロールの初期データは `src/lib/permissions.ts` で定義し、DB 初期化時にシードする

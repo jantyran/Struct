@@ -1,24 +1,18 @@
 import { NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { maskAISettings, normalizeAISettings, normalizeAISettingsRow, serializeAISettings } from '@/lib/ai/settings';
-
-async function ensureSettingsRow(userId: string) {
-  const db = getDb();
-  let row = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(userId) as any;
-  if (!row) {
-    const id = uuidv4();
-    db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(id, userId);
-    row = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(id);
-  }
-  return row;
-}
+import { DEFAULT_ORGANIZATION_SCOPE, getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
   try {
     const user = await requireSession();
-    const row = await ensureSettingsRow(user.id);
+    const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
+      return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
+    }
+    const row = getOrganizationSettingsRow(db);
     const settings = normalizeAISettingsRow(row);
     return NextResponse.json({
       settings: maskAISettings(settings),
@@ -32,17 +26,20 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const user = await requireSession();
-    await ensureSettingsRow(user.id);
     const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
+      return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
+    }
     const body = await request.json() as { settings?: unknown };
     const settings = normalizeAISettings((body.settings as any) || {});
+    getOrganizationSettingsRow(db);
 
     db.prepare(`
-      UPDATE global_assets SET
+      UPDATE organization_settings SET
         ai_settings = ?,
         updated_at = datetime('now')
-      WHERE user_id = ?
-    `).run(serializeAISettings(settings), user.id);
+      WHERE scope_key = ?
+    `).run(serializeAISettings(settings), DEFAULT_ORGANIZATION_SCOPE);
 
     return NextResponse.json({
       settings: maskAISettings(settings),
