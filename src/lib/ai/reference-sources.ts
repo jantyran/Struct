@@ -2,7 +2,6 @@ import type {
   AIReferenceSettings,
   CustomField,
   GlobalAssetObject,
-  ProjectContentTemplate,
   ProjectFieldTemplate,
   ProjectTypeDefinition,
   ProjectWithFields,
@@ -134,29 +133,6 @@ export function createStoredAIReferenceSettings(selectedKeys: string[], availabl
   };
 }
 
-export function resolveProjectTypeReferenceSelection(
-  definition: ProjectTypeDefinition,
-  template: ProjectContentTemplate,
-  globalObjects: GlobalAssetObject[],
-): AIReferenceSettings {
-  const options = getProjectTypeAIReferenceOptions(definition, globalObjects);
-  const availableKeys = options.map((option) => option.key);
-  const override = definition.ai_reference_overrides?.[template.id];
-
-  if (override) {
-    return createStoredAIReferenceSettings(
-      normalizeSelectedAIReferenceKeys(override, availableKeys),
-      availableKeys,
-    );
-  }
-
-  const commonOptions = getCommonAIReferenceOptions(globalObjects);
-  const commonSelected = new Set(
-    normalizeSelectedAIReferenceKeys(template.ai_reference, commonOptions.map((option) => option.key)),
-  );
-  const selected = availableKeys.filter((key) => key.startsWith('field:') || commonSelected.has(key));
-  return createStoredAIReferenceSettings(selected, availableKeys);
-}
 
 export function isReferenceSourceSelected(selectedKeys: Set<string>, key: string) {
   return selectedKeys.has(key);

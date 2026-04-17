@@ -334,7 +334,7 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   const groupListValue = parseGroupListValue(field.value);
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${isInherited ? 'inherited-field' : ''}`} style={{ borderColor: isInherited ? 'rgba(245,158,11,0.4)' : 'var(--border)', backgroundColor: 'rgba(255,255,255,0.62)' }}>
+    <div className={`field-section-card ${isInherited ? 'inherited-field' : ''}`}>
       {isInherited && (
         <div className="flex items-center gap-1.5 text-xs" style={{ color: '#b66a10' }}>
           <span>⚠</span>
@@ -707,13 +707,12 @@ function SectionInfoWidget({
   onNotesTabClick?: () => void;
 }) {
   const colClass = layout === 'full' ? 'col-span-2' : '';
-  const cardStyle = { borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.62)' };
 
   if (kind === 'project_type') {
     return (
-      <div className={`${colClass} rounded-xl border p-3 space-y-1`} style={cardStyle}>
+      <div className={`${colClass} surface-read space-y-1`}>
         <p className="field-label">プロジェクト種別</p>
-        <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{typeLabel || '—'}</p>
+        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{typeLabel || '—'}</p>
         {projectType?.description && (
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{projectType.description}</p>
         )}
@@ -724,9 +723,9 @@ function SectionInfoWidget({
   if (kind === 'phase') {
     const currentPhase = phases.find((p) => p.key === project.phase_key);
     return (
-      <div className={`${colClass} rounded-xl border p-3 space-y-1`} style={cardStyle}>
+      <div className={`${colClass} surface-read space-y-1`}>
         <p className="field-label">進行フェーズ</p>
-        <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
           {currentPhase?.name || (phases.length === 0 ? '—' : '未設定')}
         </p>
       </div>
@@ -736,7 +735,7 @@ function SectionInfoWidget({
   if (kind === 'note_list') {
     const pinnedNotes = (notes ?? []).filter(n => n.pinned === 1).slice(0, 3);
     return (
-      <div className={`${colClass} rounded-xl border p-3`} style={cardStyle}>
+      <div className={`${colClass} surface-read`}>
         <div className="flex items-center justify-between mb-2">
           <p className="field-label">ノート</p>
           {onNotesTabClick && (
@@ -1370,10 +1369,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               ...(canViewContent ? [{ k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }] : []),
             ]).map(t => (
               <button key={t.k} onClick={() => setTab(t.k)}
-                className="text-sm px-3 py-1.5 rounded-xl transition-colors"
-                style={tab === t.k
-                  ? { backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(15,154,177,0.18)' }
-                  : { color: 'var(--text-muted)' }}
+                className={`tab-btn${tab === t.k ? ' active' : ''}`}
               >
                 {t.l}
               </button>
@@ -1652,7 +1648,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     <section key={secId}>
                       <div className="card overflow-hidden">
                         {secColor && <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />}
-                        <button type="button" onClick={() => toggleFieldSection(secName)} className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left">
+                        <button type="button" onClick={() => toggleFieldSection(secName)} className="row-hover w-full px-5 py-4 flex items-center justify-between gap-3 text-left">
                           <div className="flex items-center gap-2 min-w-0">
                             {secColor && <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />}
                             <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{secName}</h2>

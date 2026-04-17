@@ -166,7 +166,11 @@ function ProjectCard({
   const typeColors: Record<string, string> = { event: 'text-sky-700', campaign: 'text-cyan-700', content: 'text-amber-700', other: 'text-slate-500' };
 
   return (
-    <div className="card p-5 flex flex-col gap-3 transition-all duration-200 group hover:-translate-y-0.5" style={{ borderColor: 'var(--border)' }}>
+    <Link
+      href={withBasePath(`/projects/${project.id}`)}
+      className="card card-link p-5 flex flex-col gap-3"
+      style={{ borderColor: 'var(--border)' }}
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <span className={`text-xs font-medium ${typeColors[project.type] ?? 'text-slate-500'}`}>
@@ -194,14 +198,17 @@ function ProjectCard({
       )}
 
       <div className="flex gap-2 mt-auto pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-        <Link href={withBasePath(`/projects/${project.id}`)} className="btn-primary text-xs flex-1 justify-center py-1.5">
-          開く
-        </Link>
-        <button onClick={() => onClone(project)} className="btn-secondary text-xs px-3 py-1.5">
+        <span className="btn-primary text-xs flex-1 justify-center py-1.5">
+          開く →
+        </span>
+        <button
+          onClick={(e) => { e.preventDefault(); onClone(project); }}
+          className="btn-secondary text-xs px-3 py-1.5"
+        >
           クローン
         </button>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -292,7 +299,7 @@ export default function Dashboard() {
           { label: 'アクティブ', value: stats.active, color: 'text-emerald-700' },
           { label: '下書き', value: stats.draft, color: 'text-amber-700' },
         ].map(s => (
-          <div key={s.label} className="card p-4">
+          <div key={s.label} className="surface-read">
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
             <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
           </div>

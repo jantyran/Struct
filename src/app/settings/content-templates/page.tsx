@@ -3,15 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { GlobalAssetObject, ProjectContentTemplate } from '@/types';
+import type { ProjectContentTemplate } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { CONTENT_CHANNEL_OPTIONS, createContentTemplate } from '@/lib/content-templates';
-import {
-  createStoredAIReferenceSettings,
-  getCommonAIReferenceOptions,
-  normalizeSelectedAIReferenceKeys,
-} from '@/lib/ai/reference-sources';
 
 function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   const next = [...items];
@@ -20,76 +15,11 @@ function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   return next;
 }
 
-function AIReferenceChecklist({
-  options,
-  selectedKeys,
-  onToggle,
-}: {
-  options: ReturnType<typeof getCommonAIReferenceOptions>;
-  selectedKeys: string[];
-  onToggle: (key: string, checked: boolean) => void;
-}) {
-  if (options.length === 0) return null;
-
-  const selectedSet = new Set(selectedKeys);
-  const baseOptions = options.filter((option) => option.group === 'base');
-  const objectOptions = options.filter((option) => option.group === 'global_assets');
-
-  return (
-    <div className="space-y-4 rounded-md border p-4" style={{ borderColor: 'var(--border)' }}>
-      <div>
-        <p className="text-sm font-semibold">AI参照設定</p>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-          この生成コンテンツで共通利用する参照元です。新しく追加された情報は自動で参照オンになります。
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>共通情報</p>
-        {baseOptions.map((option) => (
-          <label key={option.key} className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={selectedSet.has(option.key)}
-              onChange={(e) => onToggle(option.key, e.target.checked)}
-              className="mt-1 accent-violet-500"
-            />
-            <span>
-              <span className="font-medium">{option.label}</span>
-              <span className="block text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{option.description}</span>
-            </span>
-          </label>
-        ))}
-      </div>
-
-      {objectOptions.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Global Assets</p>
-          {objectOptions.map((option) => (
-            <label key={option.key} className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                checked={selectedSet.has(option.key)}
-                onChange={(e) => onToggle(option.key, e.target.checked)}
-                className="mt-1 accent-violet-500"
-              />
-              <span>
-                <span className="font-medium">{option.label}</span>
-                <span className="block text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{option.description}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ContentTemplateRow({
   template,
   expanded,
   dragging,
-  referenceOptions,
   onDragStart,
   onDrop,
   onToggle,
@@ -99,18 +29,12 @@ function ContentTemplateRow({
   template: ProjectContentTemplate;
   expanded: boolean;
   dragging: boolean;
-  referenceOptions: ReturnType<typeof getCommonAIReferenceOptions>;
   onDragStart: () => void;
   onDrop: () => void;
   onToggle: () => void;
   onChange: (template: ProjectContentTemplate) => void;
   onRemove: () => void;
 }) {
-  const selectedReferenceKeys = normalizeSelectedAIReferenceKeys(
-    template.ai_reference,
-    referenceOptions.map((option) => option.key),
-  );
-
   return (
     <div
       draggable
@@ -123,7 +47,7 @@ function ContentTemplateRow({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-4 flex items-start justify-between gap-4 text-left"
+        className="row-hover w-full px-4 py-4 flex items-start justify-between gap-4 text-left"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -205,22 +129,6 @@ function ContentTemplateRow({
             />
           </div>
 
-          <AIReferenceChecklist
-            options={referenceOptions}
-            selectedKeys={selectedReferenceKeys}
-            onToggle={(key, checked) => {
-              const nextSelected = checked
-                ? [...selectedReferenceKeys, key]
-                : selectedReferenceKeys.filter((currentKey) => currentKey !== key);
-              onChange({
-                ...template,
-                ai_reference: createStoredAIReferenceSettings(
-                  nextSelected,
-                  referenceOptions.map((option) => option.key),
-                ),
-              });
-            }}
-          />
         </div>
       )}
     </div>
@@ -232,7 +140,6 @@ export default function ContentTemplatesPage() {
   const { user, loading: authLoading } = useAuth();
   const canManageProjectSettings = Boolean(user?.system_permissions?.manage_project_settings);
   const [templates, setTemplates] = useState<ProjectContentTemplate[]>([]);
-  const [globalAssetObjects, setGlobalAssetObjects] = useState<GlobalAssetObject[]>([]);
   const [openTemplateIds, setOpenTemplateIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -250,28 +157,19 @@ export default function ContentTemplatesPage() {
     }
 
     (async () => {
-      const [templatesRes, globalAssetsRes] = await Promise.all([
-        fetch(withBasePath('/api/content-templates')),
-        fetch(withBasePath('/api/global-assets')),
-      ]);
-      if (templatesRes.status === 401 || globalAssetsRes.status === 401) {
+      const res = await fetch(withBasePath('/api/content-templates'));
+      if (res.status === 401) {
         router.push(withBasePath('/login'));
         return;
       }
-      if (templatesRes.status === 403 || globalAssetsRes.status === 403) {
+      if (res.status === 403) {
         router.push(withBasePath('/settings'));
         return;
       }
-      const [payload, globalAssetsPayload] = await Promise.all([
-        templatesRes.json(),
-        globalAssetsRes.json(),
-      ]);
-      if (!templatesRes.ok || !globalAssetsRes.ok) {
-        return;
-      }
+      const payload = await res.json();
+      if (!res.ok) return;
       const nextTemplates = Array.isArray(payload.content_templates) ? payload.content_templates : [];
       setTemplates(nextTemplates);
-      setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects : []);
       setOpenTemplateIds((current) => current.length > 0 ? current : nextTemplates.slice(0, 1).map((template: ProjectContentTemplate) => template.id));
     })();
   }, [authLoading, router, user]);
@@ -368,7 +266,6 @@ export default function ContentTemplatesPage() {
             template={template}
             expanded={openTemplateIds.includes(template.id)}
             dragging={draggingIndex === index}
-            referenceOptions={getCommonAIReferenceOptions(globalAssetObjects)}
             onDragStart={() => setDraggingIndex(index)}
             onDrop={() => {
               if (draggingIndex === null || draggingIndex === index) return;

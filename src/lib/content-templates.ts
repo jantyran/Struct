@@ -1,5 +1,4 @@
 import type { ProjectContentTemplate } from '@/types';
-import { createEmptyAIReferenceSettings, normalizeAIReferenceSettings } from '@/lib/ai/reference-sources';
 
 export const CONTENT_CHANNEL_OPTIONS = [
   'X',
@@ -126,7 +125,6 @@ function normalizeContentTemplate(template: Partial<ProjectContentTemplate>, ind
     mandatory_elements: template.mandatory_elements?.trim() || '',
     example_structure: template.example_structure?.trim() || '',
     instruction: template.instruction?.trim() || 'このプロジェクト向けのコンテンツを生成してください。',
-    ai_reference: normalizeAIReferenceSettings(template.ai_reference ?? createEmptyAIReferenceSettings()),
   };
 }
 
@@ -161,7 +159,6 @@ export function createContentTemplate(seed: Partial<ProjectContentTemplate> = {}
       mandatory_elements: seed.mandatory_elements || '',
       example_structure: seed.example_structure || '',
       instruction: seed.instruction || 'このプロジェクト向けのコンテンツを生成してください。',
-      ai_reference: seed.ai_reference || createEmptyAIReferenceSettings(),
     },
     0
   );

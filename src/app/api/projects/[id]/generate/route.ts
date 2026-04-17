@@ -11,7 +11,7 @@ import { normalizeContentTemplatesRow } from '@/lib/content-templates';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { requireProjectPermission } from '@/lib/permissions';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
-import { normalizeSelectedAIReferenceKeys, resolveProjectTypeReferenceSelection, getProjectReferenceOptionKeys } from '@/lib/ai/reference-sources';
+import { normalizeSelectedAIReferenceKeys, getProjectReferenceOptionKeys } from '@/lib/ai/reference-sources';
 
 interface Params { params: { id: string } }
 
@@ -78,11 +78,8 @@ export async function POST(request: Request, { params }: Params) {
       );
       if (!contentTemplate) continue;
 
-      const resolvedReferenceSettings = currentProjectType
-        ? resolveProjectTypeReferenceSelection(currentProjectType, contentTemplate, typedGlobal.objects)
-        : contentTemplate.ai_reference;
       const selectedSourceKeys = normalizeSelectedAIReferenceKeys(
-        resolvedReferenceSettings,
+        currentProjectType?.ai_reference,
         getProjectReferenceOptionKeys(typedProject, typedGlobal.objects),
       );
       const context = buildProjectContext(typedProject, typedGlobal, { selectedSourceKeys });

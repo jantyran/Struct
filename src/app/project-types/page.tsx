@@ -12,7 +12,6 @@ import {
   createStoredAIReferenceSettings,
   getProjectTypeAIReferenceOptions,
   normalizeSelectedAIReferenceKeys,
-  resolveProjectTypeReferenceSelection,
 } from '@/lib/ai/reference-sources';
 
 function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
@@ -62,7 +61,7 @@ type PlacementDragState = {
   sourceIndex: number;
 };
 
-type DefinitionPanelKey = 'basic' | 'phases' | 'sections' | 'fields' | 'content';
+type DefinitionPanelKey = 'basic' | 'phases' | 'sections' | 'fields' | 'ai_reference' | 'content';
 
 function createSectionItem(fieldId: string, layout: FieldLayout = 'half', kind: SectionItemKind = 'field'): SectionFieldPlacement {
   return {
@@ -80,21 +79,16 @@ function widgetFieldId(kind: SectionItemKind): string {
 
 function ProjectAIReferenceChecklist({
   definition,
-  template,
   globalAssetObjects,
   onChange,
 }: {
   definition: ProjectTypeDefinition;
-  template: ProjectContentTemplate;
   globalAssetObjects: GlobalAssetObject[];
-  onChange: (settings: ProjectTypeDefinition['ai_reference_overrides']) => void;
+  onChange: (settings: ProjectTypeDefinition['ai_reference']) => void;
 }) {
   const options = getProjectTypeAIReferenceOptions(definition, globalAssetObjects);
   const availableKeys = options.map((option) => option.key);
-  const selectedKeys = normalizeSelectedAIReferenceKeys(
-    resolveProjectTypeReferenceSelection(definition, template, globalAssetObjects),
-    availableKeys,
-  );
+  const selectedKeys = normalizeSelectedAIReferenceKeys(definition.ai_reference, availableKeys);
   const selectedSet = new Set(selectedKeys);
   const grouped = {
     base: options.filter((option) => option.group === 'base'),
@@ -111,28 +105,21 @@ function ProjectAIReferenceChecklist({
     const nextSelected = checked
       ? [...selectedKeys, key]
       : selectedKeys.filter((currentKey) => currentKey !== key);
-    onChange({
-      ...(definition.ai_reference_overrides ?? {}),
-      [template.id]: createStoredAIReferenceSettings(nextSelected, availableKeys),
-    });
+    onChange(createStoredAIReferenceSettings(nextSelected, availableKeys));
   }
 
   return (
-    <div className="mt-3 rounded-md border p-4 space-y-4" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(248,251,253,0.7)' }}>
-      <div>
-        <p className="text-sm font-semibold">AI参照設定</p>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-          この種別で {template.name} を生成するときに AI が参照してよい情報です。新しい項目は自動でオンになります。
-        </p>
-      </div>
-
+    <div className="space-y-4">
+      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        この種別でコンテンツを生成するとき、AIが参照してよい情報源を選択します。新しく追加された項目は自動でオンになります。
+      </p>
       {sections
         .filter(([, items]) => items.length > 0)
         .map(([label, items]) => (
           <div key={label} className="space-y-2">
             <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</p>
             {items.map((option) => (
-              <label key={option.key} className="flex items-start gap-3 text-sm">
+              <label key={option.key} className="flex items-start gap-3 text-sm cursor-pointer">
                 <input
                   type="checkbox"
                   checked={selectedSet.has(option.key)}
@@ -971,7 +958,7 @@ function DefinitionAccordionSection({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full p-4 flex items-center justify-between gap-4 text-left"
+        className="row-hover w-full p-4 flex items-center justify-between gap-4 text-left rounded-md"
       >
         <div className="min-w-0">
           <h2 className="section-title">{title}</h2>
@@ -1260,7 +1247,7 @@ export default function ProjectTypesPage() {
           <section key={definition.id} className="card overflow-hidden">
             <button
               onClick={() => toggleDefinition(definition.id)}
-              className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left border-b"
+              className="row-hover w-full px-5 py-4 flex items-center justify-between gap-4 text-left border-b"
               style={{ borderColor: 'var(--border)' }}
             >
               <div className="min-w-0 flex-1">
@@ -1817,6 +1804,22 @@ export default function ProjectTypesPage() {
                 </DefinitionAccordionSection>
 
                 <DefinitionAccordionSection
+                  title="AI参照設定"
+                  description="この種別でコンテンツを生成するとき、AIが参照する情報源を設定します。全コンテンツテンプレートに共通で適用されます。"
+                  open={(openDefinitionPanels[definition.id] ?? []).includes('ai_reference')}
+                  onToggle={() => toggleDefinitionPanel(definition.id, 'ai_reference')}
+                >
+                  <ProjectAIReferenceChecklist
+                    definition={definition}
+                    globalAssetObjects={globalAssetObjects}
+                    onChange={(nextAIReference) => updateDefinition(index, {
+                      ...definition,
+                      ai_reference: nextAIReference,
+                    })}
+                  />
+                </DefinitionAccordionSection>
+
+                <DefinitionAccordionSection
                   title="生成コンテンツ設定"
                   description="この種別で使用する生成コンテンツを、別管理のコンテンツ設定から選択します。"
                   open={(openDefinitionPanels[definition.id] ?? []).includes('content')}
@@ -1827,36 +1830,23 @@ export default function ProjectTypesPage() {
                     <div className="text-sm" style={{ color: 'var(--text-muted)' }}>生成コンテンツ設定に登録された定義がありません。</div>
                   ) : (
                     contentTemplates.map((template) => (
-                      <div key={template.id} className="rounded-md border p-3" style={{ borderColor: 'var(--border)' }}>
-                        <label className="flex items-start gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={definition.content_template_ids.includes(template.id)}
-                            onChange={(e) => updateDefinition(index, {
-                              ...definition,
-                              content_template_ids: e.target.checked
-                                ? [...definition.content_template_ids, template.id]
-                                : definition.content_template_ids.filter((id) => id !== template.id),
-                            })}
-                            className="mt-1 accent-violet-500"
-                          />
-                          <div>
-                            <p className="text-sm font-medium">{template.name}</p>
-                            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{template.instruction}</p>
-                          </div>
-                        </label>
-                        {definition.content_template_ids.includes(template.id) && (
-                          <ProjectAIReferenceChecklist
-                            definition={definition}
-                            template={template}
-                            globalAssetObjects={globalAssetObjects}
-                            onChange={(nextOverrides) => updateDefinition(index, {
-                              ...definition,
-                              ai_reference_overrides: nextOverrides,
-                            })}
-                          />
-                        )}
-                      </div>
+                      <label key={template.id} className="row-hover flex items-start gap-3 rounded-md border p-3" style={{ borderColor: 'var(--border)' }}>
+                        <input
+                          type="checkbox"
+                          checked={definition.content_template_ids.includes(template.id)}
+                          onChange={(e) => updateDefinition(index, {
+                            ...definition,
+                            content_template_ids: e.target.checked
+                              ? [...definition.content_template_ids, template.id]
+                              : definition.content_template_ids.filter((id) => id !== template.id),
+                          })}
+                          className="mt-1 accent-violet-500 shrink-0"
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{template.name}</p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{template.instruction}</p>
+                        </div>
+                      </label>
                     ))
                   )}
                 </DefinitionAccordionSection>

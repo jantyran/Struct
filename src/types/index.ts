@@ -91,7 +91,6 @@ export interface ProjectContentTemplate {
   mandatory_elements: string;
   example_structure: string;
   instruction: string;
-  ai_reference?: AIReferenceSettings;
 }
 
 export interface ProjectTypeDefinition {
@@ -105,7 +104,7 @@ export interface ProjectTypeDefinition {
   /** 組み込み + カスタムフィールドテンプレートを統合管理 */
   field_templates: ProjectFieldTemplate[];
   content_template_ids: string[];
-  ai_reference_overrides?: Record<string, AIReferenceSettings>;
+  ai_reference?: AIReferenceSettings;
   is_default?: boolean;
 }
 

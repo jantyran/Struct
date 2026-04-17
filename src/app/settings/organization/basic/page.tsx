@@ -162,11 +162,17 @@ export default function OrganizationBasicPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="field-label">Organization ID</label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="field-label !mb-0">Organization ID</label>
+              <span className="badge-readonly">読み取り専用</span>
+            </div>
             <input className="field-input" value={organization.id} disabled />
           </div>
           <div>
-            <label className="field-label">Slug</label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="field-label !mb-0">Slug</label>
+              <span className="badge-readonly">読み取り専用</span>
+            </div>
             <input className="field-input" value={organization.slug} disabled />
           </div>
         </div>

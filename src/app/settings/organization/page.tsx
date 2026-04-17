@@ -109,7 +109,7 @@ type SectionKey =
 
 function MetaItem({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+    <div className="surface-read">
       <p className="text-[11px] uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>{label}</p>
       <p className="text-sm font-medium mt-1 break-all">{value}</p>
     </div>
@@ -138,7 +138,7 @@ function SectionBlock({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left border-b"
+        className="row-hover w-full px-5 py-4 flex items-center justify-between gap-4 text-left border-b"
         style={{ borderColor: open ? 'var(--border)' : 'transparent' }}
       >
         <div className="min-w-0">
@@ -379,7 +379,7 @@ export default function OrganizationOverviewPage() {
           <MetaItem label="通貨ロケール" value={overview.organization.currency_locale || 'ja-JP'} />
         </div>
         {(overview.organization.address_street || overview.organization.address_city || overview.organization.address_state || overview.organization.address_postal_code || overview.organization.address_country) && (
-          <div className="mt-4 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+          <div className="mt-4 surface-read">
             <p className="text-[11px] uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>住所</p>
             <p className="text-sm mt-2">
               {[
