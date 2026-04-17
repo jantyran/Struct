@@ -262,3 +262,31 @@ body {
 .md-body strong { font-weight: 700; }
 .md-body em { font-style: italic; }
 .md-body del { text-decoration: line-through; color: var(--text-muted); }
+
+/* ============================================================
+   Compact mode overrides  [data-compact] on <html>
+   ============================================================ */
+html[data-compact] .card { border-radius: 0.875rem; }
+html[data-compact] .card.p-5 { padding: 0.875rem; }
+html[data-compact] .card.p-4 { padding: 0.625rem 0.875rem; }
+html[data-compact] .card.p-6 { padding: 1rem; }
+html[data-compact] .field-section-card { padding: 0.25rem 0; }
+html[data-compact] .btn-primary,
+html[data-compact] .btn-secondary { padding: 0.3rem 0.875rem; }
+html[data-compact] section.card { gap: 0.75rem; }
+html[data-compact] .space-y-6 > * + * { margin-top: 0.875rem; }
+html[data-compact] .space-y-5 > * + * { margin-top: 0.875rem; }
+html[data-compact] .space-y-4 > * + * { margin-top: 0.625rem; }
+
+/* ============================================================
+   Dynamic accent — btn-primary shadow uses --btn-primary-shadow
+   ============================================================ */
+.btn-primary {
+  box-shadow: var(--btn-primary-shadow, 0 14px 28px rgba(15, 154, 177, 0.24));
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
+}
