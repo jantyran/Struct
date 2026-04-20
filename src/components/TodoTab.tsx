@@ -578,18 +578,16 @@ function GanttView({
     [todos]
   );
 
-  if (datedTodos.length === 0) {
-    return (
-      <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-        <p className="text-2xl mb-2">📅</p>
-        <p className="text-sm">開始日または期日が設定されたタスクがありません</p>
-        <p className="text-xs mt-1">リストビューでタスクに日付を設定してください</p>
-      </div>
-    );
-  }
-
   // 日付範囲
   const { minDateBase, maxDateBase, totalDays } = useMemo(() => {
+    if (datedTodos.length === 0) {
+      const today = new Date();
+      return {
+        minDateBase: today,
+        maxDateBase: today,
+        totalDays: 1,
+      };
+    }
     const dates = datedTodos.flatMap(t => [t.start_date, t.due_date].filter(Boolean) as string[]);
     const min = new Date(dates.reduce((a, b) => a < b ? a : b));
     const max = new Date(dates.reduce((a, b) => a > b ? a : b));
@@ -742,6 +740,16 @@ function GanttView({
 
   // バーの最小幅（1日分のpx）
   const minBarW = scale === 'day' ? SCALE_DAY_W : scale === 'week' ? SCALE_WEEK_W / 7 : SCALE_WEEK5_WEEKDAY_W;
+
+  if (datedTodos.length === 0) {
+    return (
+      <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-2xl mb-2">📅</p>
+        <p className="text-sm">開始日または期日が設定されたタスクがありません</p>
+        <p className="text-xs mt-1">リストビューでタスクに日付を設定してください</p>
+      </div>
+    );
+  }
 
   return (
     <div>

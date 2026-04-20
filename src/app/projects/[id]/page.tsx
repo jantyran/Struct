@@ -843,6 +843,24 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     })();
   }, [authLoading, user, loadProject, router, checkSession]);
 
+  useEffect(() => {
+    setAssets([]);
+    setAssetsLoaded(false);
+    setAssetsLoading(false);
+    setTodos([]);
+    setTodosLoaded(false);
+    setTodosLoading(false);
+    setNotes([]);
+    setNotesLoaded(false);
+    setNoteLoading(false);
+    setNoteEditingId(null);
+    setNoteDraft({ title: '', body: '' });
+    setNoteCreating(false);
+    setAssetDirtyMap({});
+    setSuggestions([]);
+    setAiError('');
+  }, [id]);
+
   const currentProjectType = useMemo(
     () => projectTypes.find((definition) => definition.key === project?.type),
     [projectTypes, project?.type]
