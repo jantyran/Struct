@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { generateText } from '@/lib/ai/client';
 import {
-  buildProjectContext,
   buildCompletionPrompt,
   parseCompletionResponse,
   SYSTEM_PROMPT,
@@ -11,6 +10,7 @@ import { requireSession } from '@/lib/auth';
 import type { ProjectWithFields, GlobalAssets } from '@/types';
 import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 import { normalizeAISettingsRow } from '@/lib/ai/settings';
+import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { requireProjectPermission } from '@/lib/permissions';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
@@ -47,18 +47,25 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
+    const notes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];
+    const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as any[];
 
     const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
+    const projectTypes = normalizeProjectTypeDefinitionsRow(globalAssetsRow);
+    const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
 
     const typedProject: ProjectWithFields = {
       ...project,
       custom_fields: fields.map(f => ({
         ...f,
+        template_id: f.template_id || currentProjectType?.field_templates.find((ft: { key: string; id: string }) => ft.key === f.key)?.id,
         options: f.options || '{}',
         value: f.value || '',
         is_builtin: f.is_builtin ?? 0,
         section: f.section ?? '',
       })),
+      project_notes: notes,
+      generated_assets: generatedAssets,
       cloned_from: project.cloned_from,
     };
 
@@ -77,7 +84,7 @@ export async function POST(req: Request, { params }: Params) {
       : [];
 
     const prompt = buildCompletionPrompt(typedProject, typedGlobal, emptyFields, additionalInstruction, referenceNotes);
-    const raw = await generateText(prompt, SYSTEM_PROMPT, 2048, aiSettings);
+    const raw = await generateText(prompt, SYSTEM_PROMPT, 4096, aiSettings);
     const suggestions = parseCompletionResponse(raw);
 
     return NextResponse.json({ suggestions, raw_response: raw });

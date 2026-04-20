@@ -178,10 +178,13 @@ ${additionalSection}
 }
 
 export function parseCompletionResponse(raw: string): CompletionSuggestion[] {
-  const match = raw.match(/```json\s*([\s\S]*?)\s*```/);
-  if (!match) return [];
+  // ```json ... ``` を優先、次に ``` ... ```、最後に [ ... ] を直接探す
+  const jsonBlock = raw.match(/```json\s*([\s\S]*?)\s*```/) ?? raw.match(/```\s*(\[[\s\S]*?\])\s*```/);
+  const candidate = jsonBlock ? jsonBlock[1] : (raw.match(/(\[[\s\S]*\])/) ?? [])[1];
+  if (!candidate) return [];
   try {
-    return JSON.parse(match[1]) as CompletionSuggestion[];
+    const parsed = JSON.parse(candidate);
+    return Array.isArray(parsed) ? parsed as CompletionSuggestion[] : [];
   } catch {
     return [];
   }
