@@ -97,7 +97,7 @@ function ProjectAIReferenceChecklist({
   };
   const sections: Array<[string, typeof grouped.base]> = [
     ['共通情報', grouped.base],
-    ['Global Assets', grouped.globalAssets],
+    ['マスターデータ', grouped.globalAssets],
     ['プロジェクト項目', grouped.fields],
   ];
 

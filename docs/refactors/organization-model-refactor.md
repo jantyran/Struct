@@ -242,7 +242,7 @@ organizations
 ### 設定
 
 - `organization_settings.organization_id` が所属組織
-- Global Assets / Project Types / Content Templates / AI Settings はこの組織に属する
+- マスターデータ / Project Types / Content Templates / AI Settings はこの組織に属する
 
 ## 移行方針
 

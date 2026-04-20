@@ -1972,7 +1972,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
             <p className="text-xs mb-2 section-title">AIへの参照スコープ</p>
             <ul className="text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
-              <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> Global Assets</li>
+              <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> マスターデータ</li>
               <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> プロジェクトコア情報</li>
               <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.length > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                 {project.custom_fields.length > 0 ? '✓' : '−'}

@@ -84,7 +84,7 @@ export function getCommonAIReferenceOptions(globalObjects: GlobalAssetObject[]):
     ...globalObjects.map((object) => ({
       key: globalObjectReferenceKey(object.id),
       label: object.name,
-      description: object.description || 'Global Assets のオブジェクト',
+      description: object.description || 'マスターデータのオブジェクト',
       group: 'global_assets' as const,
     })),
   ];

@@ -4,7 +4,7 @@ import { withBasePath } from '@/lib/paths';
 const steps = [
   {
     title: '1. 組織の前提を整える',
-    body: '最初に組織基本設定、Global Assets、ロール・権限、AI設定を整えます。共通で使う定義を先に揃えると、後続の運用が安定します。',
+    body: '最初に組織基本設定、マスターデータ、ロール・権限、AI設定を整えます。共通で使う定義を先に揃えると、後続の運用が安定します。',
   },
   {
     title: '2. プロジェクト設定を定義する',
@@ -56,7 +56,7 @@ export default function GuidePage() {
           <h2 className="text-base font-semibold">最初に触るとよい設定</h2>
           <div className="mt-2 text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>
             <p>・組織基本設定: 組織名、タイムゾーン、ロケールなどの前提</p>
-            <p>・Global Assets: 会社情報、ブランド、共通マスタ</p>
+            <p>・マスターデータ: 会社情報、ブランド、共通マスタ</p>
             <p>・プロジェクト設定: 項目、セクション、AI参照範囲</p>
             <p>・ロールと権限: 誰が何を見て変更できるか</p>
           </div>

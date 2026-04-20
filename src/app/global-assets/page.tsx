@@ -182,9 +182,9 @@ export default function GlobalAssetsPage() {
       <div className="p-6 max-w-6xl mx-auto">
         <div className="card p-6 space-y-4">
           <div>
-            <h1 className="text-xl font-bold">Global Assets</h1>
+            <h1 className="text-xl font-bold">マスターデータ</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-              Global Assets 管理権限がないため、このページは表示できません。
+              マスターデータ管理権限がないため、このページは表示できません。
             </p>
           </div>
           <div>

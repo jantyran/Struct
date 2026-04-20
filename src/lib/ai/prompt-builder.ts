@@ -57,7 +57,7 @@ export function buildProjectContext(project: ProjectWithFields, globalAssets: Gl
   const companyRecord = selectedGlobalObjects.find(object => object.key === 'company-profile')?.records[0];
   const brandRecord = selectedGlobalObjects.find(object => object.key === 'brand-guidelines')?.records[0];
   const objectsText = selectedGlobalObjects.length > 0
-    ? '\n\n【Global Asset Objects】\n' + selectedGlobalObjects.map((object) => {
+    ? '\n\n【マスターデータ】\n' + selectedGlobalObjects.map((object) => {
         const recordsText = object.records.length > 0
           ? object.records.map((record, index) => {
               const values = object.fields.map((field) =>
@@ -84,7 +84,7 @@ export function buildProjectContext(project: ProjectWithFields, globalAssets: Gl
 
   return `
 ============================
-会社・ブランド情報（Global Assets）
+会社・ブランド情報（マスターデータ）
 ============================
 ${selectedGlobalObjects.length > 0 ? `会社名: ${companyRecord?.values.company_name || '（未設定）'}
 会社概要: ${companyRecord?.values.company_description || '（未設定）'}

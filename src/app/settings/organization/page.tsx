@@ -409,7 +409,7 @@ export default function OrganizationOverviewPage() {
       </SectionBlock>
 
       <SectionBlock
-        title="Global Assets"
+        title="マスターデータ"
         subtitle="オブジェクト一覧"
         open={openSections.global_assets}
         onToggle={() => toggleSection('global_assets')}
@@ -444,7 +444,7 @@ export default function OrganizationOverviewPage() {
             </div>
           ))}
           {filtered.globalAssets.length === 0 && (
-            <div className="py-4 text-sm" style={{ color: 'var(--text-muted)' }}>該当する Global Assets はありません。</div>
+            <div className="py-4 text-sm" style={{ color: 'var(--text-muted)' }}>該当するマスターデータはありません。</div>
           )}
         </div>
       </SectionBlock>

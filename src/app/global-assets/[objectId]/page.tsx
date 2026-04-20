@@ -417,9 +417,9 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
       <div className="p-6 max-w-6xl mx-auto">
         <div className="card p-6 space-y-4">
           <div>
-            <h1 className="text-xl font-bold">Global Assets</h1>
+            <h1 className="text-xl font-bold">マスターデータ</h1>
             <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-              Global Assets 管理権限がないため、このページは表示できません。
+              マスターデータ管理権限がないため、このページは表示できません。
             </p>
           </div>
           <div>
@@ -447,7 +447,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Link href={withBasePath('/global-assets')} className="text-sm text-gray-400 hover:text-gray-200">← Global Assets 一覧へ戻る</Link>
+          <Link href={withBasePath('/global-assets')} className="text-sm text-gray-400 hover:text-gray-200">← マスターデータ 一覧へ戻る</Link>
           <h1 className="text-2xl font-bold mt-2">{object.name}</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
             このオブジェクトの設定とレコードを管理します。

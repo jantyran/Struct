@@ -9,7 +9,7 @@ Struct の設定を「ユーザーごとの設定」ではなく「組織アカ�
 - AI 設定
 - 生成コンテンツ設定
 - プロジェクト設定
-- Global Assets
+- マスターデータ
 - それらを参照する生成・補完・プロジェクト作成処理
 
 非対象:
@@ -76,7 +76,7 @@ Struct の設定を「ユーザーごとの設定」ではなく「組織アカ�
 
 更新権限:
 
-- Global Assets: `manage_global_assets`
+- マスターデータ: `manage_global_assets`
 - AI 設定: `manage_ai_settings`
 - プロジェクト設定 / 生成コンテンツ設定: `manage_project_settings`
 

@@ -34,7 +34,7 @@ export async function PUT(request: Request) {
   try {
     const db = getDb();
     if (!hasSystemPermission(db, user.id, 'manage_global_assets')) {
-      return NextResponse.json({ error: 'Global Assets 管理権限がありません' }, { status: 403 });
+      return NextResponse.json({ error: 'マスターデータ管理権限がありません' }, { status: 403 });
     }
     const body = normalizeGlobalAssets(await request.json());
     const legacy = deriveLegacyGlobalAssetColumns(body.objects);
