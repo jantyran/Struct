@@ -54,6 +54,9 @@ export default function SignupPage() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-black">
       <div className="card w-full max-w-md p-8 shadow-2xl">
         <h1 className="text-2xl font-bold mb-6 text-center text-violet-300">Struct アカウント作成</h1>
+        <p className="text-sm text-center mb-6 leading-6" style={{ color: 'var(--text-secondary)' }}>
+          プロジェクト・施策管理ツールとして使い始めるための組織アカウントを作成します。
+        </p>
         
         <form onSubmit={handleSignup} className="space-y-4">
           <div>

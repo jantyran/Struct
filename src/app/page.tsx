@@ -427,7 +427,7 @@ export default function Dashboard() {
           <div>
             <p className="section-title mb-2">Workspace Overview</p>
             <h1 className="text-2xl font-bold tracking-tight">ダッシュボード</h1>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>マーケティング施策の構造を定義・資産化する</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>プロジェクトと施策の情報を構造化して管理する</p>
           </div>
           <button onClick={() => setShowNew(true)} className="btn-primary">+ 新規プロジェクト</button>
         </div>

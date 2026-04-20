@@ -37,7 +37,7 @@ function Sidebar() {
         <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--accent)' }}>
           Struct
         </span>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>MKTキャンペーン運用デスク</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>プロジェクト・施策管理ツール</p>
       </div>
 
       {/* ナビ */}
@@ -69,7 +69,7 @@ function Sidebar() {
 
       {!user && !loading && (
         <div className="p-4 border-t text-xs leading-5" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-          Struct は、マーケティングキャンペーンの進行管理、情報集約、全体整理をひとつにまとめるためのアプリです。
+          Struct は、プロジェクトと施策の情報整理、進行管理、実行支援をひとつにまとめる管理ツールです。
         </div>
       )}
 
@@ -113,7 +113,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <head>
-        <title>Struct — MKTキャンペーン運用デスク</title>
+        <title>Struct — プロジェクト・施策管理ツール</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="flex h-screen overflow-hidden">

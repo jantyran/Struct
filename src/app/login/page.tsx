@@ -48,6 +48,9 @@ export default function LoginPage() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-black">
       <div className="card w-full max-w-md p-8 shadow-2xl">
         <h1 className="text-2xl font-bold mb-6 text-center text-violet-300">Struct にログイン</h1>
+        <p className="text-sm text-center mb-6 leading-6" style={{ color: 'var(--text-secondary)' }}>
+          プロジェクトと施策の情報、タスク、成果物をひとつの画面で管理します。
+        </p>
         
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
