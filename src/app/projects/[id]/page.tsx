@@ -819,6 +819,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [generating, setGenerating] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
+  const [completionAdditionalInstruction, setCompletionAdditionalInstruction] = useState('');
+  const [completionSelectedNoteIds, setCompletionSelectedNoteIds] = useState<Set<string>>(new Set());
   const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
@@ -1138,7 +1140,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     await save(project);
     setCompleting(true);
     try {
-      const res = await fetch(withBasePath(`/api/projects/${id}/complete`), { method: 'POST' });
+      const res = await fetch(withBasePath(`/api/projects/${id}/complete`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          additionalInstruction: completionAdditionalInstruction,
+          noteIds: Array.from(completionSelectedNoteIds),
+        }),
+      });
       const data = await res.json() as { suggestions: CompletionSuggestion[]; error?: string };
       if (!res.ok) {
         setAiError(data.error || 'AI補完に失敗しました。');
@@ -1205,7 +1214,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     if (!project) return;
     if (tab === 'assets') void loadAssets();
     if (tab === 'tasks') void loadTodos();
-    if (tab === 'notes' || hasInlineNoteWidget) void loadNotes();
+    if (tab === 'notes' || hasInlineNoteWidget || canViewNotes) void loadNotes();
   }, [project, tab, hasInlineNoteWidget, loadAssets, loadTodos, loadNotes]);
 
   async function createNote() {
@@ -2053,9 +2062,46 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             />
           </div>
 
-          {canGenerateContent && <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
-            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>項目自動補完</p>
-            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力項目の値をAIが推測します</p>
+          {canGenerateContent && <div className="border-t pt-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>項目自動補完</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力項目の値をAIが推測します</p>
+
+            <div>
+              <p className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
+              <textarea
+                className="field-input text-xs"
+                rows={3}
+                value={completionAdditionalInstruction}
+                onChange={(e) => setCompletionAdditionalInstruction(e.target.value)}
+                placeholder="補完時に考慮してほしい条件や背景を入力"
+              />
+            </div>
+
+            {canViewNotes && notes.length > 0 && (
+              <div>
+                <p className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>参照するノート（任意）</p>
+                <div className="space-y-1 max-h-36 overflow-y-auto">
+                  {notes.map((note) => (
+                    <label key={note.id} className="flex items-start gap-2 cursor-pointer text-xs py-1">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 shrink-0"
+                        checked={completionSelectedNoteIds.has(note.id)}
+                        onChange={(e) => {
+                          setCompletionSelectedNoteIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(note.id); else next.delete(note.id);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span className="leading-tight" style={{ color: 'var(--text-primary)' }}>{note.title || '無題'}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button onClick={complete} disabled={completing} className="btn-secondary w-full justify-center text-sm">
               {completing ? (
                 <span className="flex items-center gap-2">

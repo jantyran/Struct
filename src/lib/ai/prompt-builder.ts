@@ -1,4 +1,4 @@
-import type { GlobalAssets, ProjectWithFields, CustomField, CompletionSuggestion, ProjectContentTemplate, GlobalAssetRecord } from '@/types';
+import type { GlobalAssets, ProjectWithFields, CustomField, CompletionSuggestion, ProjectContentTemplate, GlobalAssetRecord, ProjectNote } from '@/types';
 import { customFieldReferenceKey, globalObjectReferenceKey } from '@/lib/ai/reference-sources';
 
 const SYSTEM_PROMPT = `あなたはプロフェッショナルなマーケティングストラテジストです。
@@ -135,18 +135,32 @@ ${additionalInstruction ? `\n## 実行時の追加指示\n${additionalInstructio
 - 出力末尾に [⚠️ 整合性チェック] セクションを置き、使用した日付・数字・スペックの根拠を箇条書きで列挙すること`;
 }
 
-export function buildCompletionPrompt(project: ProjectWithFields, globalAssets: GlobalAssets, emptyFields: CustomField[]): string {
+export function buildCompletionPrompt(
+  project: ProjectWithFields,
+  globalAssets: GlobalAssets,
+  emptyFields: CustomField[],
+  additionalInstruction = '',
+  referenceNotes: ProjectNote[] = [],
+): string {
   const context = buildProjectContext(project, globalAssets);
   const fieldList = emptyFields.map(f => `- id: ${f.id}, ラベル: 「${f.label}」, 種別: ${f.type}`).join('\n');
+
+  const notesSection = referenceNotes.length > 0
+    ? `\n## 参照ノート\n${referenceNotes.map((n, i) => `### ${i + 1}. ${n.title || '無題'}\n${n.body || '（本文なし）'}`).join('\n\n')}\n`
+    : '';
+
+  const additionalSection = additionalInstruction.trim()
+    ? `\n## 追加指示\n${additionalInstruction.trim()}\n`
+    : '';
 
   return `
 以下のプロジェクト情報を分析し、未入力のフィールドに対して論理的に推測できる値を提案してください。
 
 ${context}
-
+${notesSection}
 ## 補完対象フィールド（未入力）
 ${fieldList}
-
+${additionalSection}
 ## 出力形式（必ずJSON配列で返すこと）
 
 \`\`\`json

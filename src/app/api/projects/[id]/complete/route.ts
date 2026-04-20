@@ -16,13 +16,21 @@ import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
 interface Params { params: { id: string } }
 
-export async function POST(_req: Request, { params }: Params) {
+export async function POST(req: Request, { params }: Params) {
   let user;
   try {
     user = await requireSession();
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  let additionalInstruction = '';
+  let noteIds: string[] = [];
+  try {
+    const body = await req.json() as { additionalInstruction?: string; noteIds?: string[] };
+    additionalInstruction = body.additionalInstruction ?? '';
+    noteIds = body.noteIds ?? [];
+  } catch { /* body なし or JSON パース失敗は無視 */ }
 
   try {
     const db = getDb();
@@ -62,7 +70,13 @@ export async function POST(_req: Request, { params }: Params) {
       return NextResponse.json({ suggestions: [], message: '補完対象フィールドがありません' });
     }
 
-    const prompt = buildCompletionPrompt(typedProject, typedGlobal, emptyFields);
+    const referenceNotes = noteIds.length > 0
+      ? (db.prepare(
+          `SELECT * FROM project_notes WHERE project_id = ? AND id IN (${noteIds.map(() => '?').join(',')}) ORDER BY created_at ASC`
+        ).all(params.id, ...noteIds) as any[])
+      : [];
+
+    const prompt = buildCompletionPrompt(typedProject, typedGlobal, emptyFields, additionalInstruction, referenceNotes);
     const raw = await generateText(prompt, SYSTEM_PROMPT, 2048, aiSettings);
     const suggestions = parseCompletionResponse(raw);
 
