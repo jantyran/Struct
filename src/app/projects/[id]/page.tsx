@@ -87,6 +87,61 @@ function buildChildField(childTemplate: ProjectFieldTemplate, state: GroupChildS
   };
 }
 
+// ============================================================
+// 参照レコード詳細モーダル
+// ============================================================
+function RecordDetailModal({
+  record,
+  object,
+  onClose,
+}: {
+  record: GlobalAssetObject['records'][number];
+  object: GlobalAssetObject | undefined;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="card w-full max-w-lg max-h-[80vh] overflow-y-auto p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{object?.name}</p>
+            <h2 className="text-lg font-bold mt-0.5">{record.name}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-xl leading-none px-1.5 py-0.5 rounded hover:bg-slate-100 transition-colors shrink-0"
+            style={{ color: 'var(--text-muted)' }}
+          >✕</button>
+        </div>
+        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+          {(object?.fields ?? []).map((f) => {
+            const value = record.values?.[f.key] ?? '';
+            if (!value) return null;
+            return (
+              <div key={f.key} className="py-3 first:pt-0">
+                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{f.label}</p>
+                {f.type === 'url' ? (
+                  <a href={value} target="_blank" rel="noopener noreferrer"
+                    className="text-sm break-all underline" style={{ color: 'var(--accent)' }}>
+                    {value}
+                  </a>
+                ) : f.type === 'textarea' ? (
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{value}</p>
+                ) : (
+                  <p className="text-sm">{value}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChildFieldValueInput({
   field,
   globalAssetObjects,
@@ -104,9 +159,13 @@ function ChildFieldValueInput({
   const childTemplates = options.children ?? [];
   const groupValue = parseGroupValue(field.value);
   const groupListValue = parseGroupListValue(field.value);
+  const [viewingRecord, setViewingRecord] = useState<GlobalAssetObject['records'][number] | null>(null);
 
   return (
     <div className={field.layout === 'full' ? 'md:col-span-2' : ''}>
+      {viewingRecord && referenceObject && (
+        <RecordDetailModal record={viewingRecord} object={referenceObject} onClose={() => setViewingRecord(null)} />
+      )}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
@@ -121,23 +180,32 @@ function ChildFieldValueInput({
         </div>
 
         {field.type === 'reference' && (
-          <select
-            className="field-input text-xs"
-            value={options.referenceRecordKey || ''}
-            onChange={(e) => {
-              const record = referenceChoices.find((choice) => choice.key === e.target.value);
-              onChange({
-                ...field,
-                value: record?.name || '',
-                options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: e.target.value }),
-              });
-            }}
-          >
-            <option value="">（選択してください）</option>
-            {referenceChoices.map((record) => (
-              <option key={record.id} value={record.key}>{record.name}</option>
-            ))}
-          </select>
+          <div className="flex gap-2 items-center">
+            <select
+              className="field-input text-xs flex-1"
+              value={options.referenceRecordKey || ''}
+              onChange={(e) => {
+                const record = referenceChoices.find((choice) => choice.key === e.target.value);
+                onChange({
+                  ...field,
+                  value: record?.name || '',
+                  options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: e.target.value }),
+                });
+              }}
+            >
+              <option value="">（選択してください）</option>
+              {referenceChoices.map((record) => (
+                <option key={record.id} value={record.key}>{record.name}</option>
+              ))}
+            </select>
+            {options.referenceRecordKey && referenceObject && (
+              <button
+                type="button"
+                className="btn-secondary text-xs px-2.5 py-1 shrink-0"
+                onClick={() => setViewingRecord(referenceChoices.find(r => r.key === options.referenceRecordKey) ?? null)}
+              >詳細</button>
+            )}
+          </div>
         )}
 
         {field.type === 'reference_multi' && (
@@ -171,22 +239,28 @@ function ChildFieldValueInput({
                 selectedReferenceRecords.map((record) => (
                   <div key={record.id} className="flex items-center justify-between rounded-xl border px-3 py-2 text-xs bg-white/70" style={{ borderColor: 'var(--border)' }}>
                     <span>{record.name}</span>
-                    <button
-                      type="button"
-                      className="transition-colors"
-                      style={{ color: '#cc5c6d' }}
-                      onClick={() => {
-                        const nextKeys = (options.referenceRecordKeys ?? []).filter((key) => key !== record.key);
-                        const nextRecords = referenceChoices.filter((choice) => nextKeys.includes(choice.key));
-                        onChange({
-                          ...field,
-                          value: nextRecords.map((choice) => choice.name).join(' / '),
-                          options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
-                        });
-                      }}
-                    >
-                      削除
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="transition-colors"
+                        style={{ color: 'var(--accent)' }}
+                        onClick={() => setViewingRecord(record)}
+                      >詳細</button>
+                      <button
+                        type="button"
+                        className="transition-colors"
+                        style={{ color: '#cc5c6d' }}
+                        onClick={() => {
+                          const nextKeys = (options.referenceRecordKeys ?? []).filter((key) => key !== record.key);
+                          const nextRecords = referenceChoices.filter((choice) => nextKeys.includes(choice.key));
+                          onChange({
+                            ...field,
+                            value: nextRecords.map((choice) => choice.name).join(' / '),
+                            options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
+                          });
+                        }}
+                      >削除</button>
+                    </div>
                   </div>
                 ))
               )}
@@ -211,10 +285,26 @@ function ChildFieldValueInput({
               value={field.value}
               onChange={(e) => onChange({ ...field, value: e.target.value })}
             />
+          ) : field.type === 'url' ? (
+            <div className="flex gap-2">
+              <input
+                className="field-input text-xs flex-1"
+                type="url"
+                value={field.value}
+                onChange={(e) => onChange({ ...field, value: e.target.value })}
+                placeholder="https://"
+              />
+              {field.value && (
+                <a href={field.value} target="_blank" rel="noopener noreferrer"
+                  className="btn-secondary text-xs px-2.5 shrink-0 flex items-center">
+                  ↗
+                </a>
+              )}
+            </div>
           ) : (
             <input
               className="field-input text-xs"
-              type={field.type === 'date' ? 'date' : field.type === 'url' ? 'url' : 'text'}
+              type={field.type === 'date' ? 'date' : 'text'}
               value={field.value}
               onChange={(e) => onChange({ ...field, value: e.target.value })}
             />
@@ -247,9 +337,13 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   const childTemplates = options.children ?? [];
   const groupValue = parseGroupValue(field.value);
   const groupListValue = parseGroupListValue(field.value);
+  const [viewingRecord, setViewingRecord] = useState<GlobalAssetObject['records'][number] | null>(null);
 
   return (
     <div className={`field-section-card ${isInherited ? 'inherited-field' : ''}`}>
+      {viewingRecord && (
+        <RecordDetailModal record={viewingRecord} object={referenceObject} onClose={() => setViewingRecord(null)} />
+      )}
       {isInherited && (
         <div className="flex items-center gap-1.5 text-xs" style={{ color: '#b66a10' }}>
           <span>⚠</span>
@@ -388,23 +482,31 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
         <div className="grid grid-cols-1 gap-2">
           <div>
             <label className="field-label">参照レコード</label>
-            <select
-              className="field-input text-xs"
-              value={options.referenceRecordKey || ''}
-              onChange={(e) => {
-                const record = referenceChoices.find((choice) => choice.key === e.target.value);
-                onChange({
-                  ...field,
-                  value: record?.name || '',
-                  options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: e.target.value }),
-                });
-              }}
-            >
-              <option value="">（選択してください）</option>
-              {referenceChoices.map((record) => (
-                <option key={record.id} value={record.key}>{record.name}</option>
-              ))}
-            </select>
+            <div className="flex gap-2 items-center">
+              <select
+                className="field-input text-xs flex-1"
+                value={options.referenceRecordKey || ''}
+                onChange={(e) => {
+                  const record = referenceChoices.find((choice) => choice.key === e.target.value);
+                  onChange({
+                    ...field,
+                    value: record?.name || '',
+                    options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKey: e.target.value }),
+                  });
+                }}
+              >
+                <option value="">（選択してください）</option>
+                {referenceChoices.map((record) => (
+                  <option key={record.id} value={record.key}>{record.name}</option>
+                ))}
+              </select>
+              {options.referenceRecordKey && (() => {
+                const rec = referenceChoices.find((r) => r.key === options.referenceRecordKey);
+                return rec ? (
+                  <button type="button" className="btn-secondary text-xs px-2 shrink-0" onClick={() => setViewingRecord(rec)}>詳細</button>
+                ) : null;
+              })()}
+            </div>
           </div>
         </div>
       )}
@@ -442,22 +544,25 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
               selectedReferenceRecords.map((record) => (
                 <div key={record.id} className="flex items-center justify-between rounded-xl border px-3 py-2 text-xs bg-white/70" style={{ borderColor: 'var(--border)' }}>
                   <span>{record.name}</span>
-                  <button
-                    type="button"
-                    className="transition-colors"
-                    style={{ color: '#cc5c6d' }}
-                    onClick={() => {
-                      const nextKeys = (options.referenceRecordKeys ?? []).filter((key) => key !== record.key);
-                      const nextRecords = referenceChoices.filter((choice) => nextKeys.includes(choice.key));
-                      onChange({
-                        ...field,
-                        value: nextRecords.map((choice) => choice.name).join(' / '),
-                        options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
-                      });
-                    }}
-                  >
-                    削除
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="btn-secondary text-xs px-2" onClick={() => setViewingRecord(record)}>詳細</button>
+                    <button
+                      type="button"
+                      className="transition-colors"
+                      style={{ color: '#cc5c6d' }}
+                      onClick={() => {
+                        const nextKeys = (options.referenceRecordKeys ?? []).filter((key) => key !== record.key);
+                        const nextRecords = referenceChoices.filter((choice) => nextKeys.includes(choice.key));
+                        onChange({
+                          ...field,
+                          value: nextRecords.map((choice) => choice.name).join(' / '),
+                          options: JSON.stringify({ referenceObjectId: options.referenceObjectId || '', referenceRecordKeys: nextKeys }),
+                        });
+                      }}
+                    >
+                      削除
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -479,6 +584,9 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
           ) : field.type === 'url' ? (
             <div className="flex gap-2">
               <input className="field-input text-xs flex-1" type="url" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} placeholder="https://" />
+              {field.value && (
+                <a href={field.value} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs px-3 shrink-0 flex items-center">↗</a>
+              )}
               <button onClick={onCrawl} disabled={crawling || !field.value} className="btn-secondary text-xs px-3 shrink-0">
                 {crawling ? '取得中...' : 'クロール'}
               </button>
