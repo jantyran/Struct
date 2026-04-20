@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
@@ -701,6 +701,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const { settings: devSettings } = useDevSettings();
   const [project, setProject] = useState<ProjectWithFields | null>(null);
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const [assetsLoading, setAssetsLoading] = useState(false);
   const [projectTypes, setProjectTypes] = useState<ProjectTypeDefinition[]>([]);
   const [globalAssetObjects, setGlobalAssetObjects] = useState<GlobalAssetObject[]>([]);
   const [contentTemplates, setContentTemplates] = useState<ProjectContentTemplate[]>([]);
@@ -719,7 +721,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [aiError, setAiError] = useState('');
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [todosLoaded, setTodosLoaded] = useState(false);
+  const [todosLoading, setTodosLoading] = useState(false);
   const [notes, setNotes] = useState<ProjectNote[]>([]);
+  const [notesLoaded, setNotesLoaded] = useState(false);
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ title: string; body: string }>({ title: '', body: '' });
@@ -732,22 +737,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
   const loadProject = useCallback(async () => {
     setLoadError('');
-    const [projectRes, assetsRes, notesRes, todosRes] = await Promise.all([
-      fetch(withBasePath(`/api/projects/${id}`)),
-      fetch(withBasePath(`/api/projects/${id}/assets`)),
-      fetch(withBasePath(`/api/projects/${id}/notes`)),
-      fetch(withBasePath(`/api/projects/${id}/todos`)),
-    ]);
+    const projectRes = await fetch(withBasePath(`/api/projects/${id}`));
     const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
       fetch(withBasePath('/api/project-types')),
       fetch(withBasePath('/api/global-assets')),
       fetch(withBasePath('/api/content-templates')),
     ]);
-    const [pr, ar, notesData, todosData, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
+    const [pr, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
       projectRes.json(),
-      assetsRes.json(),
-      notesRes.ok ? notesRes.json() : Promise.resolve([]),
-      todosRes.ok ? todosRes.json() : Promise.resolve([]),
       projectTypesRes.json(),
       globalAssetsRes.json(),
       contentTemplatesRes.json(),
@@ -756,32 +753,81 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     if (projectRes.status === 401) {
       setProject(null);
       setAssets([]);
+      setTodos([]);
+      setNotes([]);
       router.push(withBasePath('/login'));
       return;
     }
 
-    if (projectRes.status === 404 || assetsRes.status === 404) {
+    if (projectRes.status === 404) {
       setProject(null);
       setAssets([]);
+      setTodos([]);
+      setNotes([]);
       setLoadError('このプロジェクトは見つからないか、アクセスできません。');
       return;
     }
 
-    if (!projectRes.ok || !assetsRes.ok) {
+    if (!projectRes.ok) {
       setProject(null);
       setAssets([]);
+      setTodos([]);
+      setNotes([]);
       setLoadError('プロジェクトの読み込みに失敗しました。');
       return;
     }
 
     setProject(normalizeProject(pr as ProjectWithFields));
-    setAssets(Array.isArray(ar) ? ar as GeneratedAsset[] : []);
-    setNotes(Array.isArray(notesData) ? notesData as ProjectNote[] : []);
-    setTodos(Array.isArray(todosData) ? todosData as Todo[] : []);
     setProjectTypes(Array.isArray(projectTypesPayload.project_types) ? projectTypesPayload.project_types as ProjectTypeDefinition[] : []);
     setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects as GlobalAssetObject[] : []);
     setContentTemplates(Array.isArray(contentTemplatesPayload.content_templates) ? contentTemplatesPayload.content_templates as ProjectContentTemplate[] : []);
   }, [id, router]);
+
+  const loadAssets = useCallback(async (force = false) => {
+    if (!force && (assetsLoaded || assetsLoading)) return;
+    setAssetsLoading(true);
+    try {
+      const res = await fetch(withBasePath(`/api/projects/${id}/assets`));
+      if (res.status === 401) {
+        router.push(withBasePath('/login'));
+        return;
+      }
+      if (res.status === 404) {
+        setLoadError('このプロジェクトは見つからないか、アクセスできません。');
+        setProject(null);
+        return;
+      }
+      if (!res.ok) return;
+      const data = await res.json();
+      setAssets(Array.isArray(data) ? data as GeneratedAsset[] : []);
+      setAssetsLoaded(true);
+    } finally {
+      setAssetsLoading(false);
+    }
+  }, [assetsLoaded, assetsLoading, id, router]);
+
+  const loadTodos = useCallback(async (force = false) => {
+    if (!force && (todosLoaded || todosLoading)) return;
+    setTodosLoading(true);
+    try {
+      const res = await fetch(withBasePath(`/api/projects/${id}/todos`));
+      if (res.status === 401) {
+        router.push(withBasePath('/login'));
+        return;
+      }
+      if (res.status === 404) {
+        setLoadError('このプロジェクトは見つからないか、アクセスできません。');
+        setProject(null);
+        return;
+      }
+      if (!res.ok) return;
+      const data = await res.json();
+      setTodos(Array.isArray(data) ? data as Todo[] : []);
+      setTodosLoaded(true);
+    } finally {
+      setTodosLoading(false);
+    }
+  }, [todosLoaded, todosLoading, id, router]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -796,6 +842,16 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       loadProject();
     })();
   }, [authLoading, user, loadProject, router, checkSession]);
+
+  const currentProjectType = useMemo(
+    () => projectTypes.find((definition) => definition.key === project?.type),
+    [projectTypes, project?.type]
+  );
+
+  const hasInlineNoteWidget = useMemo(
+    () => (currentProjectType?.sections ?? []).some((section) => section.items.some((item) => (item.kind ?? 'field') === 'note_list')),
+    [currentProjectType]
+  );
 
   useEffect(() => {
     const currentType = projectTypes.find((definition) => definition.key === project?.type);
@@ -903,7 +959,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   }
 
   function updateField(idx: number, f: CustomField) {
-    if (!project) return;
+    if (!project || idx < 0) return;
     const fields = [...project.custom_fields];
     fields[idx] = f;
     setProject({ ...project, custom_fields: fields });
@@ -943,7 +999,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         setAiError(payload.error || 'AI生成に失敗しました。');
         return;
       }
-      await loadProject();
+      await loadAssets(true);
       setTab('assets');
     } finally {
       setGenerating(false);
@@ -996,15 +1052,35 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     router.push(withBasePath('/'));
   }
 
-  async function loadNotes() {
+  const loadNotes = useCallback(async (force = false) => {
+    if (!force && (notesLoaded || noteLoading)) return;
     setNoteLoading(true);
     try {
       const res = await fetch(withBasePath(`/api/projects/${id}/notes`));
-      if (res.ok) setNotes(await res.json());
+      if (res.status === 401) {
+        router.push(withBasePath('/login'));
+        return;
+      }
+      if (res.status === 404) {
+        setLoadError('このプロジェクトは見つからないか、アクセスできません。');
+        setProject(null);
+        return;
+      }
+      if (res.ok) {
+        setNotes(await res.json());
+        setNotesLoaded(true);
+      }
     } finally {
       setNoteLoading(false);
     }
-  }
+  }, [id, noteLoading, notesLoaded, router]);
+
+  useEffect(() => {
+    if (!project) return;
+    if (tab === 'assets') void loadAssets();
+    if (tab === 'tasks') void loadTodos();
+    if (tab === 'notes' || hasInlineNoteWidget) void loadNotes();
+  }, [project, tab, hasInlineNoteWidget, loadAssets, loadTodos, loadNotes]);
 
   async function createNote() {
     if (!noteDraft.title.trim() && !noteDraft.body.trim()) return;
@@ -1081,6 +1157,65 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     return () => document.removeEventListener('click', handleDocumentClick, true);
   }, [hasUnsavedEditors]);
 
+  const allFields = useMemo(() => Array.isArray(project?.custom_fields) ? project.custom_fields : [], [project?.custom_fields]);
+  const inheritedCount = useMemo(() => allFields.filter(f => f.inherited === 1).length, [allFields]);
+  const currentContentTemplates = useMemo(
+    () => contentTemplates.filter((template) => currentProjectType?.content_template_ids.includes(template.id)),
+    [contentTemplates, currentProjectType]
+  );
+  const fieldByTemplateId = useMemo(
+    () => new Map<string, CustomField>(allFields.filter(f => f.template_id).map(f => [f.template_id!, f])),
+    [allFields]
+  );
+  const fieldIndexById = useMemo(
+    () => new Map<string, number>(allFields.map((field, index) => [field.id, index])),
+    [allFields]
+  );
+  const typeLabel = currentProjectType?.name || (project ? PROJECT_TYPE_LABELS[project.type as ProjectType] || project.type : '');
+  const currentPhases = currentProjectType?.phases || [];
+  const currentPhaseIndex = currentPhases.findIndex((phase) => phase.key === project?.phase_key);
+  const assignableUsers = useMemo(() => Array.isArray(project?.assignable_users) ? project.assignable_users : [], [project?.assignable_users]);
+  const currentPermissions = project?.current_permissions;
+  const canManageMembers = Boolean(currentPermissions?.can_manage_members);
+  const canEditProject = Boolean(currentPermissions?.can_edit);
+  const canEditItems = Boolean(currentPermissions?.can_edit_items);
+  const canViewItems = Boolean(currentPermissions?.can_view_items);
+  const canViewContent = Boolean(currentPermissions?.can_view_content);
+  const canGenerateContent = Boolean(currentPermissions?.can_generate_content);
+  const canViewNotes = Boolean(currentPermissions?.can_view_notes);
+  const canEditNotes = Boolean(currentPermissions?.can_edit_notes);
+  const canDeleteProject = Boolean(currentPermissions?.can_delete);
+  const projectRoleDefinitions = project?.project_role_definitions ?? [];
+  const roleLabel = (role: string) => projectRoleDefinitions.find((item) => item.key === role)?.name ?? role;
+  const projectMemberUserIds = useMemo(() => new Set((project?.members ?? []).map((member) => member.user.id)), [project?.members]);
+  const selectableProjectUsers = useMemo(
+    () => (project?.registered_users ?? []).filter((candidate) =>
+      candidate.id !== project?.owner?.id && !projectMemberUserIds.has(candidate.id)
+    ),
+    [project?.registered_users, project?.owner?.id, projectMemberUserIds]
+  );
+  const primaryAssignee = assignableUsers.find((item) => item.id === project?.primary_assignee_id) ?? project?.primary_assignee ?? null;
+
+  // フィールドをセクション別にグループ化
+  const fieldsBySection = useMemo(() => allFields.reduce<Record<string, typeof allFields>>((acc, f) => {
+    const sec = f.section?.trim() || '詳細';
+    if (!acc[sec]) acc[sec] = [];
+    acc[sec].push(f);
+    return acc;
+  }, {}), [allFields]);
+  // セクション表示順：種別定義のsections順 → それ以外は末尾に追加
+  const definedSections = currentProjectType?.sections ?? [];
+  const definedSectionNames = useMemo(() => definedSections.map((s) => s.name), [definedSections]);
+  const extraSectionNames = useMemo(
+    () => Array.from(new Set(allFields.map(f => f.section?.trim() || '詳細'))).filter((n) => !definedSectionNames.includes(n)),
+    [allFields, definedSectionNames]
+  );
+  const sectionOrder = useMemo(
+    () => [...definedSectionNames.filter((n) => fieldsBySection[n]), ...extraSectionNames],
+    [definedSectionNames, fieldsBySection, extraSectionNames]
+  );
+  const sectionColorMap = useMemo(() => Object.fromEntries(definedSections.map((s) => [s.name, s.color])), [definedSections]);
+
   if (authLoading || !user) return (
     <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-muted)' }}>
       <p>読み込み中...</p>
@@ -1092,47 +1227,6 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       <p>{loadError || '読み込み中...'}</p>
     </div>
   );
-
-  const allFields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
-  const inheritedCount = allFields.filter(f => f.inherited === 1).length;
-  const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
-  const currentContentTemplates = contentTemplates.filter((template) => currentProjectType?.content_template_ids.includes(template.id));
-  const typeLabel = currentProjectType?.name || PROJECT_TYPE_LABELS[project.type as ProjectType] || project.type;
-  const currentPhases = currentProjectType?.phases || [];
-  const currentPhaseIndex = currentPhases.findIndex((phase) => phase.key === project.phase_key);
-  const assignableUsers = Array.isArray(project.assignable_users) ? project.assignable_users : [];
-  const currentUserMemberRole = project.members?.find((member) => member.user.id === user.id)?.role;
-  const currentPermissions = project.current_permissions;
-  const canManageMembers = Boolean(currentPermissions?.can_manage_members);
-  const canEditProject = Boolean(currentPermissions?.can_edit);
-  const canEditItems = Boolean(currentPermissions?.can_edit_items);
-  const canViewItems = Boolean(currentPermissions?.can_view_items);
-  const canViewContent = Boolean(currentPermissions?.can_view_content);
-  const canGenerateContent = Boolean(currentPermissions?.can_generate_content);
-  const canViewNotes = Boolean(currentPermissions?.can_view_notes);
-  const canEditNotes = Boolean(currentPermissions?.can_edit_notes);
-  const canDeleteProject = Boolean(currentPermissions?.can_delete);
-  const projectRoleDefinitions = project.project_role_definitions ?? [];
-  const roleLabel = (role: string) => projectRoleDefinitions.find((item) => item.key === role)?.name ?? role;
-  const projectMemberUserIds = new Set((project.members ?? []).map((member) => member.user.id));
-  const selectableProjectUsers = (project.registered_users ?? []).filter((candidate) =>
-    candidate.id !== project.owner?.id && !projectMemberUserIds.has(candidate.id)
-  );
-  const primaryAssignee = assignableUsers.find((item) => item.id === project.primary_assignee_id) ?? project.primary_assignee ?? null;
-
-  // フィールドをセクション別にグループ化
-  const fieldsBySection = allFields.reduce<Record<string, typeof allFields>>((acc, f) => {
-    const sec = f.section?.trim() || '詳細';
-    if (!acc[sec]) acc[sec] = [];
-    acc[sec].push(f);
-    return acc;
-  }, {});
-  // セクション表示順：種別定義のsections順 → それ以外は末尾に追加
-  const definedSections = currentProjectType?.sections ?? [];
-  const definedSectionNames = definedSections.map((s) => s.name);
-  const extraSectionNames = Array.from(new Set(allFields.map(f => f.section?.trim() || '詳細'))).filter((n) => !definedSectionNames.includes(n));
-  const sectionOrder = [...definedSectionNames.filter((n) => fieldsBySection[n]), ...extraSectionNames];
-  const sectionColorMap = Object.fromEntries(definedSections.map((s) => [s.name, s.color]));
 
   return (
     <div className="h-full flex flex-col">
@@ -1346,10 +1440,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
             {([
               ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
-              ...(canViewItems ? [{ k: 'tasks' as const, l: `タスク (${todos.flatMap(t => [t, ...(t.subtasks ?? [])]).length})` }] : []),
-              ...(canViewItems ? [{ k: 'members' as const, l: `メンバー (${assignableUsers.length})` }] : []),
-              ...(canViewNotes ? [{ k: 'notes' as const, l: `ノート (${notes.length})` }] : []),
-              ...(canViewContent ? [{ k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }] : []),
+              ...(canViewItems ? [{ k: 'tasks' as const, l: 'タスク' }] : []),
+              ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
+              ...(canViewNotes ? [{ k: 'notes' as const, l: 'ノート' }] : []),
+              ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
             ]).map(t => (
               <button
                 key={t.k}
@@ -1367,14 +1461,20 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
           {tab === 'tasks' && canViewItems ? (
             <section className="space-y-4">
-              <TodoTab
-                projectId={id}
-                todos={todos}
-                assignableUsers={project.assignable_users ?? []}
-                phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
-                canEdit={canEditItems}
-                onTodosChange={setTodos}
-              />
+              {todosLoading && !todosLoaded ? (
+                <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                  <p className="text-sm">タスクを読み込み中...</p>
+                </div>
+              ) : (
+                <TodoTab
+                  projectId={id}
+                  todos={todos}
+                  assignableUsers={project.assignable_users ?? []}
+                  phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
+                  canEdit={canEditItems}
+                  onTodosChange={setTodos}
+                />
+              )}
             </section>
           ) : tab === 'notes' && canViewNotes ? (
             <section className="space-y-4">
@@ -1624,11 +1724,6 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             <>
               {/* セクション別フィールド表示 */}
               {(() => {
-                // template_id → CustomField のマップ（情報ウィジェットと混在するitems順レンダリング用）
-                const fieldByTemplateId = new Map<string, CustomField>(
-                  allFields.filter(f => f.template_id).map(f => [f.template_id!, f])
-                );
-
                 type RenderItem =
                   | { type: 'field'; field: CustomField; layout: string; key: string }
                   | { type: 'widget'; kind: string; layout: string; key: string };
@@ -1671,7 +1766,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                 );
                               }
                               const f = item.field;
-                              const globalIdx = allFields.findIndex(af => af.id === f.id);
+                              const globalIdx = fieldIndexById.get(f.id) ?? -1;
                               return (
                                 <div key={item.key} className={item.layout === 'full' ? 'col-span-2' : ''}>
                                   <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} showFieldKeys={devSettings.showFieldKeys} showFieldTypes={devSettings.showFieldTypes} showFieldIds={devSettings.showFieldIds} />
@@ -1743,7 +1838,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             </>
           ) : tab === 'assets' && canViewContent ? (
             <section>
-              {assets.length === 0 ? (
+              {assetsLoading && !assetsLoaded ? (
+                <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
+                  <p>生成コンテンツを読み込み中...</p>
+                </div>
+              ) : assets.length === 0 ? (
                 <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
                   <p>まだコンテンツは生成されていません</p>
                   <p className="text-xs mt-1">右パネルから生成対象を選んで実行してください</p>

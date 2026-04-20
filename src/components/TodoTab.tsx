@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import type { Todo, TodoStatus, TodoPriority, ProjectUser, ProjectPhase } from '@/types';
 import { TODO_STATUS_LABELS, TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS } from '@/types';
 import { withBasePath } from '@/lib/paths';
@@ -573,7 +573,10 @@ function GanttView({
   const [override, setOverride] = useState<GanttOverride | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const datedTodos = todos.filter(t => t.start_date || t.due_date);
+  const datedTodos = useMemo(
+    () => todos.filter(t => t.start_date || t.due_date),
+    [todos]
+  );
 
   if (datedTodos.length === 0) {
     return (
@@ -586,12 +589,18 @@ function GanttView({
   }
 
   // 日付範囲
-  const dates = datedTodos.flatMap(t => [t.start_date, t.due_date].filter(Boolean) as string[]);
-  const minDateBase = new Date(dates.reduce((a, b) => a < b ? a : b));
-  const maxDateBase = new Date(dates.reduce((a, b) => a > b ? a : b));
-  minDateBase.setDate(minDateBase.getDate() - 2);
-  maxDateBase.setDate(maxDateBase.getDate() + 4);
-  const totalDays = Math.max(1, Math.ceil((maxDateBase.getTime() - minDateBase.getTime()) / 86400000));
+  const { minDateBase, maxDateBase, totalDays } = useMemo(() => {
+    const dates = datedTodos.flatMap(t => [t.start_date, t.due_date].filter(Boolean) as string[]);
+    const min = new Date(dates.reduce((a, b) => a < b ? a : b));
+    const max = new Date(dates.reduce((a, b) => a > b ? a : b));
+    min.setDate(min.getDate() - 2);
+    max.setDate(max.getDate() + 4);
+    return {
+      minDateBase: min,
+      maxDateBase: max,
+      totalDays: Math.max(1, Math.ceil((max.getTime() - min.getTime()) / 86400000)),
+    };
+  }, [datedTodos]);
 
   // スケール別 x座標計算（バーSVG: x=0 が minDateBase）
   function dateToX(dateStr: string): number {
@@ -615,12 +624,12 @@ function GanttView({
   }
 
   // barSvgWidth: maxDateBase の x座標
-  const barSvgWidth = Math.max(100, dateToX(maxDateBase.toISOString().slice(0, 10)));
-  const svgHeight = GANTT_HEADER_H + (datedTodos.length + 0.5) * GANTT_ROW_H;
+  const barSvgWidth = useMemo(() => Math.max(100, dateToX(maxDateBase.toISOString().slice(0, 10))), [maxDateBase, scale]);
+  const svgHeight = useMemo(() => GANTT_HEADER_H + (datedTodos.length + 0.5) * GANTT_ROW_H, [datedTodos.length]);
 
   // 月ヘッダー
-  const months: { label: string; x: number; width: number }[] = [];
-  {
+  const months = useMemo(() => {
+    const values: { label: string; x: number; width: number }[] = [];
     let cur = new Date(minDateBase);
     while (cur < maxDateBase) {
       const monthStart = new Date(cur);
@@ -628,54 +637,56 @@ function GanttView({
       const monthEnd = nextMonth < maxDateBase ? nextMonth : maxDateBase;
       const x = dateToX(monthStart.toISOString().slice(0, 10));
       const w = dateToX(monthEnd.toISOString().slice(0, 10)) - x;
-      months.push({ label: `${cur.getFullYear()}/${cur.getMonth() + 1}`, x, width: w });
+      values.push({ label: `${cur.getFullYear()}/${cur.getMonth() + 1}`, x, width: w });
       cur = nextMonth;
     }
-  }
+    return values;
+  }, [minDateBase, maxDateBase, scale]);
 
   // 日付ティック（スケール対応）
   type DayTick = { label: string; x: number; width: number; isWeekend: boolean };
-  const dayTicks: DayTick[] = [];
+  const dayTicks = useMemo(() => {
+    const values: DayTick[] = [];
+    if (scale === 'day') {
+      for (let d = 0; d < totalDays; d++) {
+        const date = new Date(minDateBase.getTime() + d * 86400000);
+        const dow = date.getDay();
+        values.push({
+          label: String(date.getDate()),
+          x: d * SCALE_DAY_W,
+          width: SCALE_DAY_W,
+          isWeekend: dow === 0 || dow === 6,
+        });
+      }
+    } else if (scale === 'week5') {
+      for (let d = 0; d < totalDays; d++) {
+        const date = new Date(minDateBase.getTime() + d * 86400000);
+        const dow = date.getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const w = isWeekend ? SCALE_WEEK5_WEEKEND_W : SCALE_WEEK5_WEEKDAY_W;
+        values.push({
+          label: isWeekend ? '' : String(date.getDate()),
+          x: dateToX(date.toISOString().slice(0, 10)),
+          width: w,
+          isWeekend,
+        });
+      }
+    } else {
+      for (let d = 0; d < totalDays; d += 7) {
+        const date = new Date(minDateBase.getTime() + d * 86400000);
+        values.push({
+          label: `${date.getMonth() + 1}/${date.getDate()}`,
+          x: d * (SCALE_WEEK_W / 7),
+          width: SCALE_WEEK_W,
+          isWeekend: false,
+        });
+      }
+    }
+    return values;
+  }, [minDateBase, totalDays, scale]);
 
-  if (scale === 'day') {
-    for (let d = 0; d < totalDays; d++) {
-      const date = new Date(minDateBase.getTime() + d * 86400000);
-      const dow = date.getDay();
-      dayTicks.push({
-        label: String(date.getDate()),
-        x: d * SCALE_DAY_W,
-        width: SCALE_DAY_W,
-        isWeekend: dow === 0 || dow === 6,
-      });
-    }
-  } else if (scale === 'week5') {
-    for (let d = 0; d < totalDays; d++) {
-      const date = new Date(minDateBase.getTime() + d * 86400000);
-      const dow = date.getDay();
-      const isWeekend = dow === 0 || dow === 6;
-      const w = isWeekend ? SCALE_WEEK5_WEEKEND_W : SCALE_WEEK5_WEEKDAY_W;
-      dayTicks.push({
-        label: isWeekend ? '' : String(date.getDate()),
-        x: dateToX(date.toISOString().slice(0, 10)),
-        width: w,
-        isWeekend,
-      });
-    }
-  } else {
-    // week: 月曜日のみティック
-    for (let d = 0; d < totalDays; d += 7) {
-      const date = new Date(minDateBase.getTime() + d * 86400000);
-      dayTicks.push({
-        label: `${date.getMonth() + 1}/${date.getDate()}`,
-        x: d * (SCALE_WEEK_W / 7),
-        width: SCALE_WEEK_W,
-        isWeekend: false,
-      });
-    }
-  }
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayX = dateToX(todayStr);
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayX = useMemo(() => dateToX(todayStr), [todayStr, scale, minDateBase]);
 
   function handleBarMouseDown(e: React.MouseEvent, todo: Todo, type: 'move' | 'resize') {
     e.preventDefault();
@@ -1011,9 +1022,12 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   const isFiltering = filterStatuses.size > 0 || filterPriorities.size > 0 || filterAssigneeId !== '';
 
   // フィルター適用済みTodo
-  const filteredTodos = todos
-    .filter(matchesFilter)
-    .map(t => ({ ...t, subtasks: (t.subtasks ?? []).filter(matchesFilter) }));
+  const filteredTodos = useMemo(
+    () => todos
+      .filter(matchesFilter)
+      .map(t => ({ ...t, subtasks: (t.subtasks ?? []).filter(matchesFilter) })),
+    [todos, filterStatuses, filterPriorities, filterAssigneeId]
+  );
 
   // ──── API ────
 
@@ -1079,11 +1093,11 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   }, [updateTodo]);
 
   // ──── 統計 ────
-  const allTodos = todos.flatMap(t => [t, ...(t.subtasks ?? [])]);
-  const doneCount = allTodos.filter(t => t.status === 'done').length;
+  const allTodos = useMemo(() => todos.flatMap(t => [t, ...(t.subtasks ?? [])]), [todos]);
+  const doneCount = useMemo(() => allTodos.filter(t => t.status === 'done').length, [allTodos]);
   const totalCount = allTodos.length;
-  const urgentCount = allTodos.filter(t => t.status !== 'done' && isOverdue(t.due_date, t.status)).length;
-  const filteredCount = filteredTodos.flatMap(t => [t, ...(t.subtasks ?? [])]).length;
+  const urgentCount = useMemo(() => allTodos.filter(t => t.status !== 'done' && isOverdue(t.due_date, t.status)).length, [allTodos]);
+  const filteredCount = useMemo(() => filteredTodos.flatMap(t => [t, ...(t.subtasks ?? [])]).length, [filteredTodos]);
 
   const viewButtons = [
     { k: 'list' as const, l: 'リスト' },
@@ -1092,9 +1106,12 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   ];
 
   // カンバン用: フィルタされたステータス列のみ表示
-  const visibleStatuses = filterStatuses.size > 0
-    ? STATUS_ORDER.filter(s => filterStatuses.has(s))
-    : STATUS_ORDER;
+  const visibleStatuses = useMemo(
+    () => filterStatuses.size > 0
+      ? STATUS_ORDER.filter(s => filterStatuses.has(s))
+      : STATUS_ORDER,
+    [filterStatuses]
+  );
 
   return (
     <div className="space-y-3">
