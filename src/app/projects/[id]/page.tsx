@@ -819,6 +819,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [generating, setGenerating] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
+  const [completionMessage, setCompletionMessage] = useState('');
+  const [completionRawSnippet, setCompletionRawSnippet] = useState('');
   const [completionAdditionalInstruction, setCompletionAdditionalInstruction] = useState('');
   const [completionSelectedNoteIds, setCompletionSelectedNoteIds] = useState<Set<string>>(new Set());
   const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
@@ -1148,12 +1150,15 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           noteIds: Array.from(completionSelectedNoteIds),
         }),
       });
-      const data = await res.json() as { suggestions: CompletionSuggestion[]; error?: string };
+      const data = await res.json() as { suggestions: CompletionSuggestion[]; error?: string; message?: string; raw_snippet?: string };
       if (!res.ok) {
         setAiError(data.error || 'AI補完に失敗しました。');
         return;
       }
-      setSuggestions(data.suggestions ?? []);
+      const s = data.suggestions ?? [];
+      setSuggestions(s);
+      setCompletionMessage(s.length === 0 ? (data.message || '補完候補が見つかりませんでした。') : '');
+      if (data.raw_snippet) setCompletionRawSnippet(data.raw_snippet); else setCompletionRawSnippet('');
     } finally {
       setCompleting(false);
     }
@@ -2110,6 +2115,17 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </span>
               ) : 'AI補完を実行'}
             </button>
+            {completionMessage && (
+              <div className="p-3 rounded-xl border text-xs space-y-2" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
+                <p>{completionMessage}</p>
+                {completionRawSnippet && (
+                  <details>
+                    <summary className="cursor-pointer" style={{ color: '#9a3030' }}>AIの生の応答を見る</summary>
+                    <pre className="mt-2 whitespace-pre-wrap break-all text-[10px] leading-relaxed" style={{ color: '#7a2020' }}>{completionRawSnippet}</pre>
+                  </details>
+                )}
+              </div>
+            )}
           </div>}
 
           {aiError && (

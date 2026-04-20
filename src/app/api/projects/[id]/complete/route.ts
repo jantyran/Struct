@@ -87,6 +87,14 @@ export async function POST(req: Request, { params }: Params) {
     const raw = await generateText(prompt, SYSTEM_PROMPT, 4096, aiSettings);
     const suggestions = parseCompletionResponse(raw);
 
+    if (suggestions.length === 0 && raw.trim().length > 0) {
+      return NextResponse.json({
+        suggestions: [],
+        message: 'AIは応答しましたが、補完候補を抽出できませんでした。出力が途中で切れているか、JSON形式でない可能性があります。',
+        raw_snippet: raw.slice(0, 300),
+      });
+    }
+
     return NextResponse.json({ suggestions, raw_response: raw });
   } catch (err) {
     console.error(err);
