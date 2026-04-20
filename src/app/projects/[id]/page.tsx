@@ -1,10 +1,13 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate } from '@/types';
+import { useRouter, useSearchParams } from 'next/navigation';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import { useDevSettings } from '@/components/DevSettingsContext';
+import TodoTab from '@/components/TodoTab';
+import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
@@ -28,6 +31,14 @@ function parseFieldOptions(options: string) {
 }
 
 type GroupChildState = { value: string; options?: string };
+
+function userDisplayName(user: { email: string; name?: string | null }) {
+  return user.name?.trim() || user.email;
+}
+
+function userInitials(user: { email: string; name?: string | null }) {
+  return userDisplayName(user).slice(0, 2).toUpperCase();
+}
 
 function normalizeGroupChildState(value: unknown): GroupChildState {
   if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in (value as Record<string, unknown>)) {
@@ -71,6 +82,8 @@ function buildChildField(childTemplate: ProjectFieldTemplate, state: GroupChildS
     inherited_from: null,
     crawled_content: null,
     sort_order: 0,
+    is_builtin: childTemplate.is_builtin ? 1 : 0,
+    section: childTemplate.section ?? '',
   };
 }
 
@@ -191,6 +204,13 @@ function ChildFieldValueInput({
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
+          ) : field.type === 'number' ? (
+            <input
+              className="field-input text-xs"
+              type="number"
+              value={field.value}
+              onChange={(e) => onChange({ ...field, value: e.target.value })}
+            />
           ) : (
             <input
               className="field-input text-xs"
@@ -208,12 +228,15 @@ function ChildFieldValueInput({
 // ============================================================
 // プロジェクトフィールド入力
 // ============================================================
-function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling }: {
+function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling, showFieldKeys, showFieldTypes, showFieldIds }: {
   field: CustomField;
   globalAssetObjects: GlobalAssetObject[];
   onChange: (f: CustomField) => void;
   onCrawl: () => void;
   crawling: boolean;
+  showFieldKeys: boolean;
+  showFieldTypes: boolean;
+  showFieldIds: boolean;
 }) {
   const isInherited = field.inherited === 1;
   const options = parseFieldOptions(field.options);
@@ -226,7 +249,7 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   const groupListValue = parseGroupListValue(field.value);
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${isInherited ? 'inherited-field' : ''}`} style={{ borderColor: isInherited ? 'rgba(245,158,11,0.4)' : 'var(--border)', backgroundColor: 'rgba(255,255,255,0.62)' }}>
+    <div className={`field-section-card ${isInherited ? 'inherited-field' : ''}`}>
       {isInherited && (
         <div className="flex items-center gap-1.5 text-xs" style={{ color: '#b66a10' }}>
           <span>⚠</span>
@@ -238,19 +261,24 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
-            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              {FIELD_TYPE_LABELS[field.type] || field.type}
-            </span>
-            {(field.type === 'reference' || field.type === 'reference_multi') && (
+            {showFieldTypes && (
+              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {FIELD_TYPE_LABELS[field.type] || field.type}
+              </span>
+            )}
+            {showFieldTypes && (field.type === 'reference' || field.type === 'reference_multi') && (
               <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                 ・ {referenceObject?.name || '未設定'}
               </span>
             )}
           </div>
         </div>
-        <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          キー: {field.key}
-        </div>
+        {(showFieldKeys || showFieldIds) && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            {showFieldKeys && <span>キー: {field.key}</span>}
+            {showFieldIds && <span>ID: {field.id}</span>}
+          </div>
+        )}
       </div>
 
       {field.type === 'group' && (
@@ -455,6 +483,8 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
                 {crawling ? '取得中...' : 'クロール'}
               </button>
             </div>
+          ) : field.type === 'number' ? (
+            <input className="field-input text-xs" type="number" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
           ) : (
             <input className="field-input text-xs" type={field.type === 'date' ? 'date' : 'text'} value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
           )}
@@ -474,10 +504,12 @@ function AssetCard({
   asset,
   onDelete,
   onSaved,
+  onDirtyChange,
 }: {
   asset: GeneratedAsset;
   onDelete: () => void;
   onSaved: (nextAsset: GeneratedAsset) => void;
+  onDirtyChange?: (assetId: string, dirty: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -491,6 +523,13 @@ function AssetCard({
     setDraftTitle(asset.title);
     setDraftContent(asset.content);
   }, [asset.title, asset.content]);
+
+  const isDirty = draftTitle !== asset.title || draftContent !== asset.content;
+
+  useEffect(() => {
+    onDirtyChange?.(asset.id, isDirty);
+    return () => onDirtyChange?.(asset.id, false);
+  }, [asset.id, isDirty, onDirtyChange]);
 
   function copy() {
     navigator.clipboard.writeText(asset.content);
@@ -539,38 +578,117 @@ function AssetCard({
           )}
           {editing ? (
             <div className="space-y-3">
-              <div>
-                <label className="field-label">タイトル</label>
-                <input className="field-input text-sm" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">内容</label>
-                <textarea className="field-input text-sm" rows={18} value={draftContent} onChange={(e) => setDraftContent(e.target.value)} />
-              </div>
+              <MarkdownRichTextEditor
+                title={draftTitle}
+                body={draftContent}
+                onTitleChange={setDraftTitle}
+                onBodyChange={setDraftContent}
+                onSave={saveEdit}
+                onCancel={() => {
+                  setDraftTitle(asset.title);
+                  setDraftContent(asset.content);
+                  setEditing(false);
+                }}
+                bodyLabel="内容"
+                saveLabel={saving ? '保存中...' : '保存'}
+                minHeight={320}
+                isDirty={isDirty}
+              />
             </div>
           ) : (
-            <pre className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
-              {asset.content}
-            </pre>
+            <MarkdownViewer content={asset.content} className="text-sm" />
           )}
-          <div className="flex gap-2 mt-4">
-            {editing ? (
-              <>
-                <button onClick={() => { setDraftTitle(asset.title); setDraftContent(asset.content); setEditing(false); }} className="btn-secondary text-xs">キャンセル</button>
-                <button onClick={saveEdit} disabled={saving} className="btn-primary text-xs">{saving ? '保存中...' : '保存'}</button>
-              </>
-            ) : (
-              <>
-                <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
-                <button onClick={() => setEditing(true)} className="btn-secondary text-xs">編集</button>
-              </>
-            )}
-            <button onClick={onDelete} className="btn-danger">削除</button>
-          </div>
+          {!editing && (
+            <div className="flex gap-2 mt-4">
+              <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
+              <button onClick={() => setEditing(true)} className="btn-secondary text-xs">編集</button>
+              <button onClick={onDelete} className="btn-danger">削除</button>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+// ============================================================
+// セクション内情報ウィジェット（project_type / phase）
+// CustomFieldRow と同じカードスタイル: ラベル（field-label）+ 値テキスト
+// ============================================================
+function SectionInfoWidget({
+  kind,
+  layout,
+  project,
+  projectType,
+  phases,
+  typeLabel,
+  notes,
+  onNotesTabClick,
+}: {
+  kind: string;
+  layout: 'half' | 'full';
+  project: ProjectWithFields;
+  projectType: ProjectTypeDefinition | undefined;
+  phases: ProjectPhase[];
+  typeLabel: string;
+  notes?: ProjectNote[];
+  onNotesTabClick?: () => void;
+}) {
+  const colClass = layout === 'full' ? 'col-span-2' : '';
+
+  if (kind === 'project_type') {
+    return (
+      <div className={`${colClass} surface-read space-y-1`}>
+        <p className="field-label">プロジェクト種別</p>
+        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{typeLabel || '—'}</p>
+        {projectType?.description && (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{projectType.description}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (kind === 'phase') {
+    const currentPhase = phases.find((p) => p.key === project.phase_key);
+    return (
+      <div className={`${colClass} surface-read space-y-1`}>
+        <p className="field-label">進行フェーズ</p>
+        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          {currentPhase?.name || (phases.length === 0 ? '—' : '未設定')}
+        </p>
+      </div>
+    );
+  }
+
+  if (kind === 'note_list') {
+    const pinnedNotes = (notes ?? []).filter(n => n.pinned === 1).slice(0, 3);
+    return (
+      <div className={`${colClass} surface-read`}>
+        <div className="flex items-center justify-between mb-2">
+          <p className="field-label">ノート</p>
+          {onNotesTabClick && (
+            <button onClick={onNotesTabClick} className="text-xs transition-colors" style={{ color: 'var(--accent)' }}>
+              すべて表示 →
+            </button>
+          )}
+        </div>
+        {pinnedNotes.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>ピン留めされたノートはありません</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {pinnedNotes.map(note => (
+              <li key={note.id} className="text-xs truncate" style={{ color: 'var(--text-primary)' }}>
+                <span className="mr-1" style={{ color: 'var(--accent)' }}>📌</span>
+                {note.title || '（無題）'}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ============================================================
@@ -580,6 +698,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
   const { user, loading: authLoading, checkSession } = useAuth();
+  const { settings: devSettings } = useDevSettings();
   const [project, setProject] = useState<ProjectWithFields | null>(null);
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
   const [projectTypes, setProjectTypes] = useState<ProjectTypeDefinition[]>([]);
@@ -593,24 +712,42 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'fields' | 'assets'>('fields');
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'todos' ? 'tasks' : 'fields';
+  const [tab, setTab] = useState<'fields' | 'assets' | 'notes' | 'members' | 'tasks'>(initialTab);
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
+  const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [notes, setNotes] = useState<ProjectNote[]>([]);
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState<{ title: string; body: string }>({ title: '', body: '' });
+  const [noteCreating, setNoteCreating] = useState(false);
+  const [assetDirtyMap, setAssetDirtyMap] = useState<Record<string, boolean>>({});
+  const [memberUserId, setMemberUserId] = useState('');
+  const [memberRole, setMemberRole] = useState('MEMBER');
+  const [memberMessage, setMemberMessage] = useState('');
+  const [memberSaving, setMemberSaving] = useState(false);
 
   const loadProject = useCallback(async () => {
     setLoadError('');
-    const [projectRes, assetsRes] = await Promise.all([
+    const [projectRes, assetsRes, notesRes, todosRes] = await Promise.all([
       fetch(withBasePath(`/api/projects/${id}`)),
       fetch(withBasePath(`/api/projects/${id}/assets`)),
+      fetch(withBasePath(`/api/projects/${id}/notes`)),
+      fetch(withBasePath(`/api/projects/${id}/todos`)),
     ]);
     const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
       fetch(withBasePath('/api/project-types')),
       fetch(withBasePath('/api/global-assets')),
       fetch(withBasePath('/api/content-templates')),
     ]);
-    const [pr, ar, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
+    const [pr, ar, notesData, todosData, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
       projectRes.json(),
       assetsRes.json(),
+      notesRes.ok ? notesRes.json() : Promise.resolve([]),
+      todosRes.ok ? todosRes.json() : Promise.resolve([]),
       projectTypesRes.json(),
       globalAssetsRes.json(),
       contentTemplatesRes.json(),
@@ -639,6 +776,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
     setProject(normalizeProject(pr as ProjectWithFields));
     setAssets(Array.isArray(ar) ? ar as GeneratedAsset[] : []);
+    setNotes(Array.isArray(notesData) ? notesData as ProjectNote[] : []);
+    setTodos(Array.isArray(todosData) ? todosData as Todo[] : []);
     setProjectTypes(Array.isArray(projectTypesPayload.project_types) ? projectTypesPayload.project_types as ProjectTypeDefinition[] : []);
     setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects as GlobalAssetObject[] : []);
     setContentTemplates(Array.isArray(contentTemplatesPayload.content_templates) ? contentTemplatesPayload.content_templates as ProjectContentTemplate[] : []);
@@ -670,17 +809,97 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     });
   }, [project?.type, projectTypes, contentTemplates]);
 
+  useEffect(() => {
+    if (!project) return;
+    const currentType = projectTypes.find((definition) => definition.key === project.type);
+    const fields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
+    const fieldsBySection = fields.reduce<Record<string, typeof fields>>((acc, field) => {
+      const sectionName = field.section?.trim() || '詳細';
+      if (!acc[sectionName]) acc[sectionName] = [];
+      acc[sectionName].push(field);
+      return acc;
+    }, {});
+    const definedSections = currentType?.sections ?? [];
+    const definedSectionNames = definedSections.map((section) => section.name);
+    const extraSectionNames = Array.from(new Set(fields.map((field) => field.section?.trim() || '詳細')))
+      .filter((name) => !definedSectionNames.includes(name));
+    const nextSectionOrder = [...definedSectionNames.filter((name) => fieldsBySection[name]), ...extraSectionNames];
+
+    setOpenFieldSections((current) => {
+      const filtered = current.filter((name) => nextSectionOrder.includes(name));
+      if (filtered.length > 0) return filtered;
+      return nextSectionOrder[0] ? [nextSectionOrder[0]] : [];
+    });
+  }, [project, projectTypes]);
+
   async function save(p: ProjectWithFields) {
+    if (!p.current_permissions?.can_edit) return;
     setSaving(true);
-    const channels = (() => { try { return JSON.parse(p.channels) as string[]; } catch { return []; } })();
     await fetch(withBasePath(`/api/projects/${id}`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...p, channels, custom_fields: p.custom_fields }),
+      body: JSON.stringify({
+        name: p.name,
+        type: p.type,
+        phase_key: p.phase_key,
+        status: p.status,
+        primary_assignee_id: p.primary_assignee_id ?? null,
+        ...(p.current_permissions?.can_edit_items ? { custom_fields: p.custom_fields } : {}),
+      }),
     });
     setSaving(false);
     setSavingMsg('保存済み');
     setTimeout(() => setSavingMsg(''), 2000);
+  }
+
+  async function addProjectMember() {
+    if (!memberUserId) return;
+    setMemberSaving(true);
+    setMemberMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/members`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: memberUserId, role: memberRole }),
+    });
+    const payload = await res.json() as { error?: string };
+    setMemberSaving(false);
+
+    if (!res.ok) {
+      setMemberMessage(payload.error || 'メンバー追加に失敗しました');
+      return;
+    }
+
+    setMemberUserId('');
+    setMemberRole('MEMBER');
+    setMemberMessage('メンバーを更新しました');
+    await loadProject();
+  }
+
+  async function updateProjectMemberRole(userId: string, role: string) {
+    setMemberMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/members`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, role }),
+    });
+    if (!res.ok) {
+      const payload = await res.json() as { error?: string };
+      setMemberMessage(payload.error || 'ロール更新に失敗しました');
+      return;
+    }
+    await loadProject();
+  }
+
+  async function removeProjectMember(userId: string) {
+    if (!confirm('このメンバーをプロジェクトから外しますか？')) return;
+    setMemberMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/members?user_id=${encodeURIComponent(userId)}`), { method: 'DELETE' });
+    if (!res.ok) {
+      const payload = await res.json() as { error?: string };
+      setMemberMessage(payload.error || 'メンバー削除に失敗しました');
+      return;
+    }
+    await loadProject();
   }
 
   function updateField(idx: number, f: CustomField) {
@@ -688,6 +907,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     const fields = [...project.custom_fields];
     fields[idx] = f;
     setProject({ ...project, custom_fields: fields });
+  }
+
+  function toggleFieldSection(sectionName: string) {
+    setOpenFieldSections((current) =>
+      current.includes(sectionName)
+        ? current.filter((name) => name !== sectionName)
+        : [...current, sectionName]
+    );
   }
 
   async function crawlField(fieldId: string) {
@@ -749,8 +976,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   }
 
   async function deleteAsset(assetId: string) {
+    if (!window.confirm('この生成コンテンツを削除しますか？')) return;
     await fetch(withBasePath(`/api/projects/${id}/assets?assetId=${assetId}`), { method: 'DELETE' });
     setAssets(a => a.filter(x => x.id !== assetId));
+    setAssetDirtyMap((current) => {
+      const next = { ...current };
+      delete next[assetId];
+      return next;
+    });
   }
 
   function updateAsset(updatedAsset: GeneratedAsset) {
@@ -762,6 +995,91 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     await fetch(withBasePath(`/api/projects/${id}`), { method: 'DELETE' });
     router.push(withBasePath('/'));
   }
+
+  async function loadNotes() {
+    setNoteLoading(true);
+    try {
+      const res = await fetch(withBasePath(`/api/projects/${id}/notes`));
+      if (res.ok) setNotes(await res.json());
+    } finally {
+      setNoteLoading(false);
+    }
+  }
+
+  async function createNote() {
+    if (!noteDraft.title.trim() && !noteDraft.body.trim()) return;
+    const res = await fetch(withBasePath(`/api/projects/${id}/notes`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(noteDraft),
+    });
+    if (res.ok) {
+      const created = await res.json() as ProjectNote;
+      setNotes(prev => [created, ...prev]);
+      setNoteDraft({ title: '', body: '' });
+      setNoteCreating(false);
+    }
+  }
+
+  async function updateNote(noteId: string, patch: Partial<Pick<ProjectNote, 'title' | 'body' | 'pinned'>>) {
+    const res = await fetch(withBasePath(`/api/projects/${id}/notes/${noteId}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (res.ok) {
+      const updated = await res.json() as ProjectNote;
+      setNotes(prev => prev.map(n => n.id === noteId ? updated : n));
+    }
+  }
+
+  async function deleteNote(noteId: string) {
+    if (!window.confirm('このノートを削除しますか？')) return;
+    const res = await fetch(withBasePath(`/api/projects/${id}/notes/${noteId}`), { method: 'DELETE' });
+    if (res.ok) setNotes(prev => prev.filter(n => n.id !== noteId));
+  }
+
+  const editingNote = noteEditingId ? notes.find((note) => note.id === noteEditingId) ?? null : null;
+  const noteCreateDirty = noteCreating && (noteDraft.title.trim().length > 0 || noteDraft.body.trim().length > 0);
+  const noteEditDirty = Boolean(editingNote) && (noteDraft.title !== editingNote?.title || noteDraft.body !== editingNote?.body);
+  const hasUnsavedEditors = noteCreateDirty || noteEditDirty || Object.values(assetDirtyMap).some(Boolean);
+
+  const confirmLeaveUnsaved = useCallback((message = '未保存の変更があります。保存せずに移動しますか？') => {
+    if (!hasUnsavedEditors) return true;
+    return window.confirm(message);
+  }, [hasUnsavedEditors]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedEditors) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedEditors]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!hasUnsavedEditors) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest('a');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+      if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.href === window.location.href) return;
+      if (!window.confirm('未保存の変更があります。保存せずに移動しますか？')) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    document.addEventListener('click', handleDocumentClick, true);
+    return () => document.removeEventListener('click', handleDocumentClick, true);
+  }, [hasUnsavedEditors]);
 
   if (authLoading || !user) return (
     <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-muted)' }}>
@@ -775,144 +1093,246 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     </div>
   );
 
-  const channels = (() => { try { return JSON.parse(project.channels) as string[]; } catch { return []; } })();
-  const customFields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
-  const inheritedCount = customFields.filter(f => f.inherited === 1).length;
+  const allFields = Array.isArray(project.custom_fields) ? project.custom_fields : [];
+  const inheritedCount = allFields.filter(f => f.inherited === 1).length;
   const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
   const currentContentTemplates = contentTemplates.filter((template) => currentProjectType?.content_template_ids.includes(template.id));
   const typeLabel = currentProjectType?.name || PROJECT_TYPE_LABELS[project.type as ProjectType] || project.type;
   const currentPhases = currentProjectType?.phases || [];
   const currentPhaseIndex = currentPhases.findIndex((phase) => phase.key === project.phase_key);
+  const assignableUsers = Array.isArray(project.assignable_users) ? project.assignable_users : [];
+  const currentUserMemberRole = project.members?.find((member) => member.user.id === user.id)?.role;
+  const currentPermissions = project.current_permissions;
+  const canManageMembers = Boolean(currentPermissions?.can_manage_members);
+  const canEditProject = Boolean(currentPermissions?.can_edit);
+  const canEditItems = Boolean(currentPermissions?.can_edit_items);
+  const canViewItems = Boolean(currentPermissions?.can_view_items);
+  const canViewContent = Boolean(currentPermissions?.can_view_content);
+  const canGenerateContent = Boolean(currentPermissions?.can_generate_content);
+  const canViewNotes = Boolean(currentPermissions?.can_view_notes);
+  const canEditNotes = Boolean(currentPermissions?.can_edit_notes);
+  const canDeleteProject = Boolean(currentPermissions?.can_delete);
+  const projectRoleDefinitions = project.project_role_definitions ?? [];
+  const roleLabel = (role: string) => projectRoleDefinitions.find((item) => item.key === role)?.name ?? role;
+  const projectMemberUserIds = new Set((project.members ?? []).map((member) => member.user.id));
+  const selectableProjectUsers = (project.registered_users ?? []).filter((candidate) =>
+    candidate.id !== project.owner?.id && !projectMemberUserIds.has(candidate.id)
+  );
+  const primaryAssignee = assignableUsers.find((item) => item.id === project.primary_assignee_id) ?? project.primary_assignee ?? null;
+
+  // フィールドをセクション別にグループ化
+  const fieldsBySection = allFields.reduce<Record<string, typeof allFields>>((acc, f) => {
+    const sec = f.section?.trim() || '詳細';
+    if (!acc[sec]) acc[sec] = [];
+    acc[sec].push(f);
+    return acc;
+  }, {});
+  // セクション表示順：種別定義のsections順 → それ以外は末尾に追加
+  const definedSections = currentProjectType?.sections ?? [];
+  const definedSectionNames = definedSections.map((s) => s.name);
+  const extraSectionNames = Array.from(new Set(allFields.map(f => f.section?.trim() || '詳細'))).filter((n) => !definedSectionNames.includes(n));
+  const sectionOrder = [...definedSectionNames.filter((n) => fieldsBySection[n]), ...extraSectionNames];
+  const sectionColorMap = Object.fromEntries(definedSections.map((s) => [s.name, s.color]));
 
   return (
     <div className="h-full flex flex-col">
       {/* ヘッダー */}
-      <div className="px-6 py-5 border-b space-y-4" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.92) 100%)' }}>
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-          <button onClick={() => router.push(withBasePath('/'))} className="text-sm w-fit transition-colors" style={{ color: 'var(--text-muted)' }}>← 戻る</button>
-          <div className="flex-1 min-w-0">
-            <input
-              className="bg-transparent text-xl font-bold w-full focus:outline-none border-b border-transparent transition-colors"
-              style={{ color: 'var(--text-primary)' }}
-              value={project.name}
-              onChange={e => setProject({ ...project, name: e.target.value })}
-            />
-            <div className="flex flex-wrap items-center gap-2 mt-1">
-              <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{typeLabel}</span>
-              {project.cloned_from && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>• クローン</span>}
-              {inheritedCount > 0 && <span className="text-xs" style={{ color: '#b66a10' }}>• 要確認フィールド {inheritedCount}件</span>}
-            </div>
+      <div className="border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, #ffffff 0%, rgba(241,250,252,0.95) 100%)' }}>
+        {/* 1行: 戻る | タイトル + バッジ類 | ステータス + 保存 + 削除 */}
+        <div className="px-6 py-3 flex items-center gap-3">
+          {/* 戻るボタン */}
+          <button
+            onClick={() => {
+              if (!confirmLeaveUnsaved()) return;
+              router.push(withBasePath('/'));
+            }}
+            className="inline-flex items-center gap-1 text-xs font-medium shrink-0 transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            一覧
+          </button>
+
+          <span style={{ color: 'var(--border)', fontSize: 18, lineHeight: 1 }}>|</span>
+
+          {/* タイトル */}
+          <input
+            className="bg-transparent text-lg font-bold focus:outline-none transition-colors leading-tight flex-1 min-w-0"
+            style={{ color: 'var(--text-primary)', borderBottom: '2px solid transparent' }}
+            onFocus={e => (e.target.style.borderBottomColor = 'var(--accent)')}
+            onBlur={e => (e.target.style.borderBottomColor = 'transparent')}
+            value={project.name}
+            disabled={!canEditProject}
+            onChange={e => setProject({ ...project, name: e.target.value })}
+          />
+
+          {/* バッジ群（種別・クローン・要確認） */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
+              style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.2)' }}
+            >
+              {typeLabel}
+            </span>
+            {project.cloned_from && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px]" style={{ backgroundColor: 'rgba(111,135,148,0.08)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                クローン
+              </span>
+            )}
+            {inheritedCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ backgroundColor: 'rgba(215,138,29,0.1)', color: '#b66a10', border: '1px solid rgba(215,138,29,0.22)' }}>
+                ⚠ {inheritedCount}件
+              </span>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {savingMsg && <span className="text-xs" style={{ color: 'var(--success)' }}>{savingMsg}</span>}
-            <select className="field-input text-xs w-auto" value={project.status} onChange={e => setProject({ ...project, status: e.target.value as typeof project.status })}>
-              <option value="draft">下書き</option>
-              <option value="active">実施中</option>
-              <option value="archived">アーカイブ</option>
-            </select>
-            <button onClick={() => save(project)} disabled={saving} className="btn-primary text-sm">
-              {saving ? '保存中...' : '保存'}
-            </button>
-            <button onClick={deleteProject} className="btn-danger text-xs">削除</button>
+
+          {/* ステータス・ピルセレクター */}
+          <div className="flex items-center rounded-xl overflow-hidden border shrink-0" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}>
+            {([
+              { value: 'draft',    label: '下書き',   dot: '#9fb8c4' },
+              { value: 'active',   label: 'アクティブ', dot: '#1f9d72' },
+              { value: 'archived', label: 'アーカイブ', dot: '#9fb8c4' },
+            ] as { value: typeof project.status; label: string; dot: string }[]).map((opt, i) => {
+              const isSelected = project.status === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={!canEditProject}
+                  onClick={() => setProject({ ...project, status: opt.value })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all"
+                  style={{
+                    borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
+                    background: isSelected
+                      ? opt.value === 'active'
+                        ? 'linear-gradient(135deg, rgba(31,157,114,0.15) 0%, rgba(183,244,216,0.4) 100%)'
+                        : opt.value === 'draft'
+                          ? 'linear-gradient(135deg, rgba(15,154,177,0.1) 0%, rgba(126,215,222,0.2) 100%)'
+                          : 'rgba(159,184,196,0.12)'
+                      : 'transparent',
+                    color: isSelected
+                      ? opt.value === 'active' ? 'var(--success)' : opt.value === 'draft' ? 'var(--accent)' : 'var(--text-secondary)'
+                      : 'var(--text-muted)',
+                  }}
+                >
+                  <span
+                    className="inline-block rounded-full shrink-0"
+                    style={{
+                      width: 7, height: 7,
+                      backgroundColor: isSelected ? opt.dot : 'var(--border)',
+                      boxShadow: isSelected ? `0 0 0 2px ${opt.dot}44` : 'none',
+                    }}
+                  />
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
+
+          {/* 保存・削除 */}
+          {savingMsg && (
+            <span className="inline-flex items-center gap-1 text-xs shrink-0" style={{ color: 'var(--success)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              {savingMsg}
+            </span>
+          )}
+          <button onClick={() => save(project)} disabled={saving || !canEditProject} className="btn-primary text-sm shrink-0">
+            {saving ? (
+              <span className="flex items-center gap-1.5">
+                <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+                保存中...
+              </span>
+            ) : '保存'}
+          </button>
+          {canDeleteProject && <button onClick={deleteProject} className="btn-danger text-xs shrink-0">削除</button>}
         </div>
 
-        {currentPhases.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>進行パス</p>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  全体の流れと現在地を表示しています。クリックで現在フェーズを切り替えられます。
-                </p>
-              </div>
-              <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                現在地: {currentPhases[currentPhaseIndex]?.name || '未設定'}
-              </div>
-            </div>
-            <div className="overflow-x-auto pb-1">
-              <div className="flex min-w-max items-stretch">
+        {/* 進行パス（Salesforce Path スタイル・全幅均等） */}
+        {currentPhases.length > 0 ? (
+          <div>
+            {/* パス本体: flex で全幅均等分割 */}
+            <div className="flex w-full overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
               {currentPhases.map((phase, phaseIndex) => {
                 const isCurrent = phase.key === project.phase_key;
                 const isCompleted = currentPhaseIndex >= 0 && phaseIndex < currentPhaseIndex;
-                const isUpcoming = !isCurrent && !isCompleted;
+                const isFirst = phaseIndex === 0;
                 const isLast = phaseIndex === currentPhases.length - 1;
+
+                const bgColor = isCurrent
+                  ? '#0f9ab1'
+                  : isCompleted
+                    ? '#1f9d72'
+                    : 'rgba(241,250,252,0.9)';
+                const textColor = isCurrent || isCompleted ? '#ffffff' : 'var(--text-secondary)';
+
                 return (
                   <button
                     key={phase.id}
                     type="button"
+                    disabled={!canEditProject}
                     onClick={() => setProject({ ...project, phase_key: phase.key })}
-                    className="relative flex min-w-[140px] items-center justify-between px-4 py-3 text-sm font-medium transition-colors border-y border-l first:rounded-l-2xl last:rounded-r-2xl"
+                    title={`フェーズを「${phase.name}」に切り替え`}
+                    className="group relative flex flex-1 h-10 items-center justify-center transition-all focus:outline-none"
                     style={{
-                      marginRight: isLast ? 0 : 18,
-                      borderColor: isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)',
-                      borderRightColor: isLast ? (isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)') : 'transparent',
-                      background: isCurrent
-                        ? 'linear-gradient(135deg, rgba(15,154,177,0.2) 0%, rgba(126,215,222,0.34) 100%)'
-                        : isCompleted
-                          ? 'linear-gradient(135deg, rgba(31,157,114,0.16) 0%, rgba(183,244,216,0.6) 100%)'
-                          : 'linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(241,250,252,0.86) 100%)',
-                      color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-secondary)',
-                      boxShadow: isCurrent ? '0 10px 24px rgba(15,154,177,0.14)' : 'none',
+                      minWidth: 80,
+                      paddingLeft: isFirst ? 16 : 24,
+                      paddingRight: isLast ? 16 : 8,
+                      background: bgColor,
+                      color: textColor,
+                      clipPath: isFirst
+                        ? isLast
+                          ? 'inset(0)'
+                          : 'polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)'
+                        : isLast
+                          ? 'polygon(0 0, 14px 50%, 0 100%, 100% 100%, 100% 0)'
+                          : 'polygon(0 0, 14px 50%, 0 100%, calc(100% - 14px) 100%, 100% 50%, calc(100% - 14px) 0)',
+                      filter: isCurrent ? 'drop-shadow(0 3px 8px rgba(15,154,177,0.3))' : 'none',
+                      zIndex: currentPhases.length - phaseIndex,
+                      marginLeft: isFirst ? 0 : -2,
+                      border: 'none',
+                      outline: 'none',
                     }}
                   >
-                    {!isLast && (
-                      <>
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-[-1px] right-[-19px] z-20 h-[calc(100%+2px)] w-5"
-                          style={{
-                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
-                            background: isCurrent
-                              ? 'linear-gradient(135deg, rgba(15,154,177,0.2) 0%, rgba(126,215,222,0.34) 100%)'
-                              : isCompleted
-                                ? 'linear-gradient(135deg, rgba(31,157,114,0.16) 0%, rgba(183,244,216,0.6) 100%)'
-                                : 'linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(241,250,252,0.86) 100%)',
-                          }}
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-[-1px] right-[-20px] h-[calc(100%+2px)] w-5"
-                          style={{
-                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
-                            background: isCurrent ? 'rgba(15,154,177,0.42)' : isCompleted ? 'rgba(31,157,114,0.34)' : 'var(--border)',
-                            zIndex: 10,
-                          }}
-                        />
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute top-[1px] right-[-16px] z-30 h-[calc(100%-2px)] w-4"
-                          style={{
-                            clipPath: 'polygon(0 0, 100% 50%, 0 100%)',
-                            background: 'var(--bg-base)',
-                          }}
-                        />
-                      </>
-                    )}
-                    <span className="relative z-40 flex items-center gap-2">
-                      <span
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold"
-                        style={{
-                          backgroundColor: isCurrent ? 'rgba(255,255,255,0.78)' : isCompleted ? 'rgba(255,255,255,0.72)' : 'rgba(237,245,248,0.95)',
-                          color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-muted)',
-                        }}
-                      >
-                        {phaseIndex + 1}
-                      </span>
-                      <span>{phase.name}</span>
+                    <span className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(255,255,255,0.12)' }} />
+                    {/* アイコン */}
+                    <span
+                      className="relative z-10 inline-flex shrink-0 items-center justify-center rounded-full mr-1.5"
+                      style={{
+                        width: 18, height: 18,
+                        backgroundColor: isCurrent || isCompleted ? 'rgba(255,255,255,0.22)' : 'rgba(15,154,177,0.1)',
+                        color: isCurrent || isCompleted ? '#fff' : 'var(--text-muted)',
+                        fontSize: 10, fontWeight: 700,
+                      }}
+                    >
+                      {isCompleted ? (
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      ) : (
+                        phaseIndex + 1
+                      )}
                     </span>
-                    <span className="relative z-40 text-xs" style={{ color: isCurrent ? 'var(--accent)' : isCompleted ? 'var(--success)' : 'var(--text-muted)' }}>
-                      {isCurrent ? 'Now' : isCompleted ? 'Done' : isUpcoming ? 'Next' : ''}
-                    </span>
+                    {/* 名前 */}
+                    <span className="relative z-10 text-[12px] font-semibold truncate" style={{ color: textColor }}>{phase.name}</span>
                   </button>
                 );
               })}
-              </div>
+            </div>
+            {/* プログレスバー: パスと同じ幅で確実に揃う */}
+            <div className="w-full h-[3px]" style={{ background: 'var(--border)' }}>
+              <div
+                className="h-full transition-all duration-500"
+                style={{
+                  background: 'linear-gradient(90deg, #1f9d72 0%, #0f9ab1 100%)',
+                  width: currentPhaseIndex >= 0
+                    ? `${Math.round(((currentPhaseIndex + 1) / currentPhases.length) * 100)}%`
+                    : '0%',
+                }}
+              />
             </div>
           </div>
-        )}
-        {currentPhases.length === 0 && (
-          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        ) : (
+          <div className="px-6 pb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
             この種別にはまだフェーズ定義がありません。プロジェクト種別設定で追加してください。
           </div>
         )}
@@ -924,99 +1344,383 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* タブ切り替え */}
           <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-            {[{ k: 'fields' as const, l: 'プロジェクト情報' }, { k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }].map(t => (
-              <button key={t.k} onClick={() => setTab(t.k)}
-                className={`text-sm px-3 py-1.5 rounded-xl transition-colors ${tab === t.k ? '' : ''}`}
-                style={tab === t.k
-                  ? { backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(15,154,177,0.18)' }
-                  : { color: 'var(--text-muted)' }}
+            {([
+              ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
+              ...(canViewItems ? [{ k: 'tasks' as const, l: `タスク (${todos.flatMap(t => [t, ...(t.subtasks ?? [])]).length})` }] : []),
+              ...(canViewItems ? [{ k: 'members' as const, l: `メンバー (${assignableUsers.length})` }] : []),
+              ...(canViewNotes ? [{ k: 'notes' as const, l: `ノート (${notes.length})` }] : []),
+              ...(canViewContent ? [{ k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }] : []),
+            ]).map(t => (
+              <button
+                key={t.k}
+                onClick={() => {
+                  if (tab === t.k) return;
+                  if (!confirmLeaveUnsaved()) return;
+                  setTab(t.k);
+                }}
+                className={`tab-btn${tab === t.k ? ' active' : ''}`}
               >
                 {t.l}
               </button>
             ))}
           </div>
 
-          {tab === 'fields' ? (
-            <>
-              {/* コアフィールド */}
-              <section>
-                <h2 className="section-title mb-3">基本情報 (Project Core)</h2>
-                <div className="card p-5 grid grid-cols-2 gap-4">
-                  <div className="col-span-2 flex flex-wrap gap-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    <span>種別: <span style={{ color: 'var(--accent)' }}>{typeLabel}</span></span>
-                    <span>現在フェーズ: <span style={{ color: 'var(--accent)' }}>{currentPhases[currentPhaseIndex]?.name || '未設定'}</span></span>
-                    <span>総フェーズ数: {currentPhases.length}</span>
-                  </div>
+          {tab === 'tasks' && canViewItems ? (
+            <section className="space-y-4">
+              <TodoTab
+                projectId={id}
+                todos={todos}
+                assignableUsers={project.assignable_users ?? []}
+                phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
+                canEdit={canEditItems}
+                onTodosChange={setTodos}
+              />
+            </section>
+          ) : tab === 'notes' && canViewNotes ? (
+            <section className="space-y-4">
+              {/* 新規作成フォーム */}
+              {noteCreating ? (
+                <div className="card p-4">
+                  <MarkdownRichTextEditor
+                    title={noteDraft.title}
+                    body={noteDraft.body}
+                    onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
+                    onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
+                    onSave={createNote}
+                    onCancel={() => { setNoteCreating(false); setNoteDraft({ title: '', body: '' }); }}
+                    saveLabel="作成"
+                    bodyLabel="本文"
+                    isDirty={noteCreateDirty}
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (!confirmLeaveUnsaved()) return;
+                    setNoteCreating(true);
+                  }}
+                  disabled={!canEditNotes}
+                  className="btn-secondary w-full justify-center text-sm"
+                >
+                  + 新しいノートを作成
+                </button>
+              )}
+
+              {/* ノート一覧 */}
+              {noteLoading ? (
+                <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>読み込み中...</p>
+              ) : notes.length === 0 ? (
+                <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                  <p className="text-sm">ノートはありません</p>
+                  <p className="text-xs mt-1">「新しいノートを作成」から追加してください</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notes.map(note => (
+                    <div key={note.id} className="card overflow-hidden">
+                      {noteEditingId === note.id ? (
+                        /* 編集モード */
+                        <div className="p-4">
+                          <MarkdownRichTextEditor
+                            title={noteDraft.title}
+                            body={noteDraft.body}
+                            onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
+                            onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
+                            onSave={async () => {
+                              await updateNote(note.id, { title: noteDraft.title, body: noteDraft.body });
+                              setNoteEditingId(null);
+                            }}
+                            onCancel={() => setNoteEditingId(null)}
+                            bodyLabel="本文"
+                            isDirty={noteEditDirty}
+                          />
+                        </div>
+                      ) : (
+                        /* 表示モード */
+                        <div className="p-4">
+                          <div className="flex items-start justify-between gap-2 mb-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {note.pinned === 1 && <span className="text-sm shrink-0">📌</span>}
+                              <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                                {note.title || '（無題）'}
+                              </h3>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => updateNote(note.id, { pinned: note.pinned === 1 ? 0 : 1 })}
+                                disabled={!canEditNotes}
+                                title={note.pinned === 1 ? 'ピン留めを外す' : 'ピン留め'}
+                                className="p-1 rounded transition-colors text-sm"
+                                style={{ color: note.pinned === 1 ? 'var(--accent)' : 'var(--text-muted)', opacity: note.pinned === 1 ? 1 : 0.4 }}
+                              >
+                                📌
+                              </button>
+                              <button
+                                disabled={!canEditNotes}
+                                onClick={() => {
+                                  if (!confirmLeaveUnsaved()) return;
+                                  setNoteEditingId(note.id);
+                                  setNoteDraft({ title: note.title, body: note.body });
+                                }}
+                                className="px-2 py-1 rounded transition-colors text-xs"
+                                style={{ color: 'var(--text-secondary)' }}
+                              >
+                                編集
+                              </button>
+                              <button
+                                onClick={() => deleteNote(note.id)}
+                                disabled={!canEditNotes}
+                                className="px-2 py-1 rounded transition-colors text-xs"
+                                style={{ color: '#b34a4a' }}
+                              >
+                                削除
+                              </button>
+                            </div>
+                          </div>
+                          {note.body && (
+                            <MarkdownViewer content={note.body} className="text-sm" />
+                          )}
+                          <p className="text-xs mt-3" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                            更新: {new Date(note.updated_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : tab === 'members' && canViewItems ? (
+            <section className="space-y-5">
+              <div className="card p-5 space-y-4">
+                <div>
+                  <h2 className="section-title">主担当</h2>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    プロジェクト全体の代表担当者です。Todo/KANBAN/WBSの担当者フィルタでも使います。
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
                   <div>
-                    <label className="field-label">種別</label>
+                    <label className="field-label">主担当者</label>
                     <select
                       className="field-input"
-                      value={project.type}
-                      onChange={e => {
-                        const nextType = e.target.value as typeof project.type;
-                        const nextDefinition = projectTypes.find((definition) => definition.key === nextType);
-                        const nextPhaseKey = nextDefinition?.phases.find((phase) => phase.key === project.phase_key)
-                          ? project.phase_key
-                          : (nextDefinition?.phases[0]?.key || '');
-                        setProject({ ...project, type: nextType, phase_key: nextPhaseKey });
-                      }}
+                      value={project.primary_assignee_id ?? ''}
+                      disabled={!canEditProject}
+                      onChange={(e) => setProject({ ...project, primary_assignee_id: e.target.value || null })}
                     >
-                      {projectTypes.map((definition) => <option key={definition.id} value={definition.key}>{definition.name}</option>)}
+                      <option value="">未設定</option>
+                      {assignableUsers.map((assignee) => (
+                        <option key={assignee.id} value={assignee.id}>
+                          {userDisplayName(assignee)} / {assignee.email}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="field-label">ターゲット</label>
-                    <input className="field-input" value={project.target} onChange={e => setProject({ ...project, target: e.target.value })} placeholder="例: 30代 BtoB マーケター" />
-                  </div>
-                  <div>
-                    <label className="field-label">開始日</label>
-                    <input className="field-input" type="date" value={project.start_date} onChange={e => setProject({ ...project, start_date: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="field-label">終了日</label>
-                    <input className="field-input" type="date" value={project.end_date} onChange={e => setProject({ ...project, end_date: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="field-label">予算</label>
-                    <input className="field-input" value={project.budget} onChange={e => setProject({ ...project, budget: e.target.value })} placeholder="例: ¥500,000" />
-                  </div>
-                  <div>
-                    <label className="field-label">チャネル（カンマ区切り）</label>
-                    <input className="field-input" value={channels.join(', ')} onChange={e => setProject({ ...project, channels: JSON.stringify(e.target.value.split(',').map(s => s.trim()).filter(Boolean)) })} placeholder="Web, SNS, メール" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="field-label">概要</label>
-                    <textarea className="field-input" rows={3} value={project.description} onChange={e => setProject({ ...project, description: e.target.value })} placeholder="施策の目的・背景・概要を記述" />
+                  <button onClick={() => save(project)} disabled={saving || !canEditProject} className="btn-primary text-sm">
+                    主担当を保存
+                  </button>
+                </div>
+                <div className="rounded-xl border p-3 flex items-center gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
+                  {primaryAssignee?.avatar_url ? (
+                    <img src={primaryAssignee.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                      {primaryAssignee ? userInitials(primaryAssignee) : '未'}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{primaryAssignee ? userDisplayName(primaryAssignee) : '未設定'}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{primaryAssignee?.email ?? '主担当が設定されていません'}</p>
                   </div>
                 </div>
-              </section>
+              </div>
 
-              {/* フィールド */}
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="section-title">フィールド</h2>
+              <div className="card p-5 space-y-4">
+                <div>
+                  <h2 className="section-title">メンバー</h2>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    登録済みユーザーだけをプロジェクトに追加できます。未登録ユーザーを追加する場合は、先にユーザー管理で作成してください。
+                  </p>
                 </div>
-                {customFields.length === 0 ? (
-                  <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-                    <p className="text-sm">このプロジェクト種別には追加フィールドがありません</p>
-                    <p className="text-xs mt-1">フィールド定義の追加や変更はプロジェクト設定から行ってください</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                    {customFields.map((f, i) => (
-                      <div key={f.id} className={f.layout === 'full' ? 'xl:col-span-2' : ''}>
-                        <CustomFieldRow
-                          field={f}
-                          globalAssetObjects={globalAssetObjects}
-                          onChange={nf => updateField(i, nf)}
-                          onCrawl={() => crawlField(f.id)}
-                          crawling={crawlingFieldId === f.id}
-                        />
-                      </div>
-                    ))}
+
+                {canManageMembers && (
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
+                    <div>
+                      <label className="field-label">追加するユーザー</label>
+                      <select className="field-input" value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)}>
+                        <option value="">登録済みユーザーを選択</option>
+                        {selectableProjectUsers.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>
+                            {userDisplayName(candidate)} / {candidate.email}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field-label">プロジェクトロール</label>
+                      <select className="field-input" value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                        {projectRoleDefinitions.map((role) => (
+                          <option key={role.key} value={role.key}>{role.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={addProjectMember} disabled={memberSaving || !memberUserId} className="btn-secondary text-sm">
+                      {memberSaving ? '追加中...' : '追加'}
+                    </button>
+                    {memberMessage && (
+                      <p className="md:col-span-3 text-xs" style={{ color: memberMessage === 'メンバーを更新しました' ? 'var(--success)' : '#b34a4a' }}>
+                        {memberMessage}
+                      </p>
+                    )}
                   </div>
                 )}
-              </section>
+
+                <div className="divide-y divide-slate-200/70">
+                  {project.owner && (
+                    <div className="py-3 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>
+                        {userInitials(project.owner)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{userDisplayName(project.owner)}</p>
+                        <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{project.owner.email}</p>
+                      </div>
+                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>オーナー</span>
+                    </div>
+                  )}
+                  {(project.members ?? []).map((member) => (
+                    <div key={member.user.id} className="py-3 flex items-center gap-3">
+                      {member.user.avatar_url ? (
+                        <img src={member.user.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                          {userInitials(member.user)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{userDisplayName(member.user)}</p>
+                        <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{member.user.email}</p>
+                      </div>
+                      {canManageMembers ? (
+                        <select className="field-input text-xs py-1.5 w-52" value={member.role} onChange={(e) => updateProjectMemberRole(member.user.id, e.target.value)}>
+                          {projectRoleDefinitions.map((role) => (
+                            <option key={role.key} value={role.key}>{role.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>{roleLabel(member.role)}</span>
+                      )}
+                      {canManageMembers && (
+                        <button onClick={() => removeProjectMember(member.user.id)} className="btn-danger text-xs px-2 py-1">
+                          外す
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ) : tab === 'fields' && canViewItems ? (
+            <>
+              {/* セクション別フィールド表示 */}
+              {(() => {
+                // template_id → CustomField のマップ（情報ウィジェットと混在するitems順レンダリング用）
+                const fieldByTemplateId = new Map<string, CustomField>(
+                  allFields.filter(f => f.template_id).map(f => [f.template_id!, f])
+                );
+
+                type RenderItem =
+                  | { type: 'field'; field: CustomField; layout: string; key: string }
+                  | { type: 'widget'; kind: string; layout: string; key: string };
+
+                const renderSection = (
+                  secId: string,
+                  secName: string,
+                  secColor: string | undefined,
+                  renderItems: RenderItem[]
+                ) => {
+                  if (renderItems.length === 0) return null;
+                  const isOpen = openFieldSections.includes(secName);
+                  return (
+                    <section key={secId}>
+                      <div className="card overflow-hidden">
+                        {secColor && <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />}
+                        <button type="button" onClick={() => toggleFieldSection(secName)} className="row-hover w-full px-5 py-4 flex items-center justify-between gap-3 text-left">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {secColor && <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />}
+                            <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{secName}</h2>
+                          </div>
+                          <span className="text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>{isOpen ? '▲ 閉じる' : '▼ 開く'}</span>
+                        </button>
+                        {isOpen && (
+                          <div className="px-5 pb-5 grid grid-cols-2 gap-4">
+                            {renderItems.map(item => {
+                              if (item.type === 'widget') {
+                                return (
+                                  <SectionInfoWidget
+                                    key={item.key}
+                                    kind={item.kind}
+                                    layout={item.layout as 'half' | 'full'}
+                                    project={project}
+                                    projectType={currentProjectType}
+                                    phases={currentPhases}
+                                    typeLabel={typeLabel}
+                                    notes={notes}
+                                    onNotesTabClick={() => setTab('notes')}
+                                  />
+                                );
+                              }
+                              const f = item.field;
+                              const globalIdx = allFields.findIndex(af => af.id === f.id);
+                              return (
+                                <div key={item.key} className={item.layout === 'full' ? 'col-span-2' : ''}>
+                                  <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} showFieldKeys={devSettings.showFieldKeys} showFieldTypes={devSettings.showFieldTypes} showFieldIds={devSettings.showFieldIds} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  );
+                };
+
+                return (
+                  <>
+                    {/* 定義済みセクション: items順に描画（フィールド＋情報ウィジェット） */}
+                    {definedSections.map(secDef => {
+                      const items: RenderItem[] = secDef.items.flatMap((item): RenderItem[] => {
+                        const kind = item.kind ?? 'field';
+                        if (kind !== 'field') {
+                          return [{ type: 'widget', kind, layout: item.layout, key: item.id }];
+                        }
+                        const field = fieldByTemplateId.get(item.field_id);
+                        if (!field) return [];
+                        return [{ type: 'field', field, layout: item.layout, key: item.id }];
+                      });
+                      // items未設定のセクション（レガシー）: section名でフィールドを検索
+                      const fallback = secDef.items.length === 0
+                        ? (fieldsBySection[secDef.name] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }))
+                        : [];
+                      return renderSection(secDef.id, secDef.name, secDef.color, [...items, ...fallback]);
+                    })}
+
+                    {/* 定義外セクション（レガシーフィールド） */}
+                    {extraSectionNames.map(sec => {
+                      const items = (fieldsBySection[sec] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }));
+                      return renderSection(`extra-${sec}`, sec, undefined, items);
+                    })}
+
+                    {/* セクション定義も対象フィールドもない場合 */}
+                    {definedSections.length === 0 && extraSectionNames.length === 0 && (
+                      <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-sm">このプロジェクト種別には項目がありません</p>
+                        <p className="text-xs mt-1">プロジェクト種別設定で項目を追加してください</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* AI補完サジェスト */}
               {suggestions.length > 0 && (
@@ -1037,7 +1741,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </section>
               )}
             </>
-          ) : (
+          ) : tab === 'assets' && canViewContent ? (
             <section>
               {assets.length === 0 ? (
                 <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
@@ -1046,9 +1750,28 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {assets.map(a => <AssetCard key={a.id} asset={a} onDelete={() => deleteAsset(a.id)} onSaved={updateAsset} />)}
+                  {assets.map(a => (
+                    <AssetCard
+                      key={a.id}
+                      asset={a}
+                      onDelete={() => deleteAsset(a.id)}
+                      onSaved={updateAsset}
+                      onDirtyChange={(assetId, dirty) => {
+                        setAssetDirtyMap((current) => {
+                          if (current[assetId] === dirty) return current;
+                          return { ...current, [assetId]: dirty };
+                        });
+                      }}
+                    />
+                  ))}
                 </div>
               )}
+            </section>
+          ) : (
+            <section>
+              <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                <p className="text-sm">この情報を表示する権限がありません</p>
+              </div>
             </section>
           )}
         </div>
@@ -1058,7 +1781,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           <h2 className="section-title">コンテンツ生成</h2>
 
           {/* 生成コンテンツ選択 */}
-          <div>
+          {canViewContent && <div>
             <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>生成するコンテンツ</p>
             <div className="space-y-1.5">
               {currentContentTemplates.map((template) => (
@@ -1078,12 +1801,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
           {/* 生成ボタン */}
           <button
             onClick={generate}
-            disabled={generating || selectedContentKeys.length === 0}
+            disabled={generating || selectedContentKeys.length === 0 || !canGenerateContent}
             className="btn-primary w-full justify-center py-2.5"
           >
               {generating ? (
@@ -1105,9 +1828,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             />
           </div>
 
-          <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
-            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>フィールド自動補完</p>
-            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力フィールドの値をAIが推測します</p>
+          {canGenerateContent && <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>項目自動補完</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力項目の値をAIが推測します</p>
             <button onClick={complete} disabled={completing} className="btn-secondary w-full justify-center text-sm">
               {completing ? (
                 <span className="flex items-center gap-2">
@@ -1116,7 +1839,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </span>
               ) : 'AI補完を実行'}
             </button>
-          </div>
+          </div>}
 
           {aiError && (
             <div className="p-3 rounded-xl border" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
@@ -1136,7 +1859,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> プロジェクトコア情報</li>
               <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.length > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                 {project.custom_fields.length > 0 ? '✓' : '−'}
-              </span> フィールド ({project.custom_fields.length}件)</li>
+              </span> 項目 ({project.custom_fields.length}件)</li>
               <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.some(f => f.crawled_content) ? 'var(--success)' : 'var(--text-muted)' }}>
                 {project.custom_fields.some(f => f.crawled_content) ? '✓' : '−'}
               </span> クロール済みURL</li>
@@ -1145,8 +1868,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
           {inheritedCount > 0 && (
             <div className="p-3 rounded-xl border" style={{ backgroundColor: 'rgba(255, 243, 224, 0.8)', borderColor: 'rgba(215,138,29,0.25)' }}>
-              <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>⚠ 継承フィールドあり</p>
-              <p className="text-xs mt-1" style={{ color: '#9a6213' }}>{inheritedCount}件のフィールドが前回施策から継承されています。生成前に確認を推奨します。</p>
+              <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>⚠ 継承項目あり</p>
+              <p className="text-xs mt-1" style={{ color: '#9a6213' }}>{inheritedCount}件の項目が前回施策から継承されています。生成前に確認を推奨します。</p>
             </div>
           )}
         </div>

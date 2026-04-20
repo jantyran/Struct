@@ -15,6 +15,7 @@ function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   return next;
 }
 
+
 function ContentTemplateRow({
   template,
   expanded,
@@ -46,7 +47,7 @@ function ContentTemplateRow({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-4 flex items-start justify-between gap-4 text-left"
+        className="row-hover w-full px-4 py-4 flex items-start justify-between gap-4 text-left"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -127,6 +128,7 @@ function ContentTemplateRow({
               placeholder="上記の構造化設定では足りない固有の条件や禁止事項を記述"
             />
           </div>
+
         </div>
       )}
     </div>
@@ -136,6 +138,7 @@ function ContentTemplateRow({
 export default function ContentTemplatesPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const canManageProjectSettings = Boolean(user?.system_permissions?.manage_project_settings);
   const [templates, setTemplates] = useState<ProjectContentTemplate[]>([]);
   const [openTemplateIds, setOpenTemplateIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -148,14 +151,23 @@ export default function ContentTemplatesPage() {
       router.push(withBasePath('/login'));
       return;
     }
+    if (!user.system_permissions?.manage_project_settings) {
+      router.push(withBasePath('/settings'));
+      return;
+    }
 
     (async () => {
       const res = await fetch(withBasePath('/api/content-templates'));
-      const payload = await res.json();
       if (res.status === 401) {
         router.push(withBasePath('/login'));
         return;
       }
+      if (res.status === 403) {
+        router.push(withBasePath('/settings'));
+        return;
+      }
+      const payload = await res.json();
+      if (!res.ok) return;
       const nextTemplates = Array.isArray(payload.content_templates) ? payload.content_templates : [];
       setTemplates(nextTemplates);
       setOpenTemplateIds((current) => current.length > 0 ? current : nextTemplates.slice(0, 1).map((template: ProjectContentTemplate) => template.id));
@@ -176,6 +188,13 @@ export default function ContentTemplatesPage() {
       router.push(withBasePath('/login'));
       return;
     }
+    if (res.status === 403) {
+      router.push(withBasePath('/settings'));
+      return;
+    }
+    if (!res.ok) {
+      return;
+    }
 
     setTemplates(Array.isArray(payload.content_templates) ? payload.content_templates : nextTemplates);
     setSaved(true);
@@ -184,6 +203,26 @@ export default function ContentTemplatesPage() {
 
   if (authLoading || !user) {
     return <div className="p-6 max-w-5xl mx-auto"><div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div></div>;
+  }
+
+  if (!canManageProjectSettings) {
+    return (
+      <div className="p-6 max-w-5xl mx-auto">
+        <div className="card p-6 space-y-4">
+          <div>
+            <h1 className="text-xl font-bold">生成コンテンツ設定</h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+              プロジェクト設定管理権限がないため、このページは表示できません。
+            </p>
+          </div>
+          <div>
+            <button onClick={() => router.push(withBasePath('/settings'))} className="btn-secondary">
+              ← 設定へ戻る
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

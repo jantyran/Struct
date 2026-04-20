@@ -1,46 +1,57 @@
 import { NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { normalizeProjectTypeDefinitions, normalizeProjectTypeDefinitionsRow, serializeProjectTypeDefinitions } from '@/lib/project-types';
 import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
 import type { CustomField } from '@/types';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
-    let assets = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
-
-    if (!assets) {
-      const id = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(id, user.id);
-      assets = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(id);
-    }
-
+    const assets = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json({ project_types: normalizeProjectTypeDefinitionsRow(assets) });
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('GET /api/project-types failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_project_settings')) {
+      return NextResponse.json({ error: 'プロジェクト設定管理権限がありません' }, { status: 403 });
+    }
     const body = await request.json() as { project_types?: unknown };
     const definitions = normalizeProjectTypeDefinitions(body.project_types as any[]);
+    getOrganizationSettingsRow(db, user.organization_id);
 
     const tx = db.transaction(() => {
       db.prepare(`
-        UPDATE global_assets SET
+        UPDATE organization_settings SET
           project_types = ?,
           updated_at = datetime('now')
-        WHERE user_id = ?
-      `).run(serializeProjectTypeDefinitions(definitions), user.id);
+        WHERE organization_id = ?
+      `).run(serializeProjectTypeDefinitions(definitions), user.organization_id);
 
-      const ownedProjects = db.prepare('SELECT id, type FROM projects WHERE owner_id = ?').all(user.id) as Array<{ id: string; type: string }>;
-      for (const project of ownedProjects) {
+      const projects = db.prepare('SELECT id, type FROM projects WHERE organization_id = ?').all(user.organization_id) as Array<{ id: string; type: string }>;
+      for (const project of projects) {
         const existingFields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(project.id) as CustomField[];
         const definition = definitions.find((item) => item.key === project.type);
         const syncedFields = syncCustomFieldsWithDefinition(project.id, existingFields, definition);
@@ -49,9 +60,10 @@ export async function PUT(request: Request) {
     });
     tx();
 
-    const updated = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+    const updated = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json({ project_types: normalizeProjectTypeDefinitionsRow(updated) });
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('PUT /api/project-types failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

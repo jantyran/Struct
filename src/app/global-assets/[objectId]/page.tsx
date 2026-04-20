@@ -229,6 +229,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
   const { objectId } = params;
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const canManageGlobalAssets = Boolean(user?.system_permissions?.manage_global_assets);
   const [data, setData] = useState<GlobalAssets>(EMPTY_GA);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -243,15 +244,25 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
       router.push(withBasePath('/login'));
       return;
     }
+    if (!user.system_permissions?.manage_global_assets) {
+      setData(EMPTY_GA);
+      router.push(withBasePath('/settings'));
+      return;
+    }
 
     (async () => {
       const res = await fetch(withBasePath('/api/global-assets'));
-      const payload = await res.json();
       if (res.status === 401) {
         setData(EMPTY_GA);
         router.push(withBasePath('/login'));
         return;
       }
+      if (res.status === 403) {
+        setData(EMPTY_GA);
+        router.push(withBasePath('/settings'));
+        return;
+      }
+      const payload = await res.json();
       setData(normalizeGlobalAssets(payload));
     })();
   }, [authLoading, router, user]);
@@ -274,6 +285,10 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
 
     if (res.status === 401) {
       router.push(withBasePath('/login'));
+      return;
+    }
+    if (res.status === 403) {
+      router.push(withBasePath('/settings'));
       return;
     }
 
@@ -393,6 +408,26 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
     return (
       <div className="p-6 max-w-6xl mx-auto">
         <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div>
+      </div>
+    );
+  }
+
+  if (!user || !canManageGlobalAssets) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto">
+        <div className="card p-6 space-y-4">
+          <div>
+            <h1 className="text-xl font-bold">Global Assets</h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+              Global Assets 管理権限がないため、このページは表示できません。
+            </p>
+          </div>
+          <div>
+            <button onClick={() => router.push(withBasePath('/settings'))} className="btn-secondary">
+              ← 設定へ戻る
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

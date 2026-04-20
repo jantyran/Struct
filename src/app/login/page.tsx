@@ -89,6 +89,13 @@ export default function LoginPage() {
               新規登録
             </Link>
           </p>
+          <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
+            パスワードを忘れた場合は、ログイン済みなら
+            <Link href={withBasePath('/settings/password')} className="ml-1 text-violet-400 hover:text-violet-300">
+              設定のパスワード変更
+            </Link>
+            から更新できます。ログインできない場合は管理者に再設定を依頼してください。
+          </p>
         </div>
       </div>
     </div>

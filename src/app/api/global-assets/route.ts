@@ -1,36 +1,47 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
-import { v4 as uuidv4 } from 'uuid';
 import { deriveLegacyGlobalAssetColumns, normalizeGlobalAssets, normalizeGlobalAssetsRow, serializeGlobalAssetObjects } from '@/lib/global-assets';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
-    let assets = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
-
-    if (!assets) {
-      const id = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(id, user.id);
-      assets = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(id);
-    }
-
+    const assets = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(assets));
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('GET /api/global-assets failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
+  let user;
   try {
-    const user = await requireSession();
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_global_assets')) {
+      return NextResponse.json({ error: 'Global Assets 管理権限がありません' }, { status: 403 });
+    }
     const body = normalizeGlobalAssets(await request.json());
     const legacy = deriveLegacyGlobalAssetColumns(body.objects);
+    getOrganizationSettingsRow(db, user.organization_id);
 
     db.prepare(`
-      UPDATE global_assets SET
+      UPDATE organization_settings SET
         company_name = ?,
         company_description = ?,
         brand_voice = ?,
@@ -38,7 +49,7 @@ export async function PUT(request: Request) {
         products = ?,
         objects = ?,
         updated_at = datetime('now')
-      WHERE user_id = ?
+      WHERE organization_id = ?
     `).run(
       legacy.company_name,
       legacy.company_description,
@@ -46,12 +57,13 @@ export async function PUT(request: Request) {
       legacy.brand_guidelines,
       legacy.products,
       serializeGlobalAssetObjects(body.objects),
-      user.id
+      user.organization_id
     );
 
-    const updated = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
+    const updated = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(updated));
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('PUT /api/global-assets failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

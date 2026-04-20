@@ -1,10 +1,23 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { createSession } from "@/lib/auth";
+import { attachSessionCookie, createSessionToken } from "@/lib/auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: Request) {
+  // ブルートフォース対策: IPごとに 10回/分 まで
+  const ip = getClientIp(request);
+  const rl = checkRateLimit(`login:${ip}`, 10, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "リクエストが多すぎます。しばらくしてから再試行してください。" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
+  }
+
   const { email, password } = await request.json();
 
   if (!email || !password) {
@@ -18,6 +31,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "メールアドレスまたはパスワードが正しくありません" }, { status: 401 });
   }
 
-  await createSession(user.id);
-  return NextResponse.json({ success: true, user: { id: user.id, email: user.email, name: user.name } });
+  try {
+    const token = await createSessionToken(user.id);
+    return attachSessionCookie(
+      NextResponse.json({ success: true, user: { id: user.id, email: user.email, name: user.name } }),
+      token
+    );
+  } catch (err) {
+    console.error('[login] createSession failed:', err);
+    return NextResponse.json(
+      { error: 'セッション作成に失敗しました: ' + (err instanceof Error ? err.message : String(err)) },
+      { status: 500 }
+    );
+  }
 }

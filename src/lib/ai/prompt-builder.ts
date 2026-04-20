@@ -1,4 +1,5 @@
-import type { GlobalAssets, ProjectWithFields, CustomField, CompletionSuggestion, ProjectContentTemplate } from '@/types';
+import type { GlobalAssets, ProjectWithFields, CustomField, CompletionSuggestion, ProjectContentTemplate, GlobalAssetRecord } from '@/types';
+import { customFieldReferenceKey, globalObjectReferenceKey } from '@/lib/ai/reference-sources';
 
 const SYSTEM_PROMPT = `あなたはプロフェッショナルなマーケティングストラテジストです。
 提供されたプロジェクトデータとブランド情報のみを根拠として、高品質なマーケティングコンテンツを生成します。
@@ -9,35 +10,54 @@ const SYSTEM_PROMPT = `あなたはプロフェッショナルなマーケティ
 3. ブランドボイスとガイドラインに厳密に従うこと
 4. 日本語で出力すること（指定がない限り）`;
 
-export function buildProjectContext(project: ProjectWithFields, globalAssets: GlobalAssets): string {
-  const channels = safeJson<string[]>(project.channels, []);
+type BuildProjectContextOptions = {
+  selectedSourceKeys?: string[];
+};
 
-  const inheritedFields = project.custom_fields.filter(f => f.inherited && f.value);
+export function buildProjectContext(project: ProjectWithFields, globalAssets: GlobalAssets, options: BuildProjectContextOptions = {}): string {
+  const selectedSourceKeys = new Set(options.selectedSourceKeys || []);
+  const useAllSources = selectedSourceKeys.size === 0;
+  const isEnabled = (key: string) => useAllSources || selectedSourceKeys.has(key);
+
+  const visibleFields = project.custom_fields.filter((field) => isEnabled(customFieldReferenceKey(field)));
+  const inheritedFields = visibleFields.filter(f => f.inherited && f.value);
   const inheritedWarning = inheritedFields.length > 0
     ? `\n⚠️ 継承フィールド（要確認）: ${inheritedFields.map(f => f.label).join('、')}`
     : '';
 
-  const coreFields = [
-    `種別: ${projectTypeLabel(project.type)}`,
-    `ターゲット: ${project.target || '（未設定）'}`,
-    `期間: ${project.start_date || '未定'} 〜 ${project.end_date || '未定'}`,
-    `予算: ${project.budget || '（未設定）'}`,
-    `チャネル: ${channels.length > 0 ? channels.join('、') : '（未設定）'}`,
-    `概要: ${project.description || '（未設定）'}`,
-  ].join('\n');
+  // 全フィールド（組み込み + カスタム）を section でグループ化してプロンプトに展開
+  const sectionMap = new Map<string, typeof visibleFields>();
+  for (const f of visibleFields) {
+    const sec = f.section || '詳細';
+    if (!sectionMap.has(sec)) sectionMap.set(sec, []);
+    sectionMap.get(sec)!.push(f);
+  }
 
-  const customFieldsText = project.custom_fields.length > 0
-    ? '\n\n【カスタムフィールド】\n' + project.custom_fields.map(f => {
-        const flag = f.inherited ? ' [継承・要確認]' : '';
-        const content = formatCustomFieldValue(f);
-        return `- ${f.label}${flag}: ${content}`;
-      }).join('\n')
+  const coreFields = isEnabled('project-core')
+    ? `名称: ${project.name}\n種別: ${projectTypeLabel(project.type)}\nフェーズ: ${project.phase_key || '（未設定）'}\nステータス: ${project.status || '（未設定）'}`
     : '';
 
-  const companyRecord = globalAssets.objects.find(object => object.key === 'company-profile')?.records[0];
-  const brandRecord = globalAssets.objects.find(object => object.key === 'brand-guidelines')?.records[0];
-  const objectsText = globalAssets.objects.length > 0
-    ? '\n\n【Global Asset Objects】\n' + globalAssets.objects.map((object) => {
+  const customFieldsText = sectionMap.size > 0
+    ? '\n\n' + Array.from(sectionMap.entries()).map(([sec, fields]) => {
+        const lines = fields.map(f => {
+          const flag = f.inherited ? ' [継承・要確認]' : '';
+          const content = formatCustomFieldValueWithOptions(
+            f,
+            globalAssets,
+            isEnabled('reference-records'),
+            isEnabled('url-crawled-content'),
+          );
+          return `- ${f.label}${flag}: ${content}`;
+        }).join('\n');
+        return `【${sec}】\n${lines}`;
+      }).join('\n\n')
+    : '';
+
+  const selectedGlobalObjects = globalAssets.objects.filter((object) => isEnabled(globalObjectReferenceKey(object.id)));
+  const companyRecord = selectedGlobalObjects.find(object => object.key === 'company-profile')?.records[0];
+  const brandRecord = selectedGlobalObjects.find(object => object.key === 'brand-guidelines')?.records[0];
+  const objectsText = selectedGlobalObjects.length > 0
+    ? '\n\n【Global Asset Objects】\n' + selectedGlobalObjects.map((object) => {
         const recordsText = object.records.length > 0
           ? object.records.map((record, index) => {
               const values = object.fields.map((field) =>
@@ -48,24 +68,37 @@ export function buildProjectContext(project: ProjectWithFields, globalAssets: Gl
           : '■ レコードなし';
         return `【${object.name}】\n説明: ${object.description || '（未設定）'}\n${recordsText}`;
       }).join('\n\n')
-    : '\n\n【Global Asset Objects】\n（未設定）';
+    : '';
+
+  const notesText = isEnabled('project-notes') && (project.project_notes?.length ?? 0) > 0
+    ? '\n\n【プロジェクトノート】\n' + project.project_notes!.map((note, index) => (
+        `- ${index + 1}. ${note.title || '無題'}: ${(note.body || '').trim() || '（本文なし）'}`
+      )).join('\n')
+    : '';
+
+  const generatedAssetsText = isEnabled('generated-assets') && (project.generated_assets?.length ?? 0) > 0
+    ? '\n\n【生成済みコンテンツ】\n' + project.generated_assets!.map((asset, index) => (
+        `- ${index + 1}. ${asset.title} (${asset.asset_type})\n${asset.content.slice(0, 800)}${asset.content.length > 800 ? '...' : ''}`
+      )).join('\n\n')
+    : '';
 
   return `
 ============================
 会社・ブランド情報（Global Assets）
 ============================
-会社名: ${companyRecord?.values.company_name || '（未設定）'}
+${selectedGlobalObjects.length > 0 ? `会社名: ${companyRecord?.values.company_name || '（未設定）'}
 会社概要: ${companyRecord?.values.company_description || '（未設定）'}
 ブランドボイス: ${brandRecord?.values.brand_voice || '（未設定）'}
-ブランドガイドライン: ${brandRecord?.values.brand_guidelines || '（未設定）'}
+ブランドガイドライン: ${brandRecord?.values.brand_guidelines || '（未設定）'}` : '（未設定）'}
 ${objectsText}
 
 ============================
 プロジェクト情報
 ============================
-名称: ${project.name}
 ${coreFields}
 ${customFieldsText}
+${notesText}
+${generatedAssetsText}
 ${inheritedWarning}
 `.trim();
 }
@@ -148,11 +181,21 @@ export function extractWarnings(content: string): string[] {
 
 export { SYSTEM_PROMPT };
 
-function safeJson<T>(str: string, fallback: T): T {
+function safeJson<T>(str: string | undefined | null, fallback: T): T {
+  if (!str) return fallback;
   try { return JSON.parse(str) as T; } catch { return fallback; }
 }
 
 function formatCustomFieldValue(field: CustomField): string {
+  return formatCustomFieldValueWithOptions(field, null, true, true);
+}
+
+function formatCustomFieldValueWithOptions(
+  field: CustomField,
+  globalAssets: GlobalAssets | null,
+  includeReferenceRecords: boolean,
+  includeUrlCrawledContent: boolean,
+): string {
   if (field.type === 'group') {
     const options = safeJson<{ children?: Array<{ key: string; label: string }> }>(field.options, {});
     const values = safeJson<Record<string, { value?: string } | string>>(field.value, {});
@@ -180,11 +223,46 @@ function formatCustomFieldValue(field: CustomField): string {
     }).join('\n')}`;
   }
 
-  if (field.crawled_content) {
+  if (includeReferenceRecords && globalAssets && (field.type === 'reference' || field.type === 'reference_multi')) {
+    const referenceText = formatReferenceFieldDetails(field, globalAssets);
+    if (referenceText) return referenceText;
+  }
+
+  if (includeUrlCrawledContent && field.crawled_content) {
     return `${field.value}\n  [URL取得内容]: ${field.crawled_content.substring(0, 800)}...`;
   }
 
   return field.value || '（未入力）';
+}
+
+function formatReferenceFieldDetails(field: CustomField, globalAssets: GlobalAssets): string | null {
+  const options = safeJson<{
+    referenceObjectId?: string;
+    referenceRecordKey?: string;
+    referenceRecordKeys?: string[];
+  }>(field.options, {});
+  const referenceObject = globalAssets.objects.find((object) => object.id === options.referenceObjectId);
+  if (!referenceObject) return null;
+
+  const recordKeys = field.type === 'reference'
+    ? [options.referenceRecordKey].filter((value): value is string => Boolean(value))
+    : Array.isArray(options.referenceRecordKeys)
+      ? options.referenceRecordKeys.filter((value): value is string => Boolean(value))
+      : [];
+  const selectedRecords = referenceObject.records.filter((record) => recordKeys.includes(record.key));
+  if (selectedRecords.length === 0) return field.value || '（未入力）';
+
+  return [
+    field.value || '（未入力）',
+    ...selectedRecords.map((record) => formatReferenceRecord(referenceObject.name, record)),
+  ].join('\n');
+}
+
+function formatReferenceRecord(objectName: string, record: GlobalAssetRecord) {
+  const detail = Object.entries(record.values)
+    .map(([key, value]) => `    - ${key}: ${value || '（未入力）'}`)
+    .join('\n');
+  return `  [関連オブジェクト: ${objectName} / ${record.name}]\n${detail}`;
 }
 
 function projectTypeLabel(type: string): string {

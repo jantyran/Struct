@@ -18,38 +18,37 @@ export async function POST(request: Request, { params }: Params) {
     const source = db.prepare(`
       SELECT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id) as any;
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id) as any;
 
     if (!source) return NextResponse.json({ error: 'Source project not found' }, { status: 404 });
 
-    const sourceFields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ?').all(params.id) as any[];
+    const sourceFields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
     const newId = uuidv4();
 
     const tx = db.transaction(() => {
       db.prepare(`
-        INSERT INTO projects (id, name, type, phase_key, status, owner_id, cloned_from, target, start_date, end_date, budget, channels, description)
-        VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (id, name, type, phase_key, status, organization_id, owner_id, primary_assignee_id, cloned_from)
+        VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)
       `).run(
         newId,
         body.new_name.trim(),
         source.type,
         source.phase_key || '',
+        source.organization_id || user.organization_id,
+        user.id,
         user.id,
         params.id,
-        body.include_values ? source.target : '',
-        body.include_values ? source.start_date : '',
-        body.include_values ? source.end_date : '',
-        body.include_values ? source.budget : '',
-        body.include_values ? source.channels : '[]',
-        body.include_values ? source.description : '',
       );
 
+      // 全フィールド（組み込み + カスタム）をクローン
       for (const field of sourceFields) {
         db.prepare(`
-          INSERT INTO custom_fields (id, project_id, template_id, key, label, type, value, options, layout, inherited, inherited_from, crawled_content, sort_order)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO custom_fields
+            (id, project_id, template_id, key, label, type, value, options, layout,
+             inherited, inherited_from, crawled_content, sort_order, is_builtin, section)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           uuidv4(),
           newId,
@@ -64,6 +63,8 @@ export async function POST(request: Request, { params }: Params) {
           body.include_values && field.value ? params.id : null,
           body.include_values ? (field.crawled_content ?? null) : null,
           field.sort_order,
+          field.is_builtin ?? 0,
+          field.section ?? '',
         );
       }
     });

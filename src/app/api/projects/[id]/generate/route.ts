@@ -9,6 +9,9 @@ import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 import { normalizeAISettingsRow } from '@/lib/ai/settings';
 import { normalizeContentTemplatesRow } from '@/lib/content-templates';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
+import { requireProjectPermission } from '@/lib/permissions';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { normalizeSelectedAIReferenceKeys, getProjectReferenceOptionKeys } from '@/lib/ai/reference-sources';
 
 interface Params { params: { id: string } }
 
@@ -31,51 +34,42 @@ export async function POST(request: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id) as any;
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id) as any;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
+      return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
+    }
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
+    const notes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];
+    const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as any[];
 
-    let globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
-    if (!globalAssetsRow) {
-      const assetsId = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(assetsId, user.id);
-      globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(assetsId) as any;
-    }
+    const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
+
+    const projectTypes = normalizeProjectTypeDefinitionsRow(globalAssetsRow);
+    const contentTemplates = normalizeContentTemplatesRow(globalAssetsRow);
+    const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
 
     const typedProject: ProjectWithFields = {
       ...project,
       custom_fields: fields.map(f => ({
         ...f,
-        project_id: f.project_id,
-        inherited_from: f.inherited_from,
-        crawled_content: f.crawled_content,
-        sort_order: f.sort_order,
-        options: f.options || '[]',
+        template_id: f.template_id || currentProjectType?.field_templates.find((fieldTemplate) => fieldTemplate.key === f.key)?.id,
+        options: f.options || '{}',
         value: f.value || '',
+        is_builtin: f.is_builtin ?? 0,
+        section: f.section ?? '',
       })),
-      channels: project.channels || '[]',
-      target: project.target || '',
-      start_date: project.start_date || '',
-      end_date: project.end_date || '',
-      budget: project.budget || '',
-      description: project.description || '',
+      project_notes: notes,
+      generated_assets: generatedAssets,
       cloned_from: project.cloned_from,
-      created_at: project.created_at,
-      updated_at: project.updated_at,
-      status: project.status,
-      type: project.type,
     };
 
     const typedGlobal: GlobalAssets = normalizeGlobalAssetsRow(globalAssetsRow);
     const aiSettings = normalizeAISettingsRow(globalAssetsRow);
-    const projectTypes = normalizeProjectTypeDefinitionsRow(globalAssetsRow);
-    const contentTemplates = normalizeContentTemplatesRow(globalAssetsRow);
-    const currentProjectType = projectTypes.find((definition) => definition.key === project.type);
 
-    const context = buildProjectContext(typedProject, typedGlobal);
     const results = [];
 
     for (const assetType of body.asset_types) {
@@ -83,6 +77,12 @@ export async function POST(request: Request, { params }: Params) {
         currentProjectType?.content_template_ids.includes(template.id) && template.key === assetType
       );
       if (!contentTemplate) continue;
+
+      const selectedSourceKeys = normalizeSelectedAIReferenceKeys(
+        currentProjectType?.ai_reference,
+        getProjectReferenceOptionKeys(typedProject, typedGlobal.objects),
+      );
+      const context = buildProjectContext(typedProject, typedGlobal, { selectedSourceKeys });
 
       const prompt = buildContentPrompt(contentTemplate, context, body.additional_instruction || '');
       const content = await generateText(prompt, SYSTEM_PROMPT, 4096, aiSettings);

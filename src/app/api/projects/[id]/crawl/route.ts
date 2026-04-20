@@ -19,8 +19,8 @@ export async function POST(request: Request, { params }: Params) {
       SELECT f.* FROM custom_fields f
       JOIN projects p ON f.project_id = p.id
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE f.id = ? AND p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(body.field_id, params.id, user.id, user.id) as any;
+      WHERE f.id = ? AND p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(body.field_id, params.id, user.organization_id, user.id, user.id) as any;
 
     if (!field) return NextResponse.json({ error: 'Field not found' }, { status: 404 });
     if (field.type !== 'url') return NextResponse.json({ error: 'URL型フィールドのみクローリング可能です' }, { status: 400 });

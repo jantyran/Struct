@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { requireProjectPermission } from '@/lib/permissions';
 
 interface Params { params: { id: string } }
 
@@ -13,10 +14,11 @@ export async function GET(_req: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT DISTINCT p.id FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id);
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'view_content')) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const assets = db.prepare(`
       SELECT * FROM generated_assets WHERE project_id = ? ORDER BY created_at DESC
@@ -38,10 +40,11 @@ export async function DELETE(request: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT DISTINCT p.id FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id);
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
 
     if (!assetId) {
       db.prepare('DELETE FROM generated_assets WHERE project_id = ?').run(params.id);
@@ -64,10 +67,11 @@ export async function PATCH(request: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT DISTINCT p.id FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id);
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id);
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
     if (!body.assetId) return NextResponse.json({ error: 'assetId is required' }, { status: 400 });
 
     const existing = db.prepare(`

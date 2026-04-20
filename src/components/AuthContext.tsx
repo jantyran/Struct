@@ -8,6 +8,9 @@ interface User {
   id: string;
   email: string;
   name?: string;
+  avatar_url?: string;
+  system_role?: string;
+  system_permissions?: Record<string, boolean>;
 }
 
 interface AuthContextType {

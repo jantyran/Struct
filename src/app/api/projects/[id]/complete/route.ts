@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
 import { generateText } from '@/lib/ai/client';
 import {
   buildProjectContext,
@@ -12,6 +11,8 @@ import { requireSession } from '@/lib/auth';
 import type { ProjectWithFields, GlobalAssets } from '@/types';
 import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 import { normalizeAISettingsRow } from '@/lib/ai/settings';
+import { requireProjectPermission } from '@/lib/permissions';
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
 interface Params { params: { id: string } }
 
@@ -29,42 +30,28 @@ export async function POST(_req: Request, { params }: Params) {
     const project = db.prepare(`
       SELECT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.id, user.id) as any;
+      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+    `).get(params.id, user.organization_id, user.id, user.id) as any;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
+      return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
+    }
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
 
-    let globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(user.id) as any;
-    if (!globalAssetsRow) {
-      const assetsId = uuidv4();
-      db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(assetsId, user.id);
-      globalAssetsRow = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(assetsId) as any;
-    }
+    const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
 
     const typedProject: ProjectWithFields = {
       ...project,
       custom_fields: fields.map(f => ({
         ...f,
-        project_id: f.project_id,
-        inherited_from: f.inherited_from,
-        crawled_content: f.crawled_content,
-        sort_order: f.sort_order,
-        options: f.options || '[]',
+        options: f.options || '{}',
         value: f.value || '',
+        is_builtin: f.is_builtin ?? 0,
+        section: f.section ?? '',
       })),
-      channels: project.channels || '[]',
-      target: project.target || '',
-      start_date: project.start_date || '',
-      end_date: project.end_date || '',
-      budget: project.budget || '',
-      description: project.description || '',
       cloned_from: project.cloned_from,
-      created_at: project.created_at,
-      updated_at: project.updated_at,
-      status: project.status,
-      type: project.type,
     };
 
     const typedGlobal: GlobalAssets = normalizeGlobalAssetsRow(globalAssetsRow);

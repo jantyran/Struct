@@ -1,54 +1,65 @@
 import { NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { maskAISettings, normalizeAISettings, normalizeAISettingsRow, serializeAISettings } from '@/lib/ai/settings';
-
-async function ensureSettingsRow(userId: string) {
-  const db = getDb();
-  let row = db.prepare('SELECT * FROM global_assets WHERE user_id = ?').get(userId) as any;
-  if (!row) {
-    const id = uuidv4();
-    db.prepare('INSERT INTO global_assets (id, user_id) VALUES (?, ?)').run(id, userId);
-    row = db.prepare('SELECT * FROM global_assets WHERE id = ?').get(id);
-  }
-  return row;
-}
+import { getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
+  let user;
   try {
-    const user = await requireSession();
-    const row = await ensureSettingsRow(user.id);
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
+      return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
+    }
+    const row = getOrganizationSettingsRow(db, user.organization_id);
     const settings = normalizeAISettingsRow(row);
     return NextResponse.json({
       settings: maskAISettings(settings),
       has_api_key: Boolean(settings.api_key),
     });
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  } catch (err) {
+    console.error('GET /api/ai-settings failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
+  let user;
   try {
-    const user = await requireSession();
-    await ensureSettingsRow(user.id);
+    user = await requireSession();
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
     const db = getDb();
+    if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
+      return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
+    }
     const body = await request.json() as { settings?: unknown };
     const settings = normalizeAISettings((body.settings as any) || {});
+    getOrganizationSettingsRow(db, user.organization_id);
 
     db.prepare(`
-      UPDATE global_assets SET
+      UPDATE organization_settings SET
         ai_settings = ?,
         updated_at = datetime('now')
-      WHERE user_id = ?
-    `).run(serializeAISettings(settings), user.id);
+      WHERE organization_id = ?
+    `).run(serializeAISettings(settings), user.organization_id);
 
     return NextResponse.json({
       settings: maskAISettings(settings),
       has_api_key: Boolean(settings.api_key),
     });
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  } catch (err) {
+    console.error('PUT /api/ai-settings failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
