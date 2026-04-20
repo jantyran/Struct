@@ -18,7 +18,7 @@ export async function GET() {
     const assets = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(assets));
   } catch (err) {
-    console.error('GET /api/global-assets failed', err);
+    console.error('GET /api/master-data failed', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -63,7 +63,7 @@ export async function PUT(request: Request) {
     const updated = getOrganizationSettingsRow(db, user.organization_id);
     return NextResponse.json(normalizeGlobalAssetsRow(updated));
   } catch (err) {
-    console.error('PUT /api/global-assets failed', err);
+    console.error('PUT /api/master-data failed', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
