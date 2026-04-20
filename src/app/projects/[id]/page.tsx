@@ -6,97 +6,8 @@ import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { useDevSettings } from '@/components/DevSettingsContext';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import TodoTab from '@/components/TodoTab';
-
-/** Markdownをレンダリングするビューア */
-function MarkdownViewer({ content, className }: { content: string; className?: string }) {
-  return (
-    <div className={`md-body ${className ?? ''}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {content}
-      </ReactMarkdown>
-    </div>
-  );
-}
-
-/**
- * ノート編集コンポーネント: テキストエリアとプレビューをタブ切り替え
- */
-function NoteEditor({
-  title,
-  body,
-  onTitleChange,
-  onBodyChange,
-  onSave,
-  onCancel,
-  saveLabel = '保存',
-}: {
-  title: string;
-  body: string;
-  onTitleChange: (v: string) => void;
-  onBodyChange: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  saveLabel?: string;
-}) {
-  const [editorTab, setEditorTab] = useState<'write' | 'preview'>('write');
-
-  return (
-    <div className="space-y-3">
-      <input
-        className="field-input text-sm font-semibold"
-        placeholder="タイトル"
-        value={title}
-        onChange={e => onTitleChange(e.target.value)}
-        autoFocus={editorTab === 'write'}
-      />
-
-      {/* 編集/プレビュー タブ */}
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex border-b" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(241,250,252,0.6)' }}>
-          {([{ k: 'write', l: '編集' }, { k: 'preview', l: 'プレビュー' }] as const).map(t => (
-            <button
-              key={t.k}
-              type="button"
-              onClick={() => setEditorTab(t.k)}
-              className="px-4 py-2 text-xs font-medium transition-colors"
-              style={editorTab === t.k
-                ? { color: 'var(--accent)', borderBottom: '2px solid var(--accent)', marginBottom: -1, backgroundColor: 'white' }
-                : { color: 'var(--text-muted)', borderBottom: '2px solid transparent', marginBottom: -1 }}
-            >
-              {t.l}
-            </button>
-          ))}
-        </div>
-
-        {editorTab === 'write' ? (
-          <textarea
-            className="w-full p-3 text-sm resize-none focus:outline-none"
-            style={{ minHeight: 200, color: 'var(--text-primary)', backgroundColor: 'white', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13, lineHeight: 1.7 }}
-            placeholder="Markdownで記述できます（見出し、リスト、太字など）"
-            value={body}
-            onChange={e => onBodyChange(e.target.value)}
-          />
-        ) : (
-          <div className="p-4 min-h-[200px] bg-white">
-            {body.trim() ? (
-              <MarkdownViewer content={body} />
-            ) : (
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>プレビューする内容がありません</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-2 justify-end">
-        <button onClick={onCancel} className="btn-secondary text-sm">キャンセル</button>
-        <button onClick={onSave} className="btn-primary text-sm">{saveLabel}</button>
-      </div>
-    </div>
-  );
-}
+import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
@@ -593,10 +504,12 @@ function AssetCard({
   asset,
   onDelete,
   onSaved,
+  onDirtyChange,
 }: {
   asset: GeneratedAsset;
   onDelete: () => void;
   onSaved: (nextAsset: GeneratedAsset) => void;
+  onDirtyChange?: (assetId: string, dirty: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -610,6 +523,13 @@ function AssetCard({
     setDraftTitle(asset.title);
     setDraftContent(asset.content);
   }, [asset.title, asset.content]);
+
+  const isDirty = draftTitle !== asset.title || draftContent !== asset.content;
+
+  useEffect(() => {
+    onDirtyChange?.(asset.id, isDirty);
+    return () => onDirtyChange?.(asset.id, false);
+  }, [asset.id, isDirty, onDirtyChange]);
 
   function copy() {
     navigator.clipboard.writeText(asset.content);
@@ -658,34 +578,33 @@ function AssetCard({
           )}
           {editing ? (
             <div className="space-y-3">
-              <div>
-                <label className="field-label">タイトル</label>
-                <input className="field-input text-sm" value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">内容</label>
-                <textarea className="field-input text-sm" rows={18} value={draftContent} onChange={(e) => setDraftContent(e.target.value)} />
-              </div>
+              <MarkdownRichTextEditor
+                title={draftTitle}
+                body={draftContent}
+                onTitleChange={setDraftTitle}
+                onBodyChange={setDraftContent}
+                onSave={saveEdit}
+                onCancel={() => {
+                  setDraftTitle(asset.title);
+                  setDraftContent(asset.content);
+                  setEditing(false);
+                }}
+                bodyLabel="内容"
+                saveLabel={saving ? '保存中...' : '保存'}
+                minHeight={320}
+                isDirty={isDirty}
+              />
             </div>
           ) : (
-            <pre className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
-              {asset.content}
-            </pre>
+            <MarkdownViewer content={asset.content} className="text-sm" />
           )}
-          <div className="flex gap-2 mt-4">
-            {editing ? (
-              <>
-                <button onClick={() => { setDraftTitle(asset.title); setDraftContent(asset.content); setEditing(false); }} className="btn-secondary text-xs">キャンセル</button>
-                <button onClick={saveEdit} disabled={saving} className="btn-primary text-xs">{saving ? '保存中...' : '保存'}</button>
-              </>
-            ) : (
-              <>
-                <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
-                <button onClick={() => setEditing(true)} className="btn-secondary text-xs">編集</button>
-              </>
-            )}
-            <button onClick={onDelete} className="btn-danger">削除</button>
-          </div>
+          {!editing && (
+            <div className="flex gap-2 mt-4">
+              <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
+              <button onClick={() => setEditing(true)} className="btn-secondary text-xs">編集</button>
+              <button onClick={onDelete} className="btn-danger">削除</button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -805,6 +724,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ title: string; body: string }>({ title: '', body: '' });
   const [noteCreating, setNoteCreating] = useState(false);
+  const [assetDirtyMap, setAssetDirtyMap] = useState<Record<string, boolean>>({});
   const [memberUserId, setMemberUserId] = useState('');
   const [memberRole, setMemberRole] = useState('MEMBER');
   const [memberMessage, setMemberMessage] = useState('');
@@ -1056,8 +976,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   }
 
   async function deleteAsset(assetId: string) {
+    if (!window.confirm('この生成コンテンツを削除しますか？')) return;
     await fetch(withBasePath(`/api/projects/${id}/assets?assetId=${assetId}`), { method: 'DELETE' });
     setAssets(a => a.filter(x => x.id !== assetId));
+    setAssetDirtyMap((current) => {
+      const next = { ...current };
+      delete next[assetId];
+      return next;
+    });
   }
 
   function updateAsset(updatedAsset: GeneratedAsset) {
@@ -1108,10 +1034,52 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   }
 
   async function deleteNote(noteId: string) {
-    if (!confirm('このノートを削除しますか？')) return;
+    if (!window.confirm('このノートを削除しますか？')) return;
     const res = await fetch(withBasePath(`/api/projects/${id}/notes/${noteId}`), { method: 'DELETE' });
     if (res.ok) setNotes(prev => prev.filter(n => n.id !== noteId));
   }
+
+  const editingNote = noteEditingId ? notes.find((note) => note.id === noteEditingId) ?? null : null;
+  const noteCreateDirty = noteCreating && (noteDraft.title.trim().length > 0 || noteDraft.body.trim().length > 0);
+  const noteEditDirty = Boolean(editingNote) && (noteDraft.title !== editingNote?.title || noteDraft.body !== editingNote?.body);
+  const hasUnsavedEditors = noteCreateDirty || noteEditDirty || Object.values(assetDirtyMap).some(Boolean);
+
+  const confirmLeaveUnsaved = useCallback((message = '未保存の変更があります。保存せずに移動しますか？') => {
+    if (!hasUnsavedEditors) return true;
+    return window.confirm(message);
+  }, [hasUnsavedEditors]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedEditors) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedEditors]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!hasUnsavedEditors) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest('a');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+      if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.href === window.location.href) return;
+      if (!window.confirm('未保存の変更があります。保存せずに移動しますか？')) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    document.addEventListener('click', handleDocumentClick, true);
+    return () => document.removeEventListener('click', handleDocumentClick, true);
+  }, [hasUnsavedEditors]);
 
   if (authLoading || !user) return (
     <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-muted)' }}>
@@ -1174,7 +1142,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         <div className="px-6 py-3 flex items-center gap-3">
           {/* 戻るボタン */}
           <button
-            onClick={() => router.push(withBasePath('/'))}
+            onClick={() => {
+              if (!confirmLeaveUnsaved()) return;
+              router.push(withBasePath('/'));
+            }}
             className="inline-flex items-center gap-1 text-xs font-medium shrink-0 transition-colors"
             style={{ color: 'var(--text-muted)' }}
           >
@@ -1380,7 +1351,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               ...(canViewNotes ? [{ k: 'notes' as const, l: `ノート (${notes.length})` }] : []),
               ...(canViewContent ? [{ k: 'assets' as const, l: `生成コンテンツ (${assets.length})` }] : []),
             ]).map(t => (
-              <button key={t.k} onClick={() => setTab(t.k)}
+              <button
+                key={t.k}
+                onClick={() => {
+                  if (tab === t.k) return;
+                  if (!confirmLeaveUnsaved()) return;
+                  setTab(t.k);
+                }}
                 className={`tab-btn${tab === t.k ? ' active' : ''}`}
               >
                 {t.l}
@@ -1404,7 +1381,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               {/* 新規作成フォーム */}
               {noteCreating ? (
                 <div className="card p-4">
-                  <NoteEditor
+                  <MarkdownRichTextEditor
                     title={noteDraft.title}
                     body={noteDraft.body}
                     onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
@@ -1412,11 +1389,16 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     onSave={createNote}
                     onCancel={() => { setNoteCreating(false); setNoteDraft({ title: '', body: '' }); }}
                     saveLabel="作成"
+                    bodyLabel="本文"
+                    isDirty={noteCreateDirty}
                   />
                 </div>
               ) : (
                 <button
-                  onClick={() => setNoteCreating(true)}
+                  onClick={() => {
+                    if (!confirmLeaveUnsaved()) return;
+                    setNoteCreating(true);
+                  }}
                   disabled={!canEditNotes}
                   className="btn-secondary w-full justify-center text-sm"
                 >
@@ -1439,7 +1421,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       {noteEditingId === note.id ? (
                         /* 編集モード */
                         <div className="p-4">
-                          <NoteEditor
+                          <MarkdownRichTextEditor
                             title={noteDraft.title}
                             body={noteDraft.body}
                             onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
@@ -1449,6 +1431,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                               setNoteEditingId(null);
                             }}
                             onCancel={() => setNoteEditingId(null)}
+                            bodyLabel="本文"
+                            isDirty={noteEditDirty}
                           />
                         </div>
                       ) : (
@@ -1474,6 +1458,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                               <button
                                 disabled={!canEditNotes}
                                 onClick={() => {
+                                  if (!confirmLeaveUnsaved()) return;
                                   setNoteEditingId(note.id);
                                   setNoteDraft({ title: note.title, body: note.body });
                                 }}
@@ -1765,7 +1750,20 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {assets.map(a => <AssetCard key={a.id} asset={a} onDelete={() => deleteAsset(a.id)} onSaved={updateAsset} />)}
+                  {assets.map(a => (
+                    <AssetCard
+                      key={a.id}
+                      asset={a}
+                      onDelete={() => deleteAsset(a.id)}
+                      onSaved={updateAsset}
+                      onDirtyChange={(assetId, dirty) => {
+                        setAssetDirtyMap((current) => {
+                          if (current[assetId] === dirty) return current;
+                          return { ...current, [assetId]: dirty };
+                        });
+                      }}
+                    />
+                  ))}
                 </div>
               )}
             </section>
