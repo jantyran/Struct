@@ -187,7 +187,7 @@ export type SystemPermissionKey =
   | 'manage_system_roles'
   | 'manage_project_roles'
   | 'manage_project_settings'
-  | 'manage_global_assets'
+  | 'manage_master_data'
   | 'manage_ai_settings'
   | 'view_all_projects'
   | 'edit_all_projects'

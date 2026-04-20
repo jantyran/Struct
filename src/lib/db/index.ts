@@ -272,10 +272,28 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
   seedSystemRoles(db);
   seedProjectRoles(db);
+  migratePermissionKey(db, 'manage_global_assets', 'manage_master_data');
   ensureOrganizationModel(db);
 
   // 既存プロジェクトのコアカラム値を custom_fields に移行
   migrateProjectCoreFields(db);
+}
+
+function migratePermissionKey(db: Database.Database, oldKey: string, newKey: string) {
+  const rows = db.prepare(
+    `SELECT id, permissions FROM system_role_definitions WHERE permissions LIKE ?`
+  ).all(`%${oldKey}%`) as Array<{ id: string; permissions: string }>;
+  for (const row of rows) {
+    try {
+      const perms = JSON.parse(row.permissions);
+      if (oldKey in perms) {
+        perms[newKey] = perms[oldKey];
+        delete perms[oldKey];
+        db.prepare(`UPDATE system_role_definitions SET permissions = ? WHERE id = ?`)
+          .run(JSON.stringify(perms), row.id);
+      }
+    } catch { /* JSON parse 失敗時はスキップ */ }
+  }
 }
 
 function ensureOrganizationModel(db: Database.Database) {

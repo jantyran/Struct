@@ -415,7 +415,7 @@ export default function OrganizationOverviewPage() {
         onToggle={() => toggleSection('global_assets')}
         count={filtered.globalAssets.length}
         action={
-          <button className="btn-secondary text-xs py-1 px-3" onClick={(e) => { e.stopPropagation(); router.push(withBasePath('/global-assets')); }}>
+          <button className="btn-secondary text-xs py-1 px-3" onClick={(e) => { e.stopPropagation(); router.push(withBasePath('/master-data')); }}>
             開く
           </button>
         }

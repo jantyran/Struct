@@ -1016,7 +1016,7 @@ export default function ProjectTypesPage() {
     (async () => {
       const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
         fetch(withBasePath('/api/project-types')),
-        fetch(withBasePath('/api/global-assets')),
+        fetch(withBasePath('/api/master-data')),
         fetch(withBasePath('/api/content-templates')),
       ]);
       const [projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([

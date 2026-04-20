@@ -86,7 +86,7 @@ export default function GlobalAssetsPage() {
     }
 
     (async () => {
-      const res = await fetch(withBasePath('/api/global-assets'));
+      const res = await fetch(withBasePath('/api/master-data'));
       if (res.status === 401) {
         setData(EMPTY_GA);
         router.push(withBasePath('/login'));
@@ -104,7 +104,7 @@ export default function GlobalAssetsPage() {
 
   async function handleSave() {
     setSaving(true);
-    const res = await fetch(withBasePath('/api/global-assets'), {
+    const res = await fetch(withBasePath('/api/master-data'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -143,7 +143,7 @@ export default function GlobalAssetsPage() {
     };
 
     setSaving(true);
-    const res = await fetch(withBasePath('/api/global-assets'), {
+    const res = await fetch(withBasePath('/api/master-data'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(nextData),
@@ -164,7 +164,7 @@ export default function GlobalAssetsPage() {
     setSaved(true);
     setShowNewObjectModal(false);
     setTimeout(() => setSaved(false), 2500);
-    router.push(withBasePath(`/global-assets/${nextObject.id}`));
+    router.push(withBasePath(`/master-data/${nextObject.id}`));
   }
 
   if (authLoading) {
@@ -233,7 +233,7 @@ export default function GlobalAssetsPage() {
                 </div>
               </div>
               <div className="flex gap-2 shrink-0">
-                <Link href={withBasePath(`/global-assets/${object.id}`)} className="btn-primary text-sm">
+                <Link href={withBasePath(`/master-data/${object.id}`)} className="btn-primary text-sm">
                   詳細を開く
                 </Link>
                 <button onClick={() => removeObject(objectIndex)} className="btn-danger text-sm">削除</button>

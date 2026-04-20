@@ -251,7 +251,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
     }
 
     (async () => {
-      const res = await fetch(withBasePath('/api/global-assets'));
+      const res = await fetch(withBasePath('/api/master-data'));
       if (res.status === 401) {
         setData(EMPTY_GA);
         router.push(withBasePath('/login'));
@@ -275,7 +275,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
 
   async function persist(nextData: GlobalAssets) {
     setSaving(true);
-    const res = await fetch(withBasePath('/api/global-assets'), {
+    const res = await fetch(withBasePath('/api/master-data'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(nextData),
@@ -437,7 +437,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
       <div className="p-6 max-w-4xl mx-auto">
         <div className="card p-6">
           <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>オブジェクトが見つかりません。</p>
-          <Link href={withBasePath('/global-assets')} className="btn-secondary mt-4 inline-flex">一覧へ戻る</Link>
+          <Link href={withBasePath('/master-data')} className="btn-secondary mt-4 inline-flex">一覧へ戻る</Link>
         </div>
       </div>
     );
@@ -447,7 +447,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <Link href={withBasePath('/global-assets')} className="text-sm text-gray-400 hover:text-gray-200">← マスターデータ 一覧へ戻る</Link>
+          <Link href={withBasePath('/master-data')} className="text-sm text-gray-400 hover:text-gray-200">← マスターデータ 一覧へ戻る</Link>
           <h1 className="text-2xl font-bold mt-2">{object.name}</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
             このオブジェクトの設定とレコードを管理します。

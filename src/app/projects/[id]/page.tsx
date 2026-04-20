@@ -740,7 +740,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     const projectRes = await fetch(withBasePath(`/api/projects/${id}`));
     const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
       fetch(withBasePath('/api/project-types')),
-      fetch(withBasePath('/api/global-assets')),
+      fetch(withBasePath('/api/master-data')),
       fetch(withBasePath('/api/content-templates')),
     ]);
     const [pr, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([

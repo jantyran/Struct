@@ -13,7 +13,7 @@ function Sidebar() {
   const privateNavItems = [
     { href: '/', label: 'ダッシュボード', icon: '⬡' },
     { href: '/my-todos', label: '自分のタスク', icon: '✓' },
-    { href: '/global-assets', label: 'マスターデータ', icon: '◈' },
+    { href: '/master-data', label: 'マスターデータ', icon: '◈' },
   ];
   const publicNavItems = [
     { href: '/about', label: 'Struct とは', icon: '◌' },
