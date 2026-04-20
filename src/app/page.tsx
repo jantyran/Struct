@@ -3,11 +3,49 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { Project, ProjectType, CloneOptions, ProjectTypeDefinition, CustomField } from '@/types';
-import { PROJECT_TYPE_LABELS } from '@/types';
+import type { Project, ProjectType, CloneOptions, ProjectTypeDefinition, CustomField, TodoPriority, TodoStatus } from '@/types';
+import { TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS, TODO_STATUS_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 
+// ──────────────────────────────────────────
+// 型
+// ──────────────────────────────────────────
+interface ProjectWithTodos extends Project {
+  todo_total: number;
+  todo_done: number;
+}
+
+interface DashboardTodo {
+  id: string;
+  project_id: string;
+  project_name: string;
+  title: string;
+  status: TodoStatus;
+  priority: TodoPriority;
+  due_date: string;
+  assignee_id: string | null;
+  assignee_name: string | null;
+  assignee_email: string | null;
+}
+
+interface DashboardData {
+  projects: ProjectWithTodos[];
+  my_open_todos: DashboardTodo[];
+  managed_urgent_todos: DashboardTodo[];
+  project_type_definitions: ProjectTypeDefinition[];
+  stats: {
+    total: number;
+    active: number;
+    draft: number;
+    my_todo_open: number;
+    my_todo_urgent: number;
+  };
+}
+
+// ──────────────────────────────────────────
+// 新規プロジェクトモーダル
+// ──────────────────────────────────────────
 function NewProjectModal({
   projectTypes,
   onClose,
@@ -20,8 +58,7 @@ function NewProjectModal({
   const [name, setName] = useState('');
   const [type, setType] = useState<ProjectType>(projectTypes[0]?.key || 'campaign');
   const [loading, setLoading] = useState(false);
-
-  const selectedType = projectTypes.find((definition) => definition.key === type) || projectTypes[0];
+  const selectedType = projectTypes.find(d => d.key === type) || projectTypes[0];
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -46,12 +83,7 @@ function NewProjectModal({
     const res = await fetch(withBasePath('/api/projects'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        type,
-        phase_key: selectedType?.phases[0]?.key || '',
-        custom_fields: customFields,
-      }),
+      body: JSON.stringify({ name, type, phase_key: selectedType?.phases[0]?.key || '', custom_fields: customFields }),
     });
     const data = await res.json() as { id: string };
     setLoading(false);
@@ -70,13 +102,13 @@ function NewProjectModal({
           <div>
             <label className="field-label">種別</label>
             <select className="field-input" value={type} onChange={e => setType(e.target.value as ProjectType)}>
-              {projectTypes.map((definition) => <option key={definition.id} value={definition.key}>{definition.name}</option>)}
+              {projectTypes.map(d => <option key={d.id} value={d.key}>{d.name}</option>)}
             </select>
           </div>
           {selectedType && (
             <div className="text-xs leading-6" style={{ color: 'var(--text-muted)' }}>
-              <p>初期フェーズ: {selectedType.phases.map((phase) => phase.name).join(' / ') || 'なし'}</p>
-              <p>初期項目: {selectedType.field_templates.map((field) => field.label).join(' / ') || 'なし'}</p>
+              <p>初期フェーズ: {selectedType.phases.map(p => p.name).join(' / ') || 'なし'}</p>
+              <p>初期項目: {selectedType.field_templates.map(f => f.label).join(' / ') || 'なし'}</p>
             </div>
           )}
         </div>
@@ -91,9 +123,11 @@ function NewProjectModal({
   );
 }
 
-function CloneModal({ source, projects, onClose, onCloned }: {
+// ──────────────────────────────────────────
+// クローンモーダル
+// ──────────────────────────────────────────
+function CloneModal({ source, onClose, onCloned }: {
   source: Project;
-  projects: Project[];
   onClose: () => void;
   onCloned: (id: string) => void;
 }) {
@@ -125,8 +159,7 @@ function CloneModal({ source, projects, onClose, onCloned }: {
                 { v: false, label: 'フィールド定義のみ', desc: '構造をコピーし、値はすべてリセット' },
                 { v: true, label: '定義 + 入力値', desc: '値も引き継ぎ、継承フラグを付与（要確認）' },
               ].map(opt => (
-                <label
-                  key={String(opt.v)}
+                <label key={String(opt.v)}
                   className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${options.include_values === opt.v ? 'bg-cyan-50' : 'bg-white/70'}`}
                   style={{ borderColor: options.include_values === opt.v ? 'rgba(15,154,177,0.35)' : 'var(--border)' }}
                 >
@@ -151,65 +184,74 @@ function CloneModal({ source, projects, onClose, onCloned }: {
   );
 }
 
-function ProjectCard({
-  project,
-  typeLabel,
-  onClone,
-}: {
-  project: Project;
+// ──────────────────────────────────────────
+// フェーズ進捗バー
+// ──────────────────────────────────────────
+function PhaseProgressBar({ phaseKey, phases }: { phaseKey: string; phases: { key: string; name: string }[] }) {
+  if (!phases.length) return null;
+  const idx = phases.findIndex(p => p.key === phaseKey);
+  const progress = idx >= 0 ? (idx + 1) / phases.length : 0;
+
+  return (
+    <div className="mt-2">
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          {idx >= 0 ? phases[idx].name : '—'}
+        </span>
+        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          {idx >= 0 ? `${idx + 1} / ${phases.length}` : `— / ${phases.length}`}
+        </span>
+      </div>
+      <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border)' }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${progress * 100}%`, backgroundColor: 'var(--accent)' }} />
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+// プロジェクトカード
+// ──────────────────────────────────────────
+function ProjectCard({ project, typeLabel, phases, onClone }: {
+  project: ProjectWithTodos;
   typeLabel: string;
+  phases: { key: string; name: string }[];
   onClone: (p: Project) => void;
 }) {
-  const channels = (() => { try { return JSON.parse(project.channels ?? '[]') as string[]; } catch { return []; } })();
   const statusColors: Record<string, string> = { draft: 'text-slate-600 bg-slate-100', active: 'text-emerald-700 bg-emerald-50', archived: 'text-slate-500 bg-slate-100' };
   const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', archived: 'アーカイブ' };
   const typeColors: Record<string, string> = { event: 'text-sky-700', campaign: 'text-cyan-700', content: 'text-amber-700', other: 'text-slate-500' };
+  const todoOpen = project.todo_total - project.todo_done;
 
   return (
-    <Link
-      href={withBasePath(`/projects/${project.id}`)}
-      className="card card-link flex flex-col"
-    >
-      {/* カード本文 */}
-      <div className="p-5 flex flex-col gap-2.5 flex-1">
+    <Link href={withBasePath(`/projects/${project.id}`)} className="card card-link flex flex-col">
+      <div className="p-5 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <span className={`text-[11px] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>
-            {typeLabel}
-          </span>
+          <span className={`text-[11px] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>{typeLabel}</span>
           <span className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 font-medium ${statusColors[project.status] ?? statusColors.draft}`}>
             {statusLabels[project.status] ?? project.status}
           </span>
         </div>
-
         <h3 className="font-semibold text-sm leading-snug">{project.name}</h3>
-
         {project.target && (
-          <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            {project.target}
-          </p>
+          <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{project.target}</p>
         )}
-
         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-auto pt-1">
           {project.start_date && (
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
               {project.start_date}{project.end_date && ` 〜 ${project.end_date}`}
             </p>
           )}
-          {project.cloned_from && (
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>⬡ クローン</p>
-          )}
+          {project.cloned_from && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>⬡ クローン</p>}
         </div>
+        <PhaseProgressBar phaseKey={project.phase_key} phases={phases} />
       </div>
-
-      {/* フッター */}
-      <div className="flex gap-2 px-4 pb-4 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-        <span className="btn-primary text-xs flex-1 justify-center py-1.5">
-          開く →
-        </span>
-        <button
-          onClick={(e) => { e.preventDefault(); onClone(project); }}
-          className="btn-secondary text-xs px-3 py-1.5"
-        >
+      <div className="flex gap-2 px-4 pb-4 pt-2 border-t items-center" style={{ borderColor: 'var(--border)' }}>
+        <span className="btn-primary text-xs flex-1 justify-center py-1.5">開く →</span>
+        {todoOpen > 0 && (
+          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium text-slate-600 bg-slate-100">残 {todoOpen}</span>
+        )}
+        <button onClick={e => { e.preventDefault(); onClone(project); }} className="btn-secondary text-xs px-3 py-1.5">
           クローン
         </button>
       </div>
@@ -217,69 +259,165 @@ function ProjectCard({
   );
 }
 
+// ──────────────────────────────────────────
+// サイドバー: Todoカード1行
+// ──────────────────────────────────────────
+function SidebarTodoRow({ todo, showAssignee }: { todo: DashboardTodo; showAssignee?: boolean }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = todo.due_date && todo.due_date < today && todo.status !== 'done';
+  const dueToday = todo.due_date === today && todo.status !== 'done';
+  const assigneeLabel = todo.assignee_name?.trim() || todo.assignee_email || null;
+
+  return (
+    <Link
+      href={withBasePath(`/projects/${todo.project_id}?tab=todos`)}
+      className="flex items-start gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors border-b last:border-0 group"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{todo.project_name}</p>
+        <p className="text-xs font-medium truncate leading-snug mt-0.5">{todo.title}</p>
+        {showAssignee && assigneeLabel && (
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{assigneeLabel}</p>
+        )}
+      </div>
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+          style={{ backgroundColor: `${TODO_PRIORITY_COLORS[todo.priority]}20`, color: TODO_PRIORITY_COLORS[todo.priority] }}>
+          {TODO_PRIORITY_LABELS[todo.priority]}
+        </span>
+        {todo.due_date && (
+          <span className={`text-[10px] font-medium ${overdue ? 'text-red-500' : dueToday ? 'text-amber-500' : ''}`}
+            style={!overdue && !dueToday ? { color: 'var(--text-muted)' } : undefined}>
+            {overdue ? '期限切れ' : dueToday ? '本日' : todo.due_date.slice(5)}
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+// ──────────────────────────────────────────
+// サイドバーパネル
+// ──────────────────────────────────────────
+function SidebarPanel({ myTodos, managedUrgentTodos, myOpenCount, myUrgentCount }: {
+  myTodos: DashboardTodo[];
+  managedUrgentTodos: DashboardTodo[];
+  myOpenCount: number;
+  myUrgentCount: number;
+}) {
+  return (
+    <div className="flex flex-col gap-4 w-80 shrink-0">
+      {/* 自分のタスク */}
+      <div className="card overflow-hidden">
+        <div className="px-3 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface-secondary)' }}>
+          <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>自分のタスク</span>
+          {myOpenCount > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-cyan-100 text-cyan-700">{myOpenCount}</span>
+          )}
+          {myUrgentCount > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600 ml-auto">⚠ {myUrgentCount}</span>
+          )}
+        </div>
+
+        {myTodos.length === 0 ? (
+          <div className="px-3 py-4 text-xs text-center" style={{ color: 'var(--text-muted)' }}>
+            アサインされたタスクなし
+          </div>
+        ) : (
+          <div>
+            {myTodos.map(t => (
+              <SidebarTodoRow key={t.id} todo={t} />
+            ))}
+          </div>
+        )}
+
+        <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border)' }}>
+          <Link href={withBasePath('/my-todos')} className="text-xs font-medium" style={{ color: 'var(--accent)' }}>
+            すべて見る →
+          </Link>
+        </div>
+      </div>
+
+      {/* 管理プロジェクトの急ぎタスク */}
+      {managedUrgentTodos.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-3 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(239,68,68,0.04)' }}>
+            <span className="text-xs">⚠</span>
+            <span className="text-xs font-semibold text-red-700">管理プロジェクトの急ぎタスク</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600 ml-auto">
+              {managedUrgentTodos.length}
+            </span>
+          </div>
+          <div>
+            {managedUrgentTodos.map(t => (
+              <SidebarTodoRow key={t.id} todo={t} showAssignee />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+// ダッシュボード本体
+// ──────────────────────────────────────────
 export default function Dashboard() {
   const router = useRouter();
   const { user, loading: authLoading, checkSession } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectTypes, setProjectTypes] = useState<ProjectTypeDefinition[]>([]);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [cloneSource, setCloneSource] = useState<Project | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
   const load = useCallback(async () => {
-    const [projectsRes, projectTypesRes] = await Promise.all([
-      fetch(withBasePath('/api/projects')),
-      fetch(withBasePath('/api/project-types')),
-    ]);
-    const [projectsData, projectTypesData] = await Promise.all([projectsRes.json(), projectTypesRes.json()]);
-
-    if (projectsRes.status === 401) {
-      setProjects([]);
-      router.push(withBasePath('/login'));
-      return;
-    }
-
-    setProjects(Array.isArray(projectsData) ? projectsData as Project[] : []);
-    setProjectTypes(Array.isArray(projectTypesData.project_types) ? projectTypesData.project_types as ProjectTypeDefinition[] : []);
+    const res = await fetch(withBasePath('/api/dashboard'));
+    if (res.status === 401) { router.push(withBasePath('/login')); return; }
+    setData(await res.json() as DashboardData);
   }, [router]);
 
   useEffect(() => {
     if (authLoading) return;
     (async () => {
-      const resolvedUser = user ?? await checkSession();
-      if (!resolvedUser) {
-        setProjects([]);
-        router.push(withBasePath('/login'));
-        return;
-      }
+      const resolved = user ?? await checkSession();
+      if (!resolved) { router.push(withBasePath('/login')); return; }
       load();
     })();
   }, [authLoading, user, load, router, checkSession]);
 
-  if (authLoading) {
+  if (authLoading || !data) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          読み込み中...
-        </div>
+        <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div>
       </div>
     );
   }
 
+  const { projects, my_open_todos, managed_urgent_todos, project_type_definitions, stats } = data;
   const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter || p.type === filter);
-  const typeLabelMap = Object.fromEntries(projectTypes.map((definition) => [definition.key, definition.name]));
+  const typeLabelMap = Object.fromEntries(project_type_definitions.map(d => [d.key, d.name]));
+  const phaseMap = Object.fromEntries(project_type_definitions.map(d => [d.key, d.phases]));
+
   const filterChips = [
     { v: 'all', l: 'すべて' },
     { v: 'active', l: 'アクティブ' },
     { v: 'draft', l: '下書き' },
-    ...projectTypes.map((definition) => ({ v: definition.key, l: definition.name })),
+    ...project_type_definitions.map(d => ({ v: d.key, l: d.name })),
   ];
 
-  const stats = {
-    total: projects.length,
-    active: projects.filter(p => p.status === 'active').length,
-    draft: projects.filter(p => p.status === 'draft').length,
-  };
+  const statCards = [
+    { label: '総プロジェクト', value: stats.total, color: 'text-cyan-700', accent: 'border-l-cyan-400' },
+    { label: 'アクティブ', value: stats.active, color: 'text-emerald-700', accent: 'border-l-emerald-400' },
+    { label: '下書き', value: stats.draft, color: 'text-slate-500', accent: 'border-l-slate-300' },
+    {
+      label: '自分のタスク（未完了）',
+      value: stats.my_todo_open,
+      color: stats.my_todo_urgent > 0 ? 'text-red-600' : 'text-amber-700',
+      accent: stats.my_todo_urgent > 0 ? 'border-l-red-400' : 'border-l-amber-400',
+      sub: stats.my_todo_urgent > 0 ? `うち ${stats.my_todo_urgent} 件が期限超過` : undefined,
+    },
+  ];
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -291,65 +429,74 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold tracking-tight">ダッシュボード</h1>
             <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>マーケティング施策の構造を定義・資産化する</p>
           </div>
-          <button onClick={() => setShowNew(true)} className="btn-primary">
-            + 新規プロジェクト
-          </button>
+          <button onClick={() => setShowNew(true)} className="btn-primary">+ 新規プロジェクト</button>
         </div>
       </div>
 
-      {/* 統計 */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[
-          { label: '総プロジェクト', value: stats.total, color: 'text-cyan-700', accent: 'border-l-cyan-400' },
-          { label: 'アクティブ', value: stats.active, color: 'text-emerald-700', accent: 'border-l-emerald-400' },
-          { label: '下書き', value: stats.draft, color: 'text-amber-700', accent: 'border-l-amber-400' },
-        ].map(s => (
+      {/* サマリー統計 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {statCards.map(s => (
           <div key={s.label} className={`card p-4 border-l-4 ${s.accent}`}>
             <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
             <p className={`text-2xl font-bold mt-1.5 ${s.color}`}>{s.value}</p>
+            {s.sub && <p className="text-xs mt-1 text-red-500">{s.sub}</p>}
           </div>
         ))}
       </div>
 
-      {/* フィルター */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {filterChips.map(f => (
-          <button key={f.v} onClick={() => setFilter(f.v)}
-            className={`tab-btn${filter === f.v ? ' active' : ''}`}>
-            {f.l}
-          </button>
-        ))}
-      </div>
+      {/* メインコンテンツ: プロジェクト一覧 + サイドバー */}
+      <div className="flex gap-5 items-start">
+        {/* 左: プロジェクト一覧 */}
+        <div className="flex-1 min-w-0">
+          {/* フィルター */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {filterChips.map(f => (
+              <button key={f.v} onClick={() => setFilter(f.v)} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
+                {f.l}
+              </button>
+            ))}
+          </div>
 
-      {/* プロジェクトグリッド */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-20" style={{ color: 'var(--text-muted)' }}>
-          <p className="text-4xl mb-3" style={{ color: 'var(--accent)' }}>⬡</p>
-          <p className="text-sm">プロジェクトがまだありません</p>
-          <button onClick={() => setShowNew(true)} className="btn-primary mt-4">
-            最初のプロジェクトを作成
-          </button>
+          {filtered.length === 0 ? (
+            <div className="text-center py-20" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-4xl mb-3" style={{ color: 'var(--accent)' }}>⬡</p>
+              <p className="text-sm">プロジェクトがまだありません</p>
+              <button onClick={() => setShowNew(true)} className="btn-primary mt-4">最初のプロジェクトを作成</button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map(p => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  typeLabel={typeLabelMap[p.type] || p.type}
+                  phases={phaseMap[p.type] || []}
+                  onClone={setCloneSource}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(p => (
-            <ProjectCard key={p.id} project={p} typeLabel={typeLabelMap[p.type] || PROJECT_TYPE_LABELS[p.type as ProjectType] || p.type} onClone={setCloneSource} />
-          ))}
-        </div>
-      )}
+
+        {/* 右: サイドバー */}
+        <SidebarPanel
+          myTodos={my_open_todos}
+          managedUrgentTodos={managed_urgent_todos}
+          myOpenCount={stats.my_todo_open}
+          myUrgentCount={stats.my_todo_urgent}
+        />
+      </div>
 
       {showNew && (
         <NewProjectModal
-          projectTypes={projectTypes.length > 0 ? projectTypes : []}
+          projectTypes={project_type_definitions}
           onClose={() => setShowNew(false)}
           onCreated={id => { setShowNew(false); router.push(withBasePath(`/projects/${id}`)); }}
         />
       )}
-
       {cloneSource && (
         <CloneModal
           source={cloneSource}
-          projects={projects}
           onClose={() => setCloneSource(null)}
           onCloned={id => { setCloneSource(null); router.push(withBasePath(`/projects/${id}`)); }}
         />

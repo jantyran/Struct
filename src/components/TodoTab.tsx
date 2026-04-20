@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { Todo, TodoStatus, TodoPriority, ProjectUser, ProjectPhase } from '@/types';
 import { TODO_STATUS_LABELS, TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS } from '@/types';
 import { withBasePath } from '@/lib/paths';
@@ -13,6 +13,11 @@ const STATUS_COLUMN_COLORS: Record<TodoStatus, string> = {
   in_progress: '#3b82f6',
   done: '#10b981',
 };
+const STATUS_BG: Record<TodoStatus, string> = {
+  todo: 'text-slate-600 bg-slate-100',
+  in_progress: 'text-blue-700 bg-blue-50',
+  done: 'text-emerald-700 bg-emerald-50',
+};
 
 // ──────────────────────────────────────────
 // 小ユーティリティ
@@ -22,35 +27,265 @@ function userDisplayName(user: { email: string; name?: string | null } | null | 
   return user.name?.trim() || user.email;
 }
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return '';
-  return dateStr.slice(0, 10);
+function formatDate(s: string): string {
+  return s ? s.slice(0, 10) : '';
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 function isOverdue(dueDate: string, status: TodoStatus): boolean {
   if (!dueDate || status === 'done') return false;
-  return new Date(dueDate) < new Date();
+  return dueDate < new Date().toISOString().slice(0, 10);
+}
+
+function isDueSoon(dueDate: string, status: TodoStatus): boolean {
+  if (!dueDate || status === 'done') return false;
+  const today = new Date().toISOString().slice(0, 10);
+  const in3 = addDays(today, 3);
+  return dueDate > today && dueDate <= in3;
 }
 
 // ──────────────────────────────────────────
-// 優先度バッジ
+// バッジ
 // ──────────────────────────────────────────
 function PriorityBadge({ priority }: { priority: TodoPriority }) {
   return (
-    <span
-      className="text-xs px-1.5 py-0.5 rounded font-medium"
-      style={{ backgroundColor: `${TODO_PRIORITY_COLORS[priority]}20`, color: TODO_PRIORITY_COLORS[priority] }}
-    >
+    <span className="text-[11px] px-1.5 py-0.5 rounded font-medium"
+      style={{ backgroundColor: `${TODO_PRIORITY_COLORS[priority]}20`, color: TODO_PRIORITY_COLORS[priority] }}>
       {TODO_PRIORITY_LABELS[priority]}
     </span>
   );
 }
 
+function StatusBadge({ status, onClick }: { status: TodoStatus; onClick?: () => void }) {
+  return (
+    <span
+      className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_BG[status]} ${onClick ? 'cursor-pointer hover:opacity-80' : ''}`}
+      onClick={onClick}
+      title={onClick ? 'クリックでステータス変更' : undefined}
+    >
+      {TODO_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
 // ──────────────────────────────────────────
-// Todo 作成/編集フォーム
+// 詳細/編集モーダル
 // ──────────────────────────────────────────
-interface TodoFormProps {
-  initial?: Partial<Todo>;
+interface DetailModalProps {
+  todo: Todo;
+  assignableUsers: ProjectUser[];
+  phases: ProjectPhase[];
+  canEdit: boolean;
+  onSave: (data: Partial<Todo>) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}
+
+function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDelete, onClose }: DetailModalProps) {
+  const [title, setTitle] = useState(todo.title);
+  const [description, setDescription] = useState(todo.description ?? '');
+  const [status, setStatus] = useState<TodoStatus>(todo.status);
+  const [priority, setPriority] = useState<TodoPriority>(todo.priority);
+  const [assigneeId, setAssigneeId] = useState(todo.assignee_id ?? '');
+  const [phaseKey, setPhaseKey] = useState(todo.phase_key ?? '');
+  const [startDate, setStartDate] = useState(todo.start_date ?? '');
+  const [dueDate, setDueDate] = useState(todo.due_date ?? '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  function mark<T>(setter: (v: T) => void) {
+    return (v: T) => { setter(v); setDirty(true); };
+  }
+
+  function cycleStatus() {
+    if (!canEdit) return;
+    const idx = STATUS_ORDER.indexOf(status);
+    const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
+    setStatus(next);
+    setDirty(true);
+  }
+
+  function handleSave() {
+    if (!title.trim()) return;
+    onSave({ title: title.trim(), description, status, priority, assignee_id: assigneeId || null, phase_key: phaseKey, start_date: startDate, due_date: dueDate });
+    onClose();
+  }
+
+  const overdue = isOverdue(todo.due_date, status);
+  const subtaskCount = todo.subtasks?.length ?? 0;
+  const subtaskDone = todo.subtasks?.filter(s => s.status === 'done').length ?? 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* ヘッダー */}
+        <div className="px-6 pt-5 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-start gap-3">
+            {/* チェック/ステータスボタン */}
+            <button
+              className="mt-1 flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
+              style={{
+                borderColor: status === 'done' ? '#10b981' : 'var(--border)',
+                backgroundColor: status === 'done' ? '#10b981' : 'white',
+              }}
+              onClick={() => { mark(setStatus)(status === 'done' ? 'todo' : 'done'); }}
+              title="完了/未着手を切り替え"
+            >
+              {status === 'done' && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+            <div className="flex-1 min-w-0">
+              {canEdit ? (
+                <input
+                  className="w-full text-base font-semibold bg-transparent border-0 outline-none focus:outline-none p-0"
+                  style={{ color: status === 'done' ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: status === 'done' ? 'line-through' : 'none' }}
+                  value={title}
+                  onChange={e => mark(setTitle)(e.target.value)}
+                />
+              ) : (
+                <p className="text-base font-semibold" style={{ color: 'var(--text-primary)', textDecoration: status === 'done' ? 'line-through' : 'none' }}>{title}</p>
+              )}
+            </div>
+            <button onClick={onClose} className="text-xl leading-none flex-shrink-0 opacity-30 hover:opacity-70 transition-opacity" style={{ color: 'var(--text-primary)' }}>×</button>
+          </div>
+
+          {/* ステータスバッジ行 */}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <StatusBadge status={status} onClick={canEdit ? cycleStatus : undefined} />
+            <PriorityBadge priority={priority} />
+            {overdue && <span className="text-[11px] text-red-500 font-medium">⚠ 期限切れ</span>}
+            {subtaskCount > 0 && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                サブタスク {subtaskDone}/{subtaskCount}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* 本文 */}
+        <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          {/* 説明 */}
+          {canEdit ? (
+            <textarea
+              className="w-full field-input text-sm resize-none"
+              placeholder="説明を追加..."
+              value={description}
+              onChange={e => mark(setDescription)(e.target.value)}
+              rows={3}
+            />
+          ) : description ? (
+            <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-secondary)' }}>{description}</p>
+          ) : null}
+
+          {/* メタ情報グリッド */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>ステータス</p>
+              {canEdit ? (
+                <select className="field-input text-sm" value={status} onChange={e => mark(setStatus)(e.target.value as TodoStatus)}>
+                  {STATUS_ORDER.map(s => <option key={s} value={s}>{TODO_STATUS_LABELS[s]}</option>)}
+                </select>
+              ) : <StatusBadge status={status} />}
+            </div>
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>優先度</p>
+              {canEdit ? (
+                <select className="field-input text-sm" value={priority} onChange={e => mark(setPriority)(e.target.value as TodoPriority)}>
+                  {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => <option key={p} value={p}>{TODO_PRIORITY_LABELS[p]}</option>)}
+                </select>
+              ) : <PriorityBadge priority={priority} />}
+            </div>
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>担当者</p>
+              {canEdit ? (
+                <select className="field-input text-sm" value={assigneeId} onChange={e => mark(setAssigneeId)(e.target.value)}>
+                  <option value="">未割当</option>
+                  {assignableUsers.map(u => <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>)}
+                </select>
+              ) : <p className="text-sm">{userDisplayName(todo.assignee)}</p>}
+            </div>
+            {phases.length > 0 && (
+              <div>
+                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>フェーズ</p>
+                {canEdit ? (
+                  <select className="field-input text-sm" value={phaseKey} onChange={e => mark(setPhaseKey)(e.target.value)}>
+                    <option value="">未設定</option>
+                    {phases.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
+                  </select>
+                ) : <p className="text-sm">{phases.find(p => p.key === phaseKey)?.name ?? '未設定'}</p>}
+              </div>
+            )}
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>開始日</p>
+              {canEdit ? (
+                <input type="date" className="field-input text-sm" value={startDate} onChange={e => mark(setStartDate)(e.target.value)} />
+              ) : <p className="text-sm">{formatDate(startDate) || '—'}</p>}
+            </div>
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>期日</p>
+              {canEdit ? (
+                <input type="date" className="field-input text-sm" value={dueDate} onChange={e => mark(setDueDate)(e.target.value)} />
+              ) : <p className="text-sm" style={{ color: overdue ? '#ef4444' : undefined }}>{formatDate(dueDate) || '—'}</p>}
+            </div>
+          </div>
+
+          {/* サブタスク一覧（読み取り） */}
+          {subtaskCount > 0 && (
+            <div>
+              <p className="text-[11px] font-medium mb-2" style={{ color: 'var(--text-muted)' }}>サブタスク</p>
+              <div className="space-y-1">
+                {todo.subtasks!.map(sub => (
+                  <div key={sub.id} className="flex items-center gap-2 text-sm py-1">
+                    <span className={`w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0 ${sub.status === 'done' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'}`}>
+                      {sub.status === 'done' && <svg viewBox="0 0 8 8" className="w-2 h-2"><path d="M1 4l2 2 4-4" stroke="white" strokeWidth={1.5} strokeLinecap="round" fill="none" /></svg>}
+                    </span>
+                    <span style={{ textDecoration: sub.status === 'done' ? 'line-through' : 'none', color: sub.status === 'done' ? 'var(--text-muted)' : 'var(--text-primary)' }}>{sub.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* フッター */}
+        <div className="px-6 py-4 border-t flex items-center justify-between gap-3" style={{ borderColor: 'var(--border)' }}>
+          <div>
+            {canEdit && (
+              confirmDelete ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-red-500">本当に削除しますか？</span>
+                  <button onClick={() => { onDelete(todo.id); onClose(); }} className="text-xs text-red-600 font-medium hover:underline">削除する</button>
+                  <button onClick={() => setConfirmDelete(false)} className="text-xs" style={{ color: 'var(--text-muted)' }}>キャンセル</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)} className="text-xs text-red-400 hover:text-red-600 transition-colors">削除</button>
+              )
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-secondary text-sm">閉じる</button>
+            {canEdit && dirty && (
+              <button onClick={handleSave} disabled={!title.trim()} className="btn-primary text-sm">保存</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+// 新規作成フォーム（簡易）
+// ──────────────────────────────────────────
+interface CreateFormProps {
   assignableUsers: ProjectUser[];
   phases: ProjectPhase[];
   onSave: (data: Partial<Todo>) => void;
@@ -58,93 +293,51 @@ interface TodoFormProps {
   saveLabel?: string;
 }
 
-function TodoForm({ initial, assignableUsers, phases, onSave, onCancel, saveLabel = '保存' }: TodoFormProps) {
-  const [title, setTitle] = useState(initial?.title ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [status, setStatus] = useState<TodoStatus>(initial?.status ?? 'todo');
-  const [priority, setPriority] = useState<TodoPriority>(initial?.priority ?? 'medium');
-  const [assigneeId, setAssigneeId] = useState(initial?.assignee_id ?? '');
-  const [phaseKey, setPhaseKey] = useState(initial?.phase_key ?? '');
-  const [startDate, setStartDate] = useState(initial?.start_date ?? '');
-  const [dueDate, setDueDate] = useState(initial?.due_date ?? '');
+function TodoCreateForm({ assignableUsers, phases, onSave, onCancel, saveLabel = '作成' }: CreateFormProps) {
+  const [title, setTitle] = useState('');
+  const [priority, setPriority] = useState<TodoPriority>('medium');
+  const [assigneeId, setAssigneeId] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [expanded, setExpanded] = useState(false);
 
   function handleSave() {
     if (!title.trim()) return;
-    onSave({
-      title: title.trim(),
-      description,
-      status,
-      priority,
-      assignee_id: assigneeId || null,
-      phase_key: phaseKey,
-      start_date: startDate,
-      due_date: dueDate,
-    });
+    onSave({ title: title.trim(), priority, assignee_id: assigneeId || null, due_date: dueDate, status: 'todo' });
   }
 
-  const selectCls = 'field-input text-sm';
-  const labelCls = 'text-xs font-medium mb-1 block';
-
   return (
-    <div className="space-y-3">
+    <div className="card p-4 space-y-3">
       <input
-        className="field-input text-sm font-semibold"
+        className="field-input text-sm font-medium"
         placeholder="タスク名（必須）"
         value={title}
         onChange={e => setTitle(e.target.value)}
         autoFocus
+        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSave(); if (e.key === 'Escape') onCancel(); }}
       />
-      <textarea
-        className="field-input text-sm resize-none"
-        placeholder="説明（任意）"
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        rows={2}
-      />
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={labelCls} style={{ color: 'var(--text-muted)' }}>ステータス</label>
-          <select className={selectCls} value={status} onChange={e => setStatus(e.target.value as TodoStatus)}>
-            {STATUS_ORDER.map(s => <option key={s} value={s}>{TODO_STATUS_LABELS[s]}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className={labelCls} style={{ color: 'var(--text-muted)' }}>優先度</label>
-          <select className={selectCls} value={priority} onChange={e => setPriority(e.target.value as TodoPriority)}>
-            {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => (
-              <option key={p} value={p}>{TODO_PRIORITY_LABELS[p]}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className={labelCls} style={{ color: 'var(--text-muted)' }}>担当者</label>
-          <select className={selectCls} value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
-            <option value="">未割当</option>
-            {assignableUsers.map(u => (
-              <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>
-            ))}
-          </select>
-        </div>
-        {phases.length > 0 && (
+      {expanded ? (
+        <div className="grid grid-cols-3 gap-2">
           <div>
-            <label className={labelCls} style={{ color: 'var(--text-muted)' }}>フェーズ</label>
-            <select className={selectCls} value={phaseKey} onChange={e => setPhaseKey(e.target.value)}>
-              <option value="">未設定</option>
-              {phases.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
+            <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>優先度</label>
+            <select className="field-input text-sm" value={priority} onChange={e => setPriority(e.target.value as TodoPriority)}>
+              {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => <option key={p} value={p}>{TODO_PRIORITY_LABELS[p]}</option>)}
             </select>
           </div>
-        )}
-        <div>
-          <label className={labelCls} style={{ color: 'var(--text-muted)' }}>開始日</label>
-          <input type="date" className={selectCls} value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <div>
+            <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>担当者</label>
+            <select className="field-input text-sm" value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
+              <option value="">未割当</option>
+              {assignableUsers.map(u => <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>期日</label>
+            <input type="date" className="field-input text-sm" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+          </div>
         </div>
-        <div>
-          <label className={labelCls} style={{ color: 'var(--text-muted)' }}>期日</label>
-          <input type="date" className={selectCls} value={dueDate} onChange={e => setDueDate(e.target.value)} />
-        </div>
-      </div>
-
+      ) : (
+        <button onClick={() => setExpanded(true)} className="text-xs" style={{ color: 'var(--text-muted)' }}>＋ 詳細を設定（優先度・担当者・期日）</button>
+      )}
       <div className="flex gap-2 justify-end">
         <button onClick={onCancel} className="btn-secondary text-sm">キャンセル</button>
         <button onClick={handleSave} disabled={!title.trim()} className="btn-primary text-sm">{saveLabel}</button>
@@ -157,113 +350,99 @@ function TodoForm({ initial, assignableUsers, phases, onSave, onCancel, saveLabe
 // リストビュー: 1行
 // ──────────────────────────────────────────
 function TodoRow({
-  todo,
-  assignableUsers,
-  phases,
-  depth,
-  onStatusChange,
-  onEdit,
-  onDelete,
-  onAddSubtask,
+  todo, phases, depth, onStatusChange, onOpen, onDelete, onAddSubtask, canEdit,
 }: {
   todo: Todo;
-  assignableUsers: ProjectUser[];
   phases: ProjectPhase[];
   depth: number;
   onStatusChange: (id: string, status: TodoStatus) => void;
-  onEdit: (todo: Todo) => void;
+  onOpen: (todo: Todo) => void;
   onDelete: (id: string) => void;
   onAddSubtask: (parentId: string) => void;
+  canEdit: boolean;
 }) {
-  const [showActions, setShowActions] = useState(false);
   const overdue = isOverdue(todo.due_date, todo.status);
+  const soon = isDueSoon(todo.due_date, todo.status);
+  const subtaskCount = todo.subtasks?.length ?? 0;
+  const subtaskDone = todo.subtasks?.filter(s => s.status === 'done').length ?? 0;
 
   return (
     <div
-      className="flex items-start gap-3 py-2 px-3 rounded-xl transition-colors hover:bg-gray-50 group"
-      style={{ paddingLeft: depth > 0 ? `${12 + depth * 20}px` : undefined }}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      className="flex items-center gap-3 py-2 px-3 rounded-xl transition-colors hover:bg-slate-50 group cursor-pointer select-none"
+      style={{ paddingLeft: depth > 0 ? `${12 + depth * 24}px` : undefined }}
+      onDoubleClick={() => onOpen(todo)}
+      title="ダブルクリックで詳細を開く"
     >
       {/* チェックボックス */}
       <button
-        className="mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors"
+        className="flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
         style={{
-          borderColor: todo.status === 'done' ? '#10b981' : 'var(--border)',
+          borderColor: todo.status === 'done' ? '#10b981' : todo.status === 'in_progress' ? '#3b82f6' : 'var(--border)',
           backgroundColor: todo.status === 'done' ? '#10b981' : 'white',
         }}
-        onClick={() => onStatusChange(todo.id, todo.status === 'done' ? 'todo' : 'done')}
+        onClick={e => { e.stopPropagation(); onStatusChange(todo.id, todo.status === 'done' ? 'todo' : 'done'); }}
         title={todo.status === 'done' ? '未着手に戻す' : '完了にする'}
       >
         {todo.status === 'done' && (
-          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
+          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 12 12">
             <path d="M2 6l3 3 5-5" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
+        {todo.status === 'in_progress' && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#3b82f6', display: 'block' }} />}
       </button>
 
-      {/* メイン情報 */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className={`text-sm ${todo.status === 'done' ? 'line-through' : ''}`}
-            style={{ color: todo.status === 'done' ? 'var(--text-muted)' : 'var(--text-primary)' }}
-          >
-            {todo.title}
+      {/* タイトル + メタ */}
+      <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+        <span className={`text-sm ${todo.status === 'done' ? 'line-through' : ''}`}
+          style={{ color: todo.status === 'done' ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+          {todo.title}
+        </span>
+        <PriorityBadge priority={todo.priority} />
+        {todo.status === 'in_progress' && (
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full text-blue-700 bg-blue-50">進行中</span>
+        )}
+        {subtaskCount > 0 && (
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+            {subtaskDone}/{subtaskCount}
           </span>
-          <PriorityBadge priority={todo.priority} />
-          {todo.status !== 'done' && todo.status !== 'todo' && (
-            <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
-              {TODO_STATUS_LABELS[todo.status]}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-          {todo.assignee && (
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {userDisplayName(todo.assignee)}
-            </span>
-          )}
-          {todo.due_date && (
-            <span className="text-xs" style={{ color: overdue ? '#ef4444' : 'var(--text-muted)' }}>
-              {overdue ? '⚠ ' : ''}{formatDate(todo.due_date)} 期日
-            </span>
-          )}
-          {todo.phase_key && phases.length > 0 && (
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {phases.find(p => p.key === todo.phase_key)?.name ?? todo.phase_key}
-            </span>
-          )}
-        </div>
+        )}
+        {todo.assignee && (
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{userDisplayName(todo.assignee)}</span>
+        )}
+        {todo.due_date && (
+          <span className="text-[11px] font-medium"
+            style={{ color: overdue ? '#ef4444' : soon ? '#f59e0b' : 'var(--text-muted)' }}>
+            {overdue ? '⚠ ' : soon ? '◎ ' : ''}{formatDate(todo.due_date)}
+          </span>
+        )}
+        {todo.phase_key && phases.length > 0 && (
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            {phases.find(p => p.key === todo.phase_key)?.name}
+          </span>
+        )}
       </div>
 
-      {/* アクション */}
-      <div className={`flex items-center gap-1 flex-shrink-0 transition-opacity ${showActions ? 'opacity-100' : 'opacity-0'}`}>
-        {depth === 0 && (
-          <button
-            onClick={() => onAddSubtask(todo.id)}
-            className="text-xs px-2 py-1 rounded transition-colors"
-            style={{ color: 'var(--text-muted)' }}
-            title="サブタスク追加"
-          >
-            +サブ
+      {/* アクション（ホバー時） */}
+      {canEdit && (
+        <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {depth === 0 && (
+            <button onClick={e => { e.stopPropagation(); onAddSubtask(todo.id); }}
+              className="text-[11px] px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+              style={{ color: 'var(--text-muted)' }} title="サブタスク追加">
+              +サブ
+            </button>
+          )}
+          <button onClick={e => { e.stopPropagation(); onOpen(todo); }}
+            className="text-[11px] px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+            style={{ color: 'var(--text-muted)' }}>
+            開く
           </button>
-        )}
-        <button
-          onClick={() => onEdit(todo)}
-          className="text-xs px-2 py-1 rounded transition-colors"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          編集
-        </button>
-        <button
-          onClick={() => onDelete(todo.id)}
-          className="text-xs px-2 py-1 rounded transition-colors"
-          style={{ color: '#ef4444' }}
-        >
-          削除
-        </button>
-      </div>
+          <button onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+            className="text-[11px] px-2 py-1 rounded hover:bg-red-50 transition-colors text-red-400">
+            削除
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -272,154 +451,494 @@ function TodoRow({
 // カンバンカード
 // ──────────────────────────────────────────
 function KanbanCard({
-  todo,
-  onEdit,
-  onDelete,
-  onDragStart,
+  todo, onOpen, onDelete, onDragStart,
 }: {
   todo: Todo;
-  onEdit: (todo: Todo) => void;
+  onOpen: (todo: Todo) => void;
   onDelete: (id: string) => void;
   onDragStart: (e: React.DragEvent, todo: Todo) => void;
 }) {
   const overdue = isOverdue(todo.due_date, todo.status);
+  const soon = isDueSoon(todo.due_date, todo.status);
+  const draggedRef = useRef(false);
 
   return (
     <div
       draggable
-      onDragStart={e => onDragStart(e, todo)}
-      className="card p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow"
+      onDragStart={e => { draggedRef.current = true; onDragStart(e, todo); }}
+      onDragEnd={() => { setTimeout(() => { draggedRef.current = false; }, 200); }}
+      onDoubleClick={() => { if (!draggedRef.current) onOpen(todo); }}
+      className="card p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all group"
       style={{ borderLeft: `3px solid ${TODO_PRIORITY_COLORS[todo.priority]}` }}
+      title="ダブルクリックで詳細を開く"
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium leading-tight" style={{ color: 'var(--text-primary)' }}>{todo.title}</p>
-        <div className="flex gap-1 flex-shrink-0">
-          <button onClick={() => onEdit(todo)} className="text-xs opacity-50 hover:opacity-100" title="編集">✏</button>
-          <button onClick={() => onDelete(todo.id)} className="text-xs opacity-50 hover:opacity-100 text-red-400" title="削除">✕</button>
-        </div>
+      <div className="flex items-start gap-1">
+        <p className="text-sm font-medium leading-snug flex-1 min-w-0" style={{ color: 'var(--text-primary)' }}>
+          {todo.title}
+        </p>
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
+          className="text-xs opacity-0 group-hover:opacity-40 hover:!opacity-100 text-red-400 flex-shrink-0 transition-opacity p-0.5"
+          title="削除"
+        >
+          ✕
+        </button>
       </div>
-      <div className="flex items-center gap-2 mt-2 flex-wrap">
+
+      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <PriorityBadge priority={todo.priority} />
         {todo.assignee && (
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{userDisplayName(todo.assignee)}</span>
-        )}
-        {todo.due_date && (
-          <span className="text-xs" style={{ color: overdue ? '#ef4444' : 'var(--text-muted)' }}>
-            {formatDate(todo.due_date)}
-          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{userDisplayName(todo.assignee)}</span>
         )}
       </div>
+
+      {todo.due_date && (
+        <p className="text-[11px] mt-1.5 font-medium"
+          style={{ color: overdue ? '#ef4444' : soon ? '#f59e0b' : 'var(--text-muted)' }}>
+          {overdue ? '⚠ ' : soon ? '◎ ' : ''}{formatDate(todo.due_date)}
+        </p>
+      )}
+
+      {(todo.subtasks?.length ?? 0) > 0 && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border)' }}>
+            <div className="h-full rounded-full bg-emerald-400"
+              style={{ width: `${((todo.subtasks!.filter(s => s.status === 'done').length) / todo.subtasks!.length) * 100}%` }} />
+          </div>
+          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            {todo.subtasks!.filter(s => s.status === 'done').length}/{todo.subtasks!.length}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
 // ──────────────────────────────────────────
-// ガントバー（SVGベース）
+// ガントビュー（ドラッグ対応）
 // ──────────────────────────────────────────
-const GANTT_ROW_H = 36;
-const GANTT_LABEL_W = 200;
+const GANTT_ROW_H = 50;        // 2行ラベル用に高く
+const GANTT_LABEL_W = 220;
+const GANTT_MONTH_H = 22;      // 月ヘッダー行
+const GANTT_DAY_H = 26;        // 日付ヘッダー行
+const GANTT_HEADER_H = GANTT_MONTH_H + GANTT_DAY_H;
+const RESIZE_HANDLE_PX = 10;
 
-function GanttView({ todos }: { todos: Todo[] }) {
-  // 日付がある Todo のみ表示
+// スケール別定数
+const SCALE_DAY_W = 40;          // 日モード: 1日の幅(px)
+const SCALE_WEEK5_WEEKDAY_W = 22; // 週5日モード: 平日1日幅
+const SCALE_WEEK5_WEEKEND_W = 5;  // 週5日モード: 週末1日幅
+const SCALE_WEEK_W = 84;         // 週モード: 1週間の幅
+
+type GanttScale = 'day' | 'week5' | 'week';
+const GANTT_SCALE_LABELS: Record<GanttScale, string> = {
+  day: '1日',
+  week5: '週5日',
+  week: '1週間',
+};
+
+// ステータス別バー色
+const GANTT_STATUS_COLORS: Record<string, string> = {
+  todo: '#94a3b8',        // slate-400
+  in_progress: '#3b82f6', // blue-500
+  done: '#10b981',        // emerald-500
+};
+
+interface GanttDragState {
+  type: 'move' | 'resize';
+  todoId: string;
+  startClientX: number;
+  origStart: string;
+  origEnd: string;
+}
+
+interface GanttOverride {
+  todoId: string;
+  start_date: string;
+  due_date: string;
+}
+
+function GanttView({
+  todos, onOpen, onUpdate, scale, onScaleChange, hideScaleUI = false, onExpand,
+}: {
+  todos: Todo[];
+  onOpen: (todo: Todo) => void;
+  onUpdate: (id: string, data: Partial<Todo>) => void;
+  scale: GanttScale;
+  onScaleChange: (s: GanttScale) => void;
+  hideScaleUI?: boolean;
+  onExpand?: () => void;
+}) {
+  const [dragState, setDragState] = useState<GanttDragState | null>(null);
+  const [override, setOverride] = useState<GanttOverride | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
   const datedTodos = todos.filter(t => t.start_date || t.due_date);
+
   if (datedTodos.length === 0) {
     return (
-      <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+      <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-2xl mb-2">📅</p>
         <p className="text-sm">開始日または期日が設定されたタスクがありません</p>
+        <p className="text-xs mt-1">リストビューでタスクに日付を設定してください</p>
       </div>
     );
   }
 
-  // 全体の日付範囲を計算
+  // 日付範囲
   const dates = datedTodos.flatMap(t => [t.start_date, t.due_date].filter(Boolean) as string[]);
-  const minDate = new Date(dates.reduce((a, b) => a < b ? a : b));
-  const maxDate = new Date(dates.reduce((a, b) => a > b ? a : b));
-  // 前後1日マージン
-  minDate.setDate(minDate.getDate() - 1);
-  maxDate.setDate(maxDate.getDate() + 2);
+  const minDateBase = new Date(dates.reduce((a, b) => a < b ? a : b));
+  const maxDateBase = new Date(dates.reduce((a, b) => a > b ? a : b));
+  minDateBase.setDate(minDateBase.getDate() - 2);
+  maxDateBase.setDate(maxDateBase.getDate() + 4);
+  const totalDays = Math.max(1, Math.ceil((maxDateBase.getTime() - minDateBase.getTime()) / 86400000));
 
-  const totalDays = Math.max(1, Math.ceil((maxDate.getTime() - minDate.getTime()) / 86400000));
-  const dayWidth = Math.max(20, Math.min(40, (600 / totalDays)));
-  const svgWidth = GANTT_LABEL_W + totalDays * dayWidth;
-  const svgHeight = (datedTodos.length + 1) * GANTT_ROW_H;
-
+  // スケール別 x座標計算（バーSVG: x=0 が minDateBase）
   function dateToX(dateStr: string): number {
-    const d = new Date(dateStr);
-    return GANTT_LABEL_W + Math.floor((d.getTime() - minDate.getTime()) / 86400000) * dayWidth;
+    const diffDays = Math.floor((new Date(dateStr).getTime() - minDateBase.getTime()) / 86400000);
+    if (scale === 'day') return diffDays * SCALE_DAY_W;
+    if (scale === 'week') return (diffDays / 7) * SCALE_WEEK_W;
+    // week5: 各日を平日/週末の幅で積算
+    let x = 0;
+    for (let d = 0; d < diffDays; d++) {
+      const dow = new Date(minDateBase.getTime() + d * 86400000).getDay();
+      x += (dow === 0 || dow === 6) ? SCALE_WEEK5_WEEKEND_W : SCALE_WEEK5_WEEKDAY_W;
+    }
+    return x;
   }
 
-  // 月ヘッダー用
+  function xToDeltaDays(deltaX: number): number {
+    if (scale === 'day') return Math.round(deltaX / SCALE_DAY_W);
+    if (scale === 'week') return Math.round(deltaX / (SCALE_WEEK_W / 7));
+    const avgW = (5 * SCALE_WEEK5_WEEKDAY_W + 2 * SCALE_WEEK5_WEEKEND_W) / 7;
+    return Math.round(deltaX / avgW);
+  }
+
+  // barSvgWidth: maxDateBase の x座標
+  const barSvgWidth = Math.max(100, dateToX(maxDateBase.toISOString().slice(0, 10)));
+  const svgHeight = GANTT_HEADER_H + (datedTodos.length + 0.5) * GANTT_ROW_H;
+
+  // 月ヘッダー
   const months: { label: string; x: number; width: number }[] = [];
-  let cur = new Date(minDate);
-  while (cur < maxDate) {
-    const monthStart = new Date(cur);
-    const nextMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
-    const monthEnd = nextMonth < maxDate ? nextMonth : maxDate;
-    const x = GANTT_LABEL_W + Math.floor((monthStart.getTime() - minDate.getTime()) / 86400000) * dayWidth;
-    const w = Math.floor((monthEnd.getTime() - monthStart.getTime()) / 86400000) * dayWidth;
-    months.push({ label: `${cur.getFullYear()}/${cur.getMonth() + 1}`, x, width: w });
-    cur = nextMonth;
+  {
+    let cur = new Date(minDateBase);
+    while (cur < maxDateBase) {
+      const monthStart = new Date(cur);
+      const nextMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+      const monthEnd = nextMonth < maxDateBase ? nextMonth : maxDateBase;
+      const x = dateToX(monthStart.toISOString().slice(0, 10));
+      const w = dateToX(monthEnd.toISOString().slice(0, 10)) - x;
+      months.push({ label: `${cur.getFullYear()}/${cur.getMonth() + 1}`, x, width: w });
+      cur = nextMonth;
+    }
   }
 
-  const today = new Date();
-  const todayX = GANTT_LABEL_W + Math.floor((today.getTime() - minDate.getTime()) / 86400000) * dayWidth;
+  // 日付ティック（スケール対応）
+  type DayTick = { label: string; x: number; width: number; isWeekend: boolean };
+  const dayTicks: DayTick[] = [];
+
+  if (scale === 'day') {
+    for (let d = 0; d < totalDays; d++) {
+      const date = new Date(minDateBase.getTime() + d * 86400000);
+      const dow = date.getDay();
+      dayTicks.push({
+        label: String(date.getDate()),
+        x: d * SCALE_DAY_W,
+        width: SCALE_DAY_W,
+        isWeekend: dow === 0 || dow === 6,
+      });
+    }
+  } else if (scale === 'week5') {
+    for (let d = 0; d < totalDays; d++) {
+      const date = new Date(minDateBase.getTime() + d * 86400000);
+      const dow = date.getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const w = isWeekend ? SCALE_WEEK5_WEEKEND_W : SCALE_WEEK5_WEEKDAY_W;
+      dayTicks.push({
+        label: isWeekend ? '' : String(date.getDate()),
+        x: dateToX(date.toISOString().slice(0, 10)),
+        width: w,
+        isWeekend,
+      });
+    }
+  } else {
+    // week: 月曜日のみティック
+    for (let d = 0; d < totalDays; d += 7) {
+      const date = new Date(minDateBase.getTime() + d * 86400000);
+      dayTicks.push({
+        label: `${date.getMonth() + 1}/${date.getDate()}`,
+        x: d * (SCALE_WEEK_W / 7),
+        width: SCALE_WEEK_W,
+        isWeekend: false,
+      });
+    }
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayX = dateToX(todayStr);
+
+  function handleBarMouseDown(e: React.MouseEvent, todo: Todo, type: 'move' | 'resize') {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragState({
+      type,
+      todoId: todo.id,
+      startClientX: e.clientX,
+      origStart: todo.start_date || todo.due_date || todayStr,
+      origEnd: todo.due_date || todo.start_date || todayStr,
+    });
+    setOverride({ todoId: todo.id, start_date: todo.start_date || todo.due_date || '', due_date: todo.due_date || todo.start_date || '' });
+  }
+
+  function handleMouseMove(e: React.MouseEvent) {
+    if (!dragState) return;
+    const deltaX = e.clientX - dragState.startClientX;
+    const deltaDays = xToDeltaDays(deltaX);
+    if (deltaDays === 0) return;
+    if (dragState.type === 'move') {
+      setOverride({
+        todoId: dragState.todoId,
+        start_date: dragState.origStart ? addDays(dragState.origStart, deltaDays) : '',
+        due_date: dragState.origEnd ? addDays(dragState.origEnd, deltaDays) : '',
+      });
+    } else {
+      const newEnd = dragState.origEnd ? addDays(dragState.origEnd, deltaDays) : '';
+      const minEnd = dragState.origStart || '';
+      setOverride({
+        todoId: dragState.todoId,
+        start_date: dragState.origStart || '',
+        due_date: newEnd >= minEnd ? newEnd : minEnd,
+      });
+    }
+  }
+
+  function handleMouseUp() {
+    if (!dragState || !override) { setDragState(null); setOverride(null); return; }
+    const { todoId, origStart, origEnd } = dragState;
+    if (override.start_date !== origStart || override.due_date !== origEnd) {
+      onUpdate(todoId, { start_date: override.start_date, due_date: override.due_date });
+    }
+    setDragState(null);
+    setOverride(null);
+  }
+
+  function getBarDates(todo: Todo): { start: string; end: string } {
+    if (override && override.todoId === todo.id) {
+      return { start: override.start_date || override.due_date, end: override.due_date || override.start_date };
+    }
+    return { start: todo.start_date || todo.due_date || '', end: todo.due_date || todo.start_date || '' };
+  }
+
+  // バーの最小幅（1日分のpx）
+  const minBarW = scale === 'day' ? SCALE_DAY_W : scale === 'week' ? SCALE_WEEK_W / 7 : SCALE_WEEK5_WEEKDAY_W;
 
   return (
-    <div className="overflow-x-auto">
-      <svg width={svgWidth} height={svgHeight} style={{ minWidth: svgWidth, display: 'block' }}>
-        {/* 背景 */}
-        <rect width={svgWidth} height={svgHeight} fill="white" />
+    <div>
+      {/* スケール切替（フルスクリーン時はサイドバーに移動するため非表示） */}
+      {!hideScaleUI && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>表示単位:</span>
+          {(Object.keys(GANTT_SCALE_LABELS) as GanttScale[]).map(s => (
+            <button key={s} onClick={() => onScaleChange(s)}
+              className={`tab-btn text-xs py-1 ${scale === s ? 'active' : ''}`}>
+              {GANTT_SCALE_LABELS[s]}
+            </button>
+          ))}
+          {onExpand && (
+            <button onClick={onExpand}
+              className="ml-2 text-xs px-2.5 py-1 rounded-lg border transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              ⛶ 拡大
+            </button>
+          )}
+        </div>
+      )}
 
-        {/* 月ヘッダー */}
-        {months.map((m, i) => (
-          <g key={i}>
-            <rect x={m.x} y={0} width={m.width} height={GANTT_ROW_H / 2} fill={i % 2 === 0 ? '#f8fafc' : '#f1f5f9'} />
-            <text x={m.x + m.width / 2} y={GANTT_ROW_H / 3} textAnchor="middle" fontSize={10} fill="#6b7280">{m.label}</text>
-          </g>
-        ))}
+      {/* チャート本体 */}
+      <div style={{ cursor: dragState ? (dragState.type === 'resize' ? 'ew-resize' : 'grabbing') : 'default' }}>
+        <div className="flex" style={{ userSelect: 'none' }}>
 
-        {/* 今日のライン */}
-        {todayX >= GANTT_LABEL_W && todayX <= svgWidth && (
-          <line x1={todayX} y1={0} x2={todayX} y2={svgHeight} stroke="#ef4444" strokeWidth={1} strokeDasharray="4,4" opacity={0.6} />
-        )}
+          {/* ──── 左: ラベル列（固定） ──── */}
+          <div style={{ width: GANTT_LABEL_W, flexShrink: 0, borderRight: '1px solid #cbd5e1' }}>
+            <svg width={GANTT_LABEL_W} height={svgHeight} style={{ display: 'block' }}>
+              <rect x={0} y={0} width={GANTT_LABEL_W} height={GANTT_MONTH_H} fill="#f1f5f9" />
+              <text x={10} y={GANTT_MONTH_H * 0.72} fontSize={11} fill="#475569" fontWeight={600}>タスク</text>
+              <rect x={0} y={GANTT_MONTH_H} width={GANTT_LABEL_W} height={GANTT_DAY_H} fill="#f8fafc" />
+              <line x1={0} y1={GANTT_MONTH_H} x2={GANTT_LABEL_W} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
+              <line x1={0} y1={GANTT_HEADER_H} x2={GANTT_LABEL_W} y2={GANTT_HEADER_H} stroke="#cbd5e1" strokeWidth={1} />
+              {datedTodos.map((todo, i) => {
+                const y = GANTT_HEADER_H + i * GANTT_ROW_H;
+                const priorityColor = TODO_PRIORITY_COLORS[todo.priority];
+                const isDone = todo.status === 'done';
+                const isOverdueBar = isOverdue(todo.due_date, todo.status);
+                const assigneeName = todo.assignee ? userDisplayName(todo.assignee) : null;
+                return (
+                  <g key={todo.id}>
+                    <rect x={0} y={y} width={GANTT_LABEL_W} height={GANTT_ROW_H}
+                      fill={i % 2 === 0 ? 'white' : '#fafafa'} />
+                    <line x1={0} y1={y + GANTT_ROW_H} x2={GANTT_LABEL_W} y2={y + GANTT_ROW_H}
+                      stroke="#f1f5f9" strokeWidth={0.5} />
+                    <rect x={0} y={y + 6} width={3} height={GANTT_ROW_H - 12} rx={1.5}
+                      fill={priorityColor} opacity={0.8} />
+                    <text x={10} y={y + GANTT_ROW_H * 0.4} fontSize={12}
+                      fill={isDone ? '#9ca3af' : isOverdueBar ? '#ef4444' : '#1e293b'}
+                      style={{ textDecoration: isDone ? 'line-through' : 'none', pointerEvents: 'none' }}>
+                      {todo.title.length > 24 ? `${todo.title.slice(0, 24)}…` : todo.title}
+                    </text>
+                    {assigneeName && (
+                      <text x={10} y={y + GANTT_ROW_H * 0.72} fontSize={9.5} fill="#94a3b8"
+                        style={{ pointerEvents: 'none' }}>
+                        {assigneeName.length > 22 ? `${assigneeName.slice(0, 22)}…` : assigneeName}
+                      </text>
+                    )}
+                    <rect x={0} y={y} width={GANTT_LABEL_W} height={GANTT_ROW_H} fill="transparent"
+                      style={{ cursor: 'pointer' }} onDoubleClick={() => onOpen(todo)} />
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
 
-        {/* 行 */}
-        {datedTodos.map((todo, i) => {
-          const y = (i + 1) * GANTT_ROW_H;
-          const start = todo.start_date || todo.due_date;
-          const end = todo.due_date || todo.start_date;
-          const x1 = dateToX(start!);
-          const x2 = Math.max(x1 + dayWidth, dateToX(end!));
-          const barColor = TODO_PRIORITY_COLORS[todo.priority];
-          const isDone = todo.status === 'done';
+          {/* ──── 右: バー列（横スクロール） ──── */}
+          <div className="overflow-x-auto flex-1">
+            <svg
+              ref={svgRef}
+              width={barSvgWidth}
+              height={svgHeight}
+              style={{ minWidth: barSvgWidth, display: 'block' }}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              <rect width={barSvgWidth} height={svgHeight} fill="white" />
 
-          return (
-            <g key={todo.id}>
-              <rect x={0} y={y} width={svgWidth} height={GANTT_ROW_H} fill={i % 2 === 0 ? 'white' : '#fafafa'} />
-              {/* ラベル */}
-              <text x={8} y={y + GANTT_ROW_H * 0.65} fontSize={11} fill={isDone ? '#9ca3af' : '#374151'}
-                style={{ textDecoration: isDone ? 'line-through' : 'none' }}>
-                {todo.title.length > 22 ? `${todo.title.slice(0, 22)}…` : todo.title}
-              </text>
-              {/* ガントバー */}
-              <rect x={x1} y={y + 8} width={x2 - x1} height={GANTT_ROW_H - 16}
-                rx={4} fill={barColor} opacity={isDone ? 0.35 : 0.8} />
-              {/* バー内テキスト（幅が十分な場合） */}
-              {(x2 - x1) > 40 && (
-                <text x={x1 + 4} y={y + GANTT_ROW_H * 0.65} fontSize={9} fill="white">
-                  {TODO_STATUS_LABELS[todo.status]}
-                </text>
+              {/* 月ヘッダー */}
+              {months.map((m, i) => (
+                <g key={i}>
+                  <rect x={m.x} y={0} width={m.width} height={GANTT_MONTH_H}
+                    fill={i % 2 === 0 ? '#f1f5f9' : '#e8edf2'} />
+                  <text x={m.x + 8} y={GANTT_MONTH_H * 0.72} fontSize={11} fill="#475569" fontWeight={600}>
+                    {m.label}
+                  </text>
+                  <line x1={m.x} y1={0} x2={m.x} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
+                </g>
+              ))}
+
+              {/* 日付ヘッダー */}
+              <rect x={0} y={GANTT_MONTH_H} width={barSvgWidth} height={GANTT_DAY_H} fill="#f8fafc" />
+              {dayTicks.map((tick, i) => (
+                <g key={i}>
+                  {tick.isWeekend && (
+                    <rect x={tick.x} y={GANTT_MONTH_H} width={tick.width} height={GANTT_DAY_H} fill="#f0f4f8" />
+                  )}
+                  {tick.label && (
+                    <text x={tick.x + tick.width / 2} y={GANTT_MONTH_H + GANTT_DAY_H * 0.68}
+                      textAnchor="middle" fontSize={10}
+                      fill={tick.isWeekend ? '#94a3b8' : '#64748b'}>
+                      {tick.label}
+                    </text>
+                  )}
+                  <line x1={tick.x} y1={GANTT_MONTH_H} x2={tick.x} y2={GANTT_HEADER_H} stroke="#e2e8f0" strokeWidth={0.5} />
+                </g>
+              ))}
+
+              {/* ヘッダー区切り線 */}
+              <line x1={0} y1={GANTT_MONTH_H} x2={barSvgWidth} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
+              <line x1={0} y1={GANTT_HEADER_H} x2={barSvgWidth} y2={GANTT_HEADER_H} stroke="#cbd5e1" strokeWidth={1} />
+
+              {/* 週末ハイライト（縦帯） */}
+              {dayTicks.filter(t => t.isWeekend).map((tick, i) => (
+                <rect key={i} x={tick.x} y={GANTT_HEADER_H} width={tick.width}
+                  height={svgHeight - GANTT_HEADER_H} fill="#f8fafc" />
+              ))}
+
+              {/* 縦グリッド */}
+              {dayTicks.map((tick, i) => (
+                <line key={i} x1={tick.x} y1={GANTT_HEADER_H} x2={tick.x} y2={svgHeight}
+                  stroke="#e2e8f0" strokeWidth={0.5} />
+              ))}
+
+              {/* 今日のライン */}
+              {todayX >= 0 && todayX <= barSvgWidth && (
+                <>
+                  <rect x={todayX - 1} y={GANTT_HEADER_H} width={2} height={svgHeight - GANTT_HEADER_H}
+                    fill="#ef4444" opacity={0.5} />
+                  <circle cx={todayX} cy={GANTT_HEADER_H} r={4} fill="#ef4444" opacity={0.8} />
+                  <text x={todayX + 5} y={GANTT_HEADER_H - 4} fontSize={9} fill="#ef4444" fontWeight={600}>今日</text>
+                </>
               )}
-            </g>
-          );
-        })}
 
-        {/* 縦グリッド（7日ごと） */}
-        {Array.from({ length: Math.ceil(totalDays / 7) }).map((_, i) => {
-          const x = GANTT_LABEL_W + i * 7 * dayWidth;
-          return <line key={i} x1={x} y1={GANTT_ROW_H / 2} x2={x} y2={svgHeight} stroke="#e5e7eb" strokeWidth={0.5} />;
-        })}
-      </svg>
+              {/* バー行 */}
+              {datedTodos.map((todo, i) => {
+                const y = GANTT_HEADER_H + i * GANTT_ROW_H;
+                const { start, end } = getBarDates(todo);
+                if (!start || !end) return null;
+                const x1 = dateToX(start);
+                const x2 = Math.max(x1 + minBarW, dateToX(end));
+                const barColor = GANTT_STATUS_COLORS[todo.status] ?? '#94a3b8';
+                const isDone = todo.status === 'done';
+                const isDragging = dragState?.todoId === todo.id;
+
+                return (
+                  <g key={todo.id}>
+                    <rect x={0} y={y} width={barSvgWidth} height={GANTT_ROW_H}
+                      fill={i % 2 === 0 ? 'white' : '#fafafa'} />
+                    <line x1={0} y1={y + GANTT_ROW_H} x2={barSvgWidth} y2={y + GANTT_ROW_H}
+                      stroke="#f1f5f9" strokeWidth={0.5} />
+                    <rect x={x1} y={y + 10} width={x2 - x1} height={GANTT_ROW_H - 20}
+                      rx={5} fill={barColor}
+                      opacity={isDone ? 0.4 : isDragging ? 1 : 0.85}
+                      stroke={isDragging ? barColor : 'transparent'} strokeWidth={2}
+                      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+                      onMouseDown={e => handleBarMouseDown(e, todo, 'move')}
+                      onDoubleClick={() => onOpen(todo)}
+                    />
+                    {!isDone && (
+                      <rect x={x2 - RESIZE_HANDLE_PX} y={y + 10}
+                        width={RESIZE_HANDLE_PX} height={GANTT_ROW_H - 20}
+                        rx={4} fill="white" opacity={0.4}
+                        style={{ cursor: 'ew-resize' }}
+                        onMouseDown={e => handleBarMouseDown(e, todo, 'resize')}
+                      />
+                    )}
+                    {(x2 - x1) > 48 && (
+                      <text x={x1 + 7} y={y + GANTT_ROW_H * 0.61} fontSize={9.5} fill="white"
+                        style={{ pointerEvents: 'none' }}>
+                        {TODO_STATUS_LABELS[todo.status]}
+                      </text>
+                    )}
+                    {isDragging && override && (
+                      <text x={x1} y={y + 8} fontSize={9} fill={barColor} fontWeight={700}
+                        style={{ pointerEvents: 'none' }}>
+                        {override.start_date} → {override.due_date}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+
+        {/* ──── フッター（スクロール非依存） ──── */}
+        <div className="flex items-center justify-between mt-2 px-1 flex-wrap gap-2">
+          <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            バー中央をドラッグ: 期間移動 ／ 右端をドラッグ: 期日変更 ／ ダブルクリック: 詳細を開く
+          </p>
+          <div className="flex items-center gap-3">
+            {(['todo', 'in_progress', 'done'] as const).map(s => (
+              <div key={s} className="flex items-center gap-1">
+                <div style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GANTT_STATUS_COLORS[s], opacity: 0.85, flexShrink: 0 }} />
+                <span className="text-[10px]" style={{ color: '#64748b' }}>{TODO_STATUS_LABELS[s]}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-1">
+              <div style={{ width: 3, height: 10, borderRadius: 2, backgroundColor: '#3b82f6', flexShrink: 0 }} />
+              <span className="text-[10px]" style={{ color: '#64748b' }}>優先度</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -442,10 +961,61 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   const [view, setView] = useState<TodoView>('list');
   const [creating, setCreating] = useState(false);
   const [creatingSubtaskFor, setCreatingSubtaskFor] = useState<string | null>(null);
-  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const [detailTodo, setDetailTodo] = useState<Todo | null>(null);
   const [dragOver, setDragOver] = useState<TodoStatus | null>(null);
 
-  // ──────────── API ハンドラ ────────────
+  // ──── ガント拡張表示 ────
+  const [ganttFullscreen, setGanttFullscreen] = useState(false);
+  const [ganttScale, setGanttScale] = useState<GanttScale>('day');
+
+  // ──── フィルター状態 ────
+  const [filterStatuses, setFilterStatuses] = useState<Set<TodoStatus>>(new Set());
+  const [filterPriorities, setFilterPriorities] = useState<Set<TodoPriority>>(new Set());
+  const [filterAssigneeId, setFilterAssigneeId] = useState<string>('');
+
+  function toggleStatus(s: TodoStatus) {
+    setFilterStatuses(prev => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
+  }
+  function togglePriority(p: TodoPriority) {
+    setFilterPriorities(prev => {
+      const next = new Set(prev);
+      next.has(p) ? next.delete(p) : next.add(p);
+      return next;
+    });
+  }
+
+  const hideDone = filterStatuses.size > 0 && !filterStatuses.has('done');
+
+  function toggleHideDone() {
+    if (hideDone) {
+      // 完了非表示を解除 → ステータスフィルタをクリア
+      setFilterStatuses(new Set());
+    } else {
+      // 完了のみ除外
+      setFilterStatuses(new Set(['todo', 'in_progress'] as TodoStatus[]));
+    }
+  }
+
+  function matchesFilter(todo: Todo): boolean {
+    if (filterStatuses.size > 0 && !filterStatuses.has(todo.status)) return false;
+    if (filterPriorities.size > 0 && !filterPriorities.has(todo.priority)) return false;
+    if (filterAssigneeId === 'unassigned' && todo.assignee_id) return false;
+    if (filterAssigneeId && filterAssigneeId !== 'unassigned' && todo.assignee_id !== filterAssigneeId) return false;
+    return true;
+  }
+
+  const isFiltering = filterStatuses.size > 0 || filterPriorities.size > 0 || filterAssigneeId !== '';
+
+  // フィルター適用済みTodo
+  const filteredTodos = todos
+    .filter(matchesFilter)
+    .map(t => ({ ...t, subtasks: (t.subtasks ?? []).filter(matchesFilter) }));
+
+  // ──── API ────
 
   const createTodo = useCallback(async (data: Partial<Todo>, parentId?: string) => {
     const res = await fetch(withBasePath(`/api/projects/${projectId}/todos`), {
@@ -457,7 +1027,6 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     const created: Todo = await res.json();
 
     if (parentId) {
-      // 親タスクのsubtasksに追加
       onTodosChange(todos.map(t =>
         t.id === parentId ? { ...t, subtasks: [...(t.subtasks ?? []), created] } : t
       ));
@@ -476,35 +1045,28 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     });
     if (!res.ok) return;
     const updated: Todo = await res.json();
-    // アサイニーは既存データを維持
     const existing = todos.find(t => t.id === id) ?? todos.flatMap(t => t.subtasks ?? []).find(t => t.id === id);
     const merged = { ...updated, assignee: existing?.assignee ?? null };
-
-    // 担当者を更新（assignee_id が変わった場合）
     if (data.assignee_id !== undefined) {
       const newAssignee = data.assignee_id ? assignableUsers.find(u => u.id === data.assignee_id) ?? null : null;
       Object.assign(merged, { assignee: newAssignee });
     }
-
     onTodosChange(todos.map(t => {
       if (t.id === id) return { ...merged, subtasks: t.subtasks };
       return { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === id ? merged : s) };
     }));
-    setEditingTodo(null);
+    // detailTodoが開いていれば更新
+    setDetailTodo(prev => prev?.id === id ? { ...merged, subtasks: prev.subtasks } : prev);
   }, [projectId, todos, assignableUsers, onTodosChange]);
 
   const deleteTodo = useCallback(async (id: string) => {
     const res = await fetch(withBasePath(`/api/projects/${projectId}/todos/${id}`), { method: 'DELETE' });
     if (!res.ok) return;
-    onTodosChange(
-      todos
-        .filter(t => t.id !== id)
-        .map(t => ({ ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== id) }))
-    );
+    onTodosChange(todos.filter(t => t.id !== id).map(t => ({ ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== id) })));
+    setDetailTodo(null);
   }, [projectId, todos, onTodosChange]);
 
-  // ──────────── カンバン Drag & Drop ────────────
-
+  // ──── カンバン D&D ────
   const handleDragStart = useCallback((e: React.DragEvent, todo: Todo) => {
     e.dataTransfer.setData('todoId', todo.id);
   }, []);
@@ -516,12 +1078,12 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     updateTodo(id, { status });
   }, [updateTodo]);
 
-  // ──────────── 統計 ────────────
+  // ──── 統計 ────
   const allTodos = todos.flatMap(t => [t, ...(t.subtasks ?? [])]);
   const doneCount = allTodos.filter(t => t.status === 'done').length;
   const totalCount = allTodos.length;
-
-  // ──────────── ビュー ────────────
+  const urgentCount = allTodos.filter(t => t.status !== 'done' && isOverdue(t.due_date, t.status)).length;
+  const filteredCount = filteredTodos.flatMap(t => [t, ...(t.subtasks ?? [])]).length;
 
   const viewButtons = [
     { k: 'list' as const, l: 'リスト' },
@@ -529,109 +1091,186 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     { k: 'gantt' as const, l: 'ガント' },
   ];
 
+  // カンバン用: フィルタされたステータス列のみ表示
+  const visibleStatuses = filterStatuses.size > 0
+    ? STATUS_ORDER.filter(s => filterStatuses.has(s))
+    : STATUS_ORDER;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* ヘッダー */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: 'rgba(241,250,252,0.8)', border: '1px solid var(--border)' }}>
             {viewButtons.map(b => (
-              <button
-                key={b.k}
-                onClick={() => setView(b.k)}
+              <button key={b.k} onClick={() => setView(b.k)}
                 className="text-xs px-3 py-1 rounded-lg transition-colors"
                 style={view === b.k
                   ? { backgroundColor: 'white', color: 'var(--accent)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
-                  : { color: 'var(--text-muted)' }}
-              >
+                  : { color: 'var(--text-muted)' }}>
                 {b.l}
               </button>
             ))}
           </div>
           {totalCount > 0 && (
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {doneCount} / {totalCount} 完了
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                {isFiltering ? `${filteredCount} / ${totalCount}件` : `${doneCount} / ${totalCount} 完了`}
+              </span>
+              {urgentCount > 0 && (
+                <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium text-red-600 bg-red-50">
+                  ⚠ {urgentCount} 件期限切れ
+                </span>
+              )}
+            </div>
           )}
         </div>
         {canEdit && !creating && !creatingSubtaskFor && (
-          <button onClick={() => setCreating(true)} className="btn-primary text-sm">
-            + タスク追加
-          </button>
+          <button onClick={() => setCreating(true)} className="btn-primary text-sm">+ タスク追加</button>
         )}
       </div>
 
-      {/* 新規作成フォーム */}
-      {creating && (
-        <div className="card p-4">
-          <TodoForm
-            assignableUsers={assignableUsers}
-            phases={phases}
-            onSave={data => createTodo(data)}
-            onCancel={() => setCreating(false)}
-            saveLabel="作成"
-          />
+      {/* フィルターバー */}
+      {totalCount > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 py-2 rounded-xl"
+          style={{ backgroundColor: 'rgba(248,250,252,0.8)', border: '1px solid var(--border)' }}>
+
+          {/* 完了を隠す クイックトグル */}
+          <button
+            onClick={toggleHideDone}
+            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors"
+            style={hideDone
+              ? { backgroundColor: 'var(--accent)', color: 'white' }
+              : { color: 'var(--text-muted)', backgroundColor: 'transparent' }}>
+            <span className="text-[10px]">{hideDone ? '✓' : '○'}</span>
+            完了を隠す
+          </button>
+
+          <div className="w-px h-4 bg-slate-200" />
+
+          {/* ステータス */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>状態</span>
+            {STATUS_ORDER.map(s => (
+              <button key={s} onClick={() => toggleStatus(s)}
+                className="text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors"
+                style={filterStatuses.has(s)
+                  ? { backgroundColor: STATUS_COLUMN_COLORS[s], color: 'white' }
+                  : { backgroundColor: `${STATUS_COLUMN_COLORS[s]}15`, color: STATUS_COLUMN_COLORS[s] }}>
+                {TODO_STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-4 bg-slate-200" />
+
+          {/* 優先度 */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>優先度</span>
+            {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => (
+              <button key={p} onClick={() => togglePriority(p)}
+                className="text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors"
+                style={filterPriorities.has(p)
+                  ? { backgroundColor: TODO_PRIORITY_COLORS[p], color: 'white' }
+                  : { backgroundColor: `${TODO_PRIORITY_COLORS[p]}18`, color: TODO_PRIORITY_COLORS[p] }}>
+                {TODO_PRIORITY_LABELS[p]}
+              </button>
+            ))}
+          </div>
+
+          {/* 担当者 */}
+          {assignableUsers.length > 0 && (
+            <>
+              <div className="w-px h-4 bg-slate-200" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>担当者</span>
+                <select
+                  className="text-[11px] rounded-lg px-2 py-0.5 border transition-colors"
+                  style={{
+                    borderColor: filterAssigneeId ? 'var(--accent)' : 'var(--border)',
+                    color: filterAssigneeId ? 'var(--accent)' : 'var(--text-secondary)',
+                    backgroundColor: filterAssigneeId ? 'rgba(15,154,177,0.06)' : 'white',
+                  }}
+                  value={filterAssigneeId}
+                  onChange={e => setFilterAssigneeId(e.target.value)}
+                >
+                  <option value="">全員</option>
+                  <option value="unassigned">未割当</option>
+                  {assignableUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* クリアボタン */}
+          {isFiltering && (
+            <button
+              onClick={() => { setFilterStatuses(new Set()); setFilterPriorities(new Set()); setFilterAssigneeId(''); }}
+              className="text-[11px] ml-auto px-2 py-0.5 rounded-lg transition-colors"
+              style={{ color: 'var(--text-muted)' }}>
+              クリア ×
+            </button>
+          )}
         </div>
       )}
 
-      {/* 編集モーダル */}
-      {editingTodo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4">
-            <h3 className="font-semibold text-base" style={{ color: 'var(--text-primary)' }}>タスクを編集</h3>
-            <TodoForm
-              initial={editingTodo}
-              assignableUsers={assignableUsers}
-              phases={phases}
-              onSave={data => updateTodo(editingTodo.id, data)}
-              onCancel={() => setEditingTodo(null)}
-            />
-          </div>
-        </div>
+      {/* 新規作成 */}
+      {creating && (
+        <TodoCreateForm assignableUsers={assignableUsers} phases={phases}
+          onSave={data => createTodo(data)} onCancel={() => setCreating(false)} />
+      )}
+
+      {/* 詳細モーダル */}
+      {detailTodo && (
+        <TodoDetailModal
+          todo={detailTodo}
+          assignableUsers={assignableUsers}
+          phases={phases}
+          canEdit={canEdit}
+          onSave={data => updateTodo(detailTodo.id, data)}
+          onDelete={deleteTodo}
+          onClose={() => setDetailTodo(null)}
+        />
       )}
 
       {/* ──── リストビュー ──── */}
       {view === 'list' && (
-        <div className="space-y-1">
-          {todos.length === 0 && !creating && (
-            <p className="text-sm text-center py-8" style={{ color: 'var(--text-muted)' }}>
-              タスクがありません。「タスク追加」から作成してください。
-            </p>
-          )}
-          {todos.map(todo => (
+        <div className="space-y-0.5">
+          {todos.length === 0 && !creating ? (
+            <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-2xl mb-2">✓</p>
+              <p className="text-sm">タスクがありません</p>
+              {canEdit && <button onClick={() => setCreating(true)} className="btn-primary text-sm mt-4">タスクを追加</button>}
+            </div>
+          ) : filteredTodos.length === 0 && !creating ? (
+            <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-sm">条件に一致するタスクがありません</p>
+            </div>
+          ) : null}
+          {filteredTodos.map(todo => (
             <div key={todo.id}>
               <TodoRow
-                todo={todo}
-                assignableUsers={assignableUsers}
-                phases={phases}
-                depth={0}
+                todo={todo} phases={phases} depth={0} canEdit={canEdit}
                 onStatusChange={(id, s) => updateTodo(id, { status: s })}
-                onEdit={setEditingTodo}
+                onOpen={setDetailTodo}
                 onDelete={deleteTodo}
                 onAddSubtask={id => setCreatingSubtaskFor(id)}
               />
-              {/* サブタスク作成フォーム */}
               {creatingSubtaskFor === todo.id && (
-                <div className="card p-3 ml-8 mt-1">
-                  <TodoForm
-                    assignableUsers={assignableUsers}
-                    phases={phases}
+                <div className="ml-8 mt-1 mb-1">
+                  <TodoCreateForm assignableUsers={assignableUsers} phases={phases}
                     onSave={data => createTodo(data, todo.id)}
                     onCancel={() => setCreatingSubtaskFor(null)}
-                    saveLabel="サブタスク作成"
-                  />
+                    saveLabel="サブタスク作成" />
                 </div>
               )}
-              {/* サブタスク表示 */}
               {(todo.subtasks ?? []).map(sub => (
                 <TodoRow
-                  key={sub.id}
-                  todo={sub}
-                  assignableUsers={assignableUsers}
-                  phases={phases}
-                  depth={1}
+                  key={sub.id} todo={sub} phases={phases} depth={1} canEdit={canEdit}
                   onStatusChange={(id, s) => updateTodo(id, { status: s })}
-                  onEdit={setEditingTodo}
+                  onOpen={setDetailTodo}
                   onDelete={deleteTodo}
                   onAddSubtask={() => {}}
                 />
@@ -643,12 +1282,12 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
 
       {/* ──── カンバンビュー ──── */}
       {view === 'kanban' && (
-        <div className="grid grid-cols-3 gap-4 min-h-[300px]">
-          {STATUS_ORDER.map(status => {
-            const columnTodos = todos.filter(t => t.status === status);
+        <div className={`grid gap-4 min-h-[300px]`}
+          style={{ gridTemplateColumns: `repeat(${visibleStatuses.length}, minmax(0, 1fr))` }}>
+          {visibleStatuses.map(status => {
+            const columnTodos = filteredTodos.filter(t => t.status === status);
             return (
-              <div
-                key={status}
+              <div key={status}
                 className="rounded-2xl p-3 space-y-2 transition-colors"
                 style={{
                   backgroundColor: dragOver === status ? `${STATUS_COLUMN_COLORS[status]}10` : 'rgba(248,250,252,0.8)',
@@ -659,28 +1298,22 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
                 onDragLeave={() => setDragOver(null)}
                 onDrop={e => handleDrop(e, status)}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <span
-                    className="text-xs font-semibold px-2 py-1 rounded-full"
-                    style={{ backgroundColor: `${STATUS_COLUMN_COLORS[status]}18`, color: STATUS_COLUMN_COLORS[status] }}
-                  >
+                <div className="flex items-center justify-between mb-1 px-1">
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full"
+                    style={{ backgroundColor: `${STATUS_COLUMN_COLORS[status]}18`, color: STATUS_COLUMN_COLORS[status] }}>
                     {TODO_STATUS_LABELS[status]}
                   </span>
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{columnTodos.length}</span>
                 </div>
                 {columnTodos.map(todo => (
-                  <KanbanCard
-                    key={todo.id}
-                    todo={todo}
-                    onEdit={setEditingTodo}
+                  <KanbanCard key={todo.id} todo={todo}
+                    onOpen={setDetailTodo}
                     onDelete={deleteTodo}
                     onDragStart={handleDragStart}
                   />
                 ))}
                 {columnTodos.length === 0 && (
-                  <div className="text-center py-4 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    タスクなし
-                  </div>
+                  <div className="text-center py-6 text-xs" style={{ color: 'var(--text-muted)' }}>タスクなし</div>
                 )}
               </div>
             );
@@ -690,8 +1323,142 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
 
       {/* ──── ガントビュー ──── */}
       {view === 'gantt' && (
-        <div className="card overflow-hidden">
-          <GanttView todos={todos} />
+        <div className="card overflow-hidden p-3">
+          <GanttView
+            todos={filteredTodos} onOpen={setDetailTodo} onUpdate={updateTodo}
+            scale={ganttScale} onScaleChange={setGanttScale}
+            onExpand={() => setGanttFullscreen(true)}
+          />
+        </div>
+      )}
+
+      {/* ──── ガント拡大表示オーバーレイ ──── */}
+      {ganttFullscreen && (
+        <div className="fixed inset-0 z-50 flex" style={{ background: 'white' }}>
+          {/* サイドバー */}
+          <div className="w-52 shrink-0 h-full flex flex-col border-r overflow-y-auto"
+            style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(248,250,252,1) 0%, rgba(241,250,252,0.95) 100%)' }}>
+
+            {/* ヘッダー */}
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+              <span className="text-sm font-bold" style={{ color: 'var(--accent)' }}>ガントチャート</span>
+              <button
+                onClick={() => setGanttFullscreen(false)}
+                className="text-lg leading-none rounded-md px-1.5 hover:bg-slate-100 transition-colors"
+                style={{ color: 'var(--text-muted)' }}>
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 space-y-5 flex-1">
+              {/* 表示単位 */}
+              <div>
+                <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>表示単位</p>
+                <div className="flex flex-col gap-1">
+                  {(Object.keys(GANTT_SCALE_LABELS) as GanttScale[]).map(s => (
+                    <button key={s} onClick={() => setGanttScale(s)}
+                      className="text-xs text-left px-3 py-1.5 rounded-lg transition-colors"
+                      style={ganttScale === s
+                        ? { backgroundColor: 'var(--accent)', color: 'white' }
+                        : { color: 'var(--text-secondary)', backgroundColor: 'transparent' }}>
+                      {GANTT_SCALE_LABELS[s]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t" style={{ borderColor: 'var(--border)' }} />
+
+              {/* 完了を隠す */}
+              <div>
+                <button onClick={toggleHideDone}
+                  className="w-full flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                  style={hideDone
+                    ? { backgroundColor: 'var(--accent)', color: 'white' }
+                    : { color: 'var(--text-secondary)', backgroundColor: 'transparent' }}>
+                  <span className="text-[10px]">{hideDone ? '✓' : '○'}</span>
+                  完了を隠す
+                </button>
+              </div>
+
+              {/* ステータス */}
+              <div>
+                <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>ステータス</p>
+                <div className="flex flex-col gap-1">
+                  {STATUS_ORDER.map(s => (
+                    <button key={s} onClick={() => toggleStatus(s)}
+                      className="text-xs text-left px-3 py-1.5 rounded-lg transition-colors"
+                      style={filterStatuses.has(s)
+                        ? { backgroundColor: STATUS_COLUMN_COLORS[s], color: 'white' }
+                        : { backgroundColor: `${STATUS_COLUMN_COLORS[s]}15`, color: STATUS_COLUMN_COLORS[s] }}>
+                      {TODO_STATUS_LABELS[s]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 優先度 */}
+              <div>
+                <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>優先度</p>
+                <div className="flex flex-col gap-1">
+                  {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => (
+                    <button key={p} onClick={() => togglePriority(p)}
+                      className="text-xs text-left px-3 py-1.5 rounded-lg transition-colors"
+                      style={filterPriorities.has(p)
+                        ? { backgroundColor: TODO_PRIORITY_COLORS[p], color: 'white' }
+                        : { backgroundColor: `${TODO_PRIORITY_COLORS[p]}18`, color: TODO_PRIORITY_COLORS[p] }}>
+                      {TODO_PRIORITY_LABELS[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 担当者 */}
+              {assignableUsers.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>担当者</p>
+                  <select
+                    className="w-full text-[11px] rounded-lg px-2 py-1.5 border transition-colors"
+                    style={{
+                      borderColor: filterAssigneeId ? 'var(--accent)' : 'var(--border)',
+                      color: filterAssigneeId ? 'var(--accent)' : 'var(--text-secondary)',
+                      backgroundColor: filterAssigneeId ? 'rgba(15,154,177,0.06)' : 'white',
+                    }}
+                    value={filterAssigneeId}
+                    onChange={e => setFilterAssigneeId(e.target.value)}>
+                    <option value="">全員</option>
+                    <option value="unassigned">未割当</option>
+                    {assignableUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* クリア */}
+              {isFiltering && (
+                <button
+                  onClick={() => { setFilterStatuses(new Set()); setFilterPriorities(new Set()); setFilterAssigneeId(''); }}
+                  className="w-full text-xs px-3 py-1.5 rounded-lg border transition-colors"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                  フィルタをクリア ×
+                </button>
+              )}
+            </div>
+
+            {/* フッター */}
+            <div className="px-4 py-3 border-t text-[10px] leading-relaxed" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              バー: ドラッグで移動<br />右端: ドラッグで期日変更<br />ダブルクリック: 詳細を開く
+            </div>
+          </div>
+
+          {/* メインエリア */}
+          <div className="flex-1 h-full overflow-auto p-4">
+            <GanttView
+              todos={filteredTodos} onOpen={setDetailTodo} onUpdate={updateTodo}
+              scale={ganttScale} onScaleChange={setGanttScale} hideScaleUI
+            />
+          </div>
         </div>
       )}
     </div>
