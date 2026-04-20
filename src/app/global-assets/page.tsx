@@ -201,7 +201,7 @@ export default function GlobalAssetsPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold">Global Assets</h1>
+          <h1 className="text-xl font-bold">マスターデータ</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
             オブジェクト一覧と管理ハブです。各オブジェクトの設定とレコード編集は詳細ページで行います。
           </p>
