@@ -66,7 +66,7 @@ function NewObjectModal({
 export default function GlobalAssetsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const canManageGlobalAssets = Boolean(user?.system_permissions?.manage_global_assets);
+  const canManageGlobalAssets = Boolean(user?.system_permissions?.manage_master_data);
   const [data, setData] = useState<GlobalAssets>(EMPTY_GA);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -79,7 +79,7 @@ export default function GlobalAssetsPage() {
       router.push(withBasePath('/login'));
       return;
     }
-    if (!user.system_permissions?.manage_global_assets) {
+    if (!user.system_permissions?.manage_master_data) {
       setData(EMPTY_GA);
       router.push(withBasePath('/settings'));
       return;
