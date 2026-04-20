@@ -65,7 +65,7 @@ Struct の設定を「ユーザーごとの設定」ではなく「組織アカ�
 
 以下はすべて組織設定を読む:
 
-- `/api/global-assets`
+- `/api/master-data`
 - `/api/project-types`
 - `/api/content-templates`
 - `/api/ai-settings`
@@ -76,7 +76,7 @@ Struct の設定を「ユーザーごとの設定」ではなく「組織アカ�
 
 更新権限:
 
-- マスターデータ: `manage_global_assets`
+- マスターデータ: `manage_master_data`
 - AI 設定: `manage_ai_settings`
 - プロジェクト設定 / 生成コンテンツ設定: `manage_project_settings`
 

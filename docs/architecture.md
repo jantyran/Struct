@@ -102,15 +102,15 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
     │   │   ├── ai-settings/route.ts
 │   │   ├── auth/
 │   │   ├── content-templates/route.ts
-│   │   ├── global-assets/route.ts
+│   │   ├── master-data/route.ts
 │   │   ├── invites/[token]/
 │   │   ├── project-roles/route.ts
 │   │   ├── project-types/route.ts
 │   │   ├── roles/route.ts
 │   │   ├── users/route.ts
 │   │   └── projects/
-    │   ├── global-assets/page.tsx
-    │   ├── global-assets/[objectId]/page.tsx
+    │   ├── master-data/page.tsx
+    │   ├── master-data/[objectId]/page.tsx
     │   ├── guide/page.tsx
     │   ├── layout.tsx
     │   ├── login/page.tsx
@@ -173,14 +173,14 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 ### 5.5 マスターデータ 一覧
 
-`src/app/global-assets/page.tsx`
+`src/app/master-data/page.tsx`
 
 - オブジェクト一覧と追加
 - 各オブジェクト詳細への導線
 
 ### 5.6 マスターデータ 詳細
 
-`src/app/global-assets/[objectId]/page.tsx`
+`src/app/master-data/[objectId]/page.tsx`
 
 - オブジェクト設定
 - 項目設定
@@ -568,8 +568,8 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `PUT /api/roles`
 - `GET /api/project-roles`
 - `PUT /api/project-roles`
-- `GET /api/global-assets`
-- `PUT /api/global-assets`
+- `GET /api/master-data`
+- `PUT /api/master-data`
 - `GET /api/project-types`
 - `PUT /api/project-types`
 - `GET /api/content-templates`

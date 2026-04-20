@@ -37,9 +37,9 @@ Struct は、`MKTキャンペーン運用デスク` として使う認証付き�
 
 - `/`
   - ダッシュボード
-- `/global-assets`
+- `/master-data`
   - オブジェクト一覧と管理
-- `/global-assets/[objectId]`
+- `/master-data/[objectId]`
   - オブジェクト設定、項目設定、レコード管理
 - `/project-types`
   - プロジェクト設定
