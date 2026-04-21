@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
@@ -733,7 +733,11 @@ function SectionInfoWidget({
   phases,
   typeLabel,
   notes,
+  todos,
+  todosLoading,
+  members,
   onNotesTabClick,
+  onTasksTabClick,
 }: {
   kind: string;
   layout: 'half' | 'full';
@@ -742,7 +746,11 @@ function SectionInfoWidget({
   phases: ProjectPhase[];
   typeLabel: string;
   notes?: ProjectNote[];
+  todos?: import('@/types').Todo[];
+  todosLoading?: boolean;
+  members?: import('@/types').ProjectUser[];
   onNotesTabClick?: () => void;
+  onTasksTabClick?: () => void;
 }) {
   const colClass = layout === 'full' ? 'col-span-2' : '';
 
@@ -798,6 +806,122 @@ function SectionInfoWidget({
     );
   }
 
+  if (kind === 'todo_list') {
+    const STATUS_COLORS: Record<string, string> = { todo: '#94a3b8', in_progress: '#3b82f6', done: '#10b981' };
+    const STATUS_LABELS: Record<string, string> = { todo: '未着手', in_progress: '進行中', done: '完了' };
+    const activeTodos = (todos ?? []).filter(t => t.status !== 'done' && !t.parent_id).slice(0, 5);
+    const totalActive = (todos ?? []).filter(t => t.status !== 'done' && !t.parent_id).length;
+    return (
+      <div className={`${colClass} surface-read`}>
+        <div className="flex items-center justify-between mb-2">
+          <p className="field-label">タスク一覧</p>
+          {onTasksTabClick && (
+            <button onClick={onTasksTabClick} className="text-xs transition-colors" style={{ color: 'var(--accent)' }}>
+              すべて表示 →
+            </button>
+          )}
+        </div>
+        {todosLoading ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>読み込み中...</p>
+        ) : activeTodos.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>未完了のタスクはありません</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {activeTodos.map(todo => (
+              <li key={todo.id} className="flex items-center gap-2 text-xs">
+                <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_COLORS[todo.status] ?? '#94a3b8' }} />
+                <span className="flex-1 truncate" style={{ color: 'var(--text-primary)' }}>{todo.title}</span>
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[todo.status] ?? '#94a3b8'}18`, color: STATUS_COLORS[todo.status] ?? '#94a3b8' }}>
+                  {STATUS_LABELS[todo.status] ?? todo.status}
+                </span>
+              </li>
+            ))}
+            {totalActive > 5 && (
+              <li className="text-[10px]" style={{ color: 'var(--text-muted)' }}>他 {totalActive - 5} 件...</li>
+            )}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  if (kind === 'todo_summary') {
+    const allTodos = (todos ?? []).filter(t => !t.parent_id);
+    const done = allTodos.filter(t => t.status === 'done').length;
+    const inProgress = allTodos.filter(t => t.status === 'in_progress').length;
+    const notStarted = allTodos.filter(t => t.status === 'todo').length;
+    const total = allTodos.length;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    return (
+      <div className={`${colClass} surface-read`}>
+        <div className="flex items-center justify-between mb-3">
+          <p className="field-label">タスクサマリー</p>
+          {onTasksTabClick && (
+            <button onClick={onTasksTabClick} className="text-xs transition-colors" style={{ color: 'var(--accent)' }}>
+              詳細 →
+            </button>
+          )}
+        </div>
+        {todosLoading ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>読み込み中...</p>
+        ) : total === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>タスクがありません</p>
+        ) : (
+          <div className="space-y-3">
+            {/* 積み上げプログレスバー */}
+            <div className="space-y-1">
+              <div className="flex h-2.5 rounded-full overflow-hidden gap-px" style={{ backgroundColor: 'var(--border)' }}>
+                {done > 0 && <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(done / total) * 100}%` }} />}
+                {inProgress > 0 && <div className="h-full bg-blue-400 transition-all" style={{ width: `${(inProgress / total) * 100}%` }} />}
+              </div>
+              <div className="flex items-center justify-between text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                <span>完了率 <span className="font-semibold" style={{ color: '#10b981' }}>{pct}%</span></span>
+                <span>全 {total} 件</span>
+              </div>
+            </div>
+            {/* ステータス内訳 */}
+            <div className="grid grid-cols-3 gap-1.5 text-center">
+              <div className="rounded-lg py-1.5 px-1" style={{ backgroundColor: 'rgba(16,185,129,0.08)' }}>
+                <p className="text-base font-bold leading-none" style={{ color: '#10b981' }}>{done}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>完了</p>
+              </div>
+              <div className="rounded-lg py-1.5 px-1" style={{ backgroundColor: 'rgba(59,130,246,0.08)' }}>
+                <p className="text-base font-bold leading-none" style={{ color: '#3b82f6' }}>{inProgress}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>進行中</p>
+              </div>
+              <div className="rounded-lg py-1.5 px-1" style={{ backgroundColor: 'rgba(148,163,184,0.1)' }}>
+                <p className="text-base font-bold leading-none" style={{ color: '#64748b' }}>{notStarted}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>未着手</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (kind === 'member_list') {
+    const memberList = members ?? [];
+    return (
+      <div className={`${colClass} surface-read`}>
+        <p className="field-label mb-2">メンバー</p>
+        {memberList.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>メンバーがいません</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {memberList.map(m => (
+              <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0" />
+                {m.name?.trim() || m.email}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -834,6 +958,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
+  // どの type key でセクション開閉を初期化済みか追跡する（undefined = 未初期化）
+  const sectionInitTypeRef = useRef<string | undefined>(undefined);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [todosLoaded, setTodosLoaded] = useState(false);
   const [todosLoading, setTodosLoading] = useState(false);
@@ -987,6 +1113,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     [currentProjectType]
   );
 
+  const hasInlineTodoWidget = useMemo(
+    () => (currentProjectType?.sections ?? []).some((section) =>
+      section.items.some((item) => item.kind === 'todo_list' || item.kind === 'todo_summary')
+    ),
+    [currentProjectType]
+  );
+
   useEffect(() => {
     const currentType = projectTypes.find((definition) => definition.key === project?.type);
     const availableKeys = contentTemplates
@@ -1013,12 +1146,25 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     const definedSectionNames = definedSections.map((section) => section.name);
     const extraSectionNames = Array.from(new Set(fields.map((field) => field.section?.trim() || '詳細')))
       .filter((name) => !definedSectionNames.includes(name));
-    const nextSectionOrder = [...definedSectionNames.filter((name) => fieldsBySection[name]), ...extraSectionNames];
+    // 定義済みセクションはすべて対象にする（fieldsBySection でフィルタすると
+    // ウィジェットのみのセクションや section プロパティ不一致のセクションが脱落するため）
+    const nextSectionOrder = [...definedSectionNames, ...extraSectionNames];
 
+    const typeKey = currentType?.key;
     setOpenFieldSections((current) => {
-      const filtered = current.filter((name) => nextSectionOrder.includes(name));
-      if (filtered.length > 0) return filtered;
-      return nextSectionOrder[0] ? [nextSectionOrder[0]] : [];
+      // 同じ type key で既に初期化済みならユーザーの開閉操作を維持する
+      if (typeKey !== undefined && sectionInitTypeRef.current === typeKey) {
+        const filtered = current.filter((name) => nextSectionOrder.includes(name));
+        if (filtered.length > 0) return filtered;
+      }
+      // type が確定したタイミング（または type 変更時）に defaultOpen を適用する
+      const defaultOpenSections = nextSectionOrder.filter(name => {
+        const secDef = definedSections.find(s => s.name === name);
+        return !secDef || (secDef.defaultOpen ?? true);
+      });
+      // type が確定している場合のみ初期化済みとしてマーク
+      if (typeKey !== undefined) sectionInitTypeRef.current = typeKey;
+      return defaultOpenSections.length > 0 ? defaultOpenSections : (nextSectionOrder[0] ? [nextSectionOrder[0]] : []);
     });
   }, [project, projectTypes]);
 
@@ -1222,9 +1368,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     if (!project) return;
     if (tab === 'assets') void loadAssets();
-    if (tab === 'tasks') void loadTodos();
+    if (tab === 'tasks' || hasInlineTodoWidget) void loadTodos();
     if (tab === 'notes' || hasInlineNoteWidget || canViewNotes) void loadNotes();
-  }, [project, tab, hasInlineNoteWidget, loadAssets, loadTodos, loadNotes]);
+  }, [project, tab, hasInlineNoteWidget, hasInlineTodoWidget, loadAssets, loadTodos, loadNotes]);
 
   usePendingScrollTarget(
     pendingNoteScrollTarget,
@@ -1924,7 +2070,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                     phases={currentPhases}
                                     typeLabel={typeLabel}
                                     notes={notes}
+                                    todos={todos}
+                                    todosLoading={todosLoading}
+                                    members={assignableUsers}
                                     onNotesTabClick={() => setTab('notes')}
+                                    onTasksTabClick={() => setTab('tasks')}
                                   />
                                 );
                               }

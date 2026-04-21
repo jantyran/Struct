@@ -304,6 +304,7 @@ function normalizeSection(section: Partial<SectionDefinition>, index: number): S
     name: section.name?.trim() || `セクション ${index + 1}`,
     color: typeof section.color === 'string' && section.color ? section.color : DEFAULT_SECTIONS[index % DEFAULT_SECTIONS.length]?.color ?? '#0f9ab1',
     items: safeArray<Partial<SectionFieldPlacement>>((section as SectionDefinition).items).map(normalizeSectionFieldPlacement),
+    ...(section.defaultOpen !== undefined ? { defaultOpen: section.defaultOpen } : {}),
   };
 }
 

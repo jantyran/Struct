@@ -34,7 +34,7 @@ export interface ProjectPhase {
 }
 
 /** セクションに配置できるアイテムの種別 */
-export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list';
+export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list' | 'todo_list' | 'todo_summary' | 'member_list';
 
 /** 情報ウィジェットの仮想 field_id プレフィックス */
 export const WIDGET_FIELD_ID_PREFIX = '__widget:';
@@ -44,6 +44,9 @@ export const SECTION_INFO_WIDGETS: { kind: SectionItemKind; label: string; descr
   { kind: 'project_type', label: 'プロジェクト種別', description: '種別名・キーを表示' },
   { kind: 'phase', label: '進行フェーズ', description: '現在のフェーズをパス形式で表示' },
   { kind: 'note_list', label: 'ノート一覧', description: 'プロジェクトのノートをインライン表示' },
+  { kind: 'todo_list', label: 'タスク一覧', description: '未完了タスクを最大5件表示' },
+  { kind: 'todo_summary', label: 'タスクサマリー', description: 'タスクの進捗を件数・割合で表示' },
+  { kind: 'member_list', label: 'メンバー一覧', description: 'プロジェクトの担当メンバーを表示' },
 ];
 
 export interface ProjectNote {
@@ -73,6 +76,8 @@ export interface SectionDefinition {
   color: string;
   /** セクション内の表示順・列幅 */
   items: SectionFieldPlacement[];
+  /** デフォルトで開いた状態にするか（省略時は true = 開く） */
+  defaultOpen?: boolean;
 }
 
 export interface ProjectFieldTemplate {

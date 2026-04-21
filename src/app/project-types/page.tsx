@@ -687,6 +687,10 @@ function PlacementChip({
 const INFO_WIDGET_STYLE: Record<string, { icon: string; color: string }> = {
   project_type: { icon: '🏷', color: '#8b5cf6' },
   phase: { icon: '→', color: '#f59e0b' },
+  note_list: { icon: '📌', color: '#64748b' },
+  todo_list: { icon: '✓', color: '#3b82f6' },
+  todo_summary: { icon: '◉', color: '#10b981' },
+  member_list: { icon: '👥', color: '#0ea5e9' },
 };
 
 function InfoWidgetChip({
@@ -841,31 +845,47 @@ function SectionPlacementPanel({
               onChange={(e) => onSectionChange({ ...section, name: e.target.value })}
             />
           </div>
-          <div className="flex flex-wrap justify-end gap-1.5">
-            {SECTION_COLOR_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                title={preset}
-                onClick={() => onSectionChange({ ...section, color: preset })}
-                className="rounded transition-all shrink-0"
-                style={{
-                  width: 18,
-                  height: 18,
-                  backgroundColor: preset,
-                  outline: section.color === preset ? `2px solid ${preset}` : 'none',
-                  outlineOffset: 2,
-                }}
-              />
-            ))}
-            <label
-              title="カスタムカラー"
-              className="cursor-pointer rounded overflow-hidden flex items-center justify-center shrink-0"
-              style={{ width: 18, height: 18, border: '1.5px dashed var(--border)' }}
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => onSectionChange({ ...section, defaultOpen: !(section.defaultOpen ?? true) })}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0"
+              style={{
+                backgroundColor: (section.defaultOpen ?? true) ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.08)',
+                color: (section.defaultOpen ?? true) ? '#10b981' : '#94a3b8',
+                border: `1px solid ${(section.defaultOpen ?? true) ? '#10b981' : '#cbd5e1'}55`,
+              }}
+              title="プロジェクト詳細ページを開いたときのデフォルト表示状態"
             >
-              <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>+</span>
-              <input type="color" className="sr-only" value={section.color} onChange={(e) => onSectionChange({ ...section, color: e.target.value })} />
-            </label>
+              <span>{(section.defaultOpen ?? true) ? '▼' : '▶'}</span>
+              <span>初期{(section.defaultOpen ?? true) ? '展開' : '折りたたみ'}</span>
+            </button>
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {SECTION_COLOR_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  title={preset}
+                  onClick={() => onSectionChange({ ...section, color: preset })}
+                  className="rounded transition-all shrink-0"
+                  style={{
+                    width: 18,
+                    height: 18,
+                    backgroundColor: preset,
+                    outline: section.color === preset ? `2px solid ${preset}` : 'none',
+                    outlineOffset: 2,
+                  }}
+                />
+              ))}
+              <label
+                title="カスタムカラー"
+                className="cursor-pointer rounded overflow-hidden flex items-center justify-center shrink-0"
+                style={{ width: 18, height: 18, border: '1.5px dashed var(--border)' }}
+              >
+                <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>+</span>
+                <input type="color" className="sr-only" value={section.color} onChange={(e) => onSectionChange({ ...section, color: e.target.value })} />
+              </label>
+            </div>
           </div>
         </div>
         <button type="button" onClick={onSectionRemove} className="btn-danger shrink-0">削除</button>
