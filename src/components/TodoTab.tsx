@@ -285,64 +285,116 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
 }
 
 // ──────────────────────────────────────────
-// 新規作成フォーム（簡易）
+// 新規作成モーダル
 // ──────────────────────────────────────────
-interface CreateFormProps {
+interface CreateModalProps {
   assignableUsers: ProjectUser[];
   phases: ProjectPhase[];
+  parentTodo?: Todo | null;
   onSave: (data: Partial<Todo>) => void;
   onCancel: () => void;
   saveLabel?: string;
 }
 
-function TodoCreateForm({ assignableUsers, phases, onSave, onCancel, saveLabel = '作成' }: CreateFormProps) {
+function TodoCreateModal({ assignableUsers, phases, parentTodo, onSave, onCancel, saveLabel = '作成' }: CreateModalProps) {
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [status, setStatus] = useState<TodoStatus>('todo');
   const [priority, setPriority] = useState<TodoPriority>('medium');
   const [assigneeId, setAssigneeId] = useState('');
+  const [phaseKey, setPhaseKey] = useState(parentTodo?.phase_key ?? '');
+  const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [expanded, setExpanded] = useState(false);
 
   function handleSave() {
     if (!title.trim()) return;
-    onSave({ title: title.trim(), priority, assignee_id: assigneeId || null, due_date: dueDate, status: 'todo' });
+    onSave({
+      title: title.trim(),
+      description,
+      status,
+      priority,
+      assignee_id: assigneeId || null,
+      phase_key: phaseKey,
+      start_date: startDate,
+      due_date: dueDate,
+    });
   }
 
   return (
-    <div className="card p-4 space-y-3">
-      <input
-        className="field-input text-sm font-medium"
-        placeholder="タスク名（必須）"
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        autoFocus
-        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSave(); if (e.key === 'Escape') onCancel(); }}
-      />
-      {expanded ? (
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>優先度</label>
-            <select className="field-input text-sm" value={priority} onChange={e => setPriority(e.target.value as TodoPriority)}>
-              {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => <option key={p} value={p}>{TODO_PRIORITY_LABELS[p]}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>担当者</label>
-            <select className="field-input text-sm" value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
-              <option value="">未割当</option>
-              {assignableUsers.map(u => <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>期日</label>
-            <input type="date" className="field-input text-sm" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="px-6 pt-5 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium mb-2" style={{ color: 'var(--accent)' }}>
+                {parentTodo ? `サブタスクを追加: ${parentTodo.title}` : '新しいタスク'}
+              </p>
+              <input
+                className="w-full text-base font-semibold bg-transparent border-0 outline-none focus:outline-none p-0"
+                placeholder="タスク名（必須）"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSave(); if (e.key === 'Escape') onCancel(); }}
+              />
+            </div>
+            <button onClick={onCancel} className="text-xl leading-none flex-shrink-0 opacity-30 hover:opacity-70 transition-opacity" style={{ color: 'var(--text-primary)' }}>×</button>
           </div>
         </div>
-      ) : (
-        <button onClick={() => setExpanded(true)} className="text-xs" style={{ color: 'var(--text-muted)' }}>＋ 詳細を設定（優先度・担当者・期日）</button>
-      )}
-      <div className="flex gap-2 justify-end">
-        <button onClick={onCancel} className="btn-secondary text-sm">キャンセル</button>
-        <button onClick={handleSave} disabled={!title.trim()} className="btn-primary text-sm">{saveLabel}</button>
+
+        <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          <textarea
+            className="w-full field-input text-sm resize-none"
+            placeholder="説明を追加..."
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            rows={3}
+          />
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>ステータス</p>
+              <select className="field-input text-sm" value={status} onChange={e => setStatus(e.target.value as TodoStatus)}>
+                {STATUS_ORDER.map(s => <option key={s} value={s}>{TODO_STATUS_LABELS[s]}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>優先度</p>
+              <select className="field-input text-sm" value={priority} onChange={e => setPriority(e.target.value as TodoPriority)}>
+                {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => <option key={p} value={p}>{TODO_PRIORITY_LABELS[p]}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>担当者</p>
+              <select className="field-input text-sm" value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
+                <option value="">未割当</option>
+                {assignableUsers.map(u => <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>)}
+              </select>
+            </div>
+            {phases.length > 0 && (
+              <div>
+                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>フェーズ</p>
+                <select className="field-input text-sm" value={phaseKey} onChange={e => setPhaseKey(e.target.value)}>
+                  <option value="">未設定</option>
+                  {phases.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>開始日</p>
+              <input type="date" className="field-input text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+            <div>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>期日</p>
+              <input type="date" className="field-input text-sm" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: 'var(--border)' }}>
+          <button onClick={onCancel} className="btn-secondary text-sm">キャンセル</button>
+          <button onClick={handleSave} disabled={!title.trim()} className="btn-primary text-sm">{saveLabel}</button>
+        </div>
       </div>
     </div>
   );
@@ -1258,9 +1310,18 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
       )}
 
       {/* 新規作成 */}
-      {creating && (
-        <TodoCreateForm assignableUsers={assignableUsers} phases={phases}
-          onSave={data => createTodo(data)} onCancel={() => setCreating(false)} />
+      {(creating || creatingSubtaskFor) && (
+        <TodoCreateModal
+          assignableUsers={assignableUsers}
+          phases={phases}
+          parentTodo={creatingSubtaskFor ? todos.find((todo) => todo.id === creatingSubtaskFor) ?? null : null}
+          onSave={data => createTodo(data, creatingSubtaskFor ?? undefined)}
+          onCancel={() => {
+            setCreating(false);
+            setCreatingSubtaskFor(null);
+          }}
+          saveLabel={creatingSubtaskFor ? 'サブタスク作成' : '作成'}
+        />
       )}
 
       {/* 詳細モーダル */}
@@ -1299,14 +1360,6 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
                 onDelete={deleteTodo}
                 onAddSubtask={id => setCreatingSubtaskFor(id)}
               />
-              {creatingSubtaskFor === todo.id && (
-                <div className="ml-8 mt-1 mb-1">
-                  <TodoCreateForm assignableUsers={assignableUsers} phases={phases}
-                    onSave={data => createTodo(data, todo.id)}
-                    onCancel={() => setCreatingSubtaskFor(null)}
-                    saveLabel="サブタスク作成" />
-                </div>
-              )}
               {(todo.subtasks ?? []).map(sub => (
                 <div key={sub.id} id={`todo-row-${sub.id}`}>
                   <TodoRow
