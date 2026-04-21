@@ -7,6 +7,7 @@ import type { FieldLayout, GlobalAssetObject, ProjectContentTemplate, ProjectFie
 import { FIELD_TYPE_LABELS, SECTION_INFO_WIDGETS, WIDGET_FIELD_ID_PREFIX } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { createProjectTypeDefinition, defaultProjectTypeDefinitions, DEFAULT_SECTIONS } from '@/lib/project-types';
 import {
   createStoredAIReferenceSettings,
@@ -1188,6 +1189,11 @@ export default function ProjectTypesPage() {
     setPendingScrollTarget,
     scrollOptions,
   );
+
+  useRegisterShortcutScope('project-types', 'プロジェクト設定', {
+    save_current: canManageProjectSettings ? () => saveDefinitions() : undefined,
+    new_record: canManageProjectSettings ? addDefinition : undefined,
+  });
 
   if (authLoading) {
     return <div className="p-6 max-w-6xl mx-auto"><div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div></div>;

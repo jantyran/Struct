@@ -4,6 +4,7 @@ import type { Todo, TodoStatus, TodoPriority, ProjectUser, ProjectPhase } from '
 import { TODO_STATUS_LABELS, TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 
 // ──────────────────────────────────────────
 // 定数
@@ -1046,6 +1047,10 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     setPendingScrollTarget,
     scrollOptions,
   );
+
+  useRegisterShortcutScope(`todo-tab-${projectId}`, 'タスク', {
+    new_record: canEdit ? () => setCreating(true) : undefined,
+  });
 
   // ──── API ────
 

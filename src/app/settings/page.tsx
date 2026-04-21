@@ -22,6 +22,13 @@ const settingSections = [
     permission: 'manage_organization_settings',
   },
   {
+    href: '/settings/shortcuts',
+    title: 'ショートカット設定',
+    description: '保存や新規追加など、アプリ全体で使うキーボードショートカットを管理します。',
+    meta: 'Ctrl/Cmd + S / Ctrl/Cmd + N / ショートカット一覧',
+    permission: 'manage_organization_settings',
+  },
+  {
     href: '/settings/ai',
     title: 'AI設定',
     description: '使用するAIプロバイダ、モデル、APIキーを管理します。',

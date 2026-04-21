@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { ProjectContentTemplate } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { CONTENT_CHANNEL_OPTIONS, createContentTemplate } from '@/lib/content-templates';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
@@ -184,6 +185,18 @@ export default function ContentTemplatesPage() {
     scrollOptions,
   );
 
+  function addTemplate() {
+    const nextTemplate = createContentTemplate({ id: uuidv4(), key: `content_${templates.length + 1}` });
+    setTemplates((current) => [...current, nextTemplate]);
+    setOpenTemplateIds((current) => [...current, nextTemplate.id]);
+    setPendingTemplateScrollTarget(`content-template-row-${nextTemplate.id}`);
+  }
+
+  useRegisterShortcutScope('settings-content-templates', '生成コンテンツ設定', {
+    save_current: canManageProjectSettings ? () => save() : undefined,
+    new_record: canManageProjectSettings ? addTemplate : undefined,
+  });
+
   async function save(nextTemplates = templates) {
     setSaving(true);
     const res = await fetch(withBasePath('/api/content-templates'), {
@@ -249,12 +262,7 @@ export default function ContentTemplatesPage() {
             ← 設定へ戻る
           </button>
           <button
-            onClick={() => {
-              const nextTemplate = createContentTemplate({ id: uuidv4(), key: `content_${templates.length + 1}` });
-              setTemplates((current) => [...current, nextTemplate]);
-              setOpenTemplateIds((current) => [...current, nextTemplate.id]);
-              setPendingTemplateScrollTarget(`content-template-row-${nextTemplate.id}`);
-            }}
+            onClick={addTemplate}
             className="btn-secondary"
           >
             + コンテンツ追加

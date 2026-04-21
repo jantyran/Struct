@@ -18,6 +18,15 @@ export interface AIReferenceSettings {
   known_source_keys: string[];
 }
 
+export type ShortcutActionKey = 'save_current' | 'new_record' | 'show_shortcuts_help';
+
+export interface ShortcutBinding {
+  enabled: boolean;
+  combo: string;
+}
+
+export type ShortcutSettings = Record<ShortcutActionKey, ShortcutBinding>;
+
 export interface ProjectPhase {
   id: string;
   key: string;

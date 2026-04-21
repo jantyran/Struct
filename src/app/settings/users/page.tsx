@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthContext';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { withBasePath } from '@/lib/paths';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
@@ -53,6 +54,11 @@ export default function UsersSettingsPage() {
     setPendingUserScrollTarget,
     scrollOptions,
   );
+
+  useRegisterShortcutScope('settings-users', 'ユーザー管理', {
+    save_current: () => saveProfile(),
+    new_record: canManageUsers && newUser.email.trim() && newUser.password ? () => createUser() : undefined,
+  });
 
   async function loadUsers() {
     const res = await fetch(withBasePath('/api/users'));

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/components/AuthContext';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { withBasePath } from '@/lib/paths';
 import type { ProjectRoleDefinition, ProjectRolePermissionKey, ProjectRolePermissions } from '@/types';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
@@ -97,6 +98,11 @@ export default function ProjectRolesSettingsPage() {
     ]);
     setPendingRoleScrollTarget(`project-role-row-${nextRoleId}`);
   }
+
+  useRegisterShortcutScope('settings-project-roles', 'プロジェクトロール設定', {
+    save_current: () => saveRoles(),
+    new_record: addRole,
+  });
 
   function removeRole(roleId: string) {
     setRoles((current) => current.filter((role) => role.id !== roleId).map((role, index) => ({ ...role, sort_order: index })));

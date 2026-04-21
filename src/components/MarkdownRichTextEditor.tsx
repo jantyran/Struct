@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useRegisterShortcutScope, useShortcutSettings } from '@/components/ShortcutProvider';
+import { formatShortcutCombo } from '@/lib/shortcut-settings';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -241,6 +243,8 @@ export function MarkdownRichTextEditor({
   const [richTextHtml, setRichTextHtml] = useState(() => markdownToRichTextHtml(body));
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastBodyRef = useRef(body);
+  const shortcutScopeId = useId();
+  const { settings } = useShortcutSettings();
 
   useEffect(() => {
     if (body === lastBodyRef.current) return;
@@ -265,21 +269,15 @@ export function MarkdownRichTextEditor({
       event.returnValue = '';
     };
 
-    const handleKeydown = (event: KeyboardEvent) => {
-      if (!isDirty) return;
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        onSave();
-      }
-    };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('keydown', handleKeydown);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('keydown', handleKeydown);
     };
-  }, [isDirty, onSave]);
+  }, [isDirty]);
+
+  useRegisterShortcutScope(shortcutScopeId, 'Markdownエディタ', {
+    save_current: isDirty ? onSave : undefined,
+  });
 
   const previewHint = useMemo(() => {
     if (mode === 'markdown') return 'Markdown記法で直接編集します。';
@@ -328,7 +326,7 @@ export function MarkdownRichTextEditor({
               </span>
             )}
             <span style={{ color: 'var(--text-muted)' }}>{previewHint}</span>
-            <span style={{ color: 'var(--text-muted)' }}>Ctrl/Cmd + S で保存</span>
+            <span style={{ color: 'var(--text-muted)' }}>{settings.save_current.enabled ? `${formatShortcutCombo(settings.save_current.combo)} で保存` : '保存ショートカットOFF'}</span>
           </div>
         </div>
 

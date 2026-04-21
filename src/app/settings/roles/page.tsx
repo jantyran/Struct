@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/components/AuthContext';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { withBasePath } from '@/lib/paths';
 import type { RoleDefinition, SystemPermissionKey, SystemPermissions } from '@/types';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
@@ -103,6 +104,11 @@ export default function RolesSettingsPage() {
     ]);
     setPendingRoleScrollTarget(`system-role-row-${nextRoleId}`);
   }
+
+  useRegisterShortcutScope('settings-system-roles', 'ロール・権限設定', {
+    save_current: () => saveRoles(),
+    new_record: addRole,
+  });
 
   function removeRole(roleId: string) {
     setRoles((current) => current.filter((role) => role.id !== roleId).map((role, index) => ({ ...role, sort_order: index })));

@@ -6,6 +6,7 @@ import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { useDevSettings } from '@/components/DevSettingsContext';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import TodoTab from '@/components/TodoTab';
 import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
@@ -1337,6 +1338,17 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const canEditNotes = Boolean(currentPermissions?.can_edit_notes);
   const canDeleteProject = Boolean(currentPermissions?.can_delete);
   const projectRoleDefinitions = project?.project_role_definitions ?? [];
+
+  useRegisterShortcutScope(`project-${id}`, project?.name ? `${project.name}` : 'プロジェクト詳細', {
+    save_current: project && tab === 'fields' && canEditProject ? () => save(project) : undefined,
+    new_record: tab === 'notes' && canEditNotes
+      ? () => {
+          if (noteCreating) return;
+          if (!confirmLeaveUnsaved()) return;
+          setNoteCreating(true);
+        }
+      : undefined,
+  });
   const roleLabel = (role: string) => projectRoleDefinitions.find((item) => item.key === role)?.name ?? role;
   const projectMemberUserIds = useMemo(() => new Set((project?.members ?? []).map((member) => member.user.id)), [project?.members]);
   const selectableProjectUsers = useMemo(

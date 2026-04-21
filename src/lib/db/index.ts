@@ -167,6 +167,7 @@ function initSchema(db: Database.Database) {
       project_types TEXT DEFAULT '[]',
       content_templates TEXT DEFAULT '[]',
       ai_settings TEXT DEFAULT '{}',
+      shortcut_settings TEXT DEFAULT '{}',
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -251,6 +252,7 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'organization_settings', 'project_types', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'organization_settings', 'content_templates', `TEXT DEFAULT '[]'`);
   ensureColumn(db, 'organization_settings', 'ai_settings', `TEXT DEFAULT '{}'`);
+  ensureColumn(db, 'organization_settings', 'shortcut_settings', `TEXT DEFAULT '{}'`);
   ensureColumn(db, 'users', 'avatar_url', `TEXT DEFAULT ''`);
   ensureColumn(db, 'users', 'organization_id', `TEXT`);
   ensureColumn(db, 'users', 'system_role', `TEXT DEFAULT 'USER'`);

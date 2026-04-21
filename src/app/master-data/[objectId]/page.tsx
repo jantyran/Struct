@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GlobalAssets, GlobalAssetField, GlobalAssetFieldType, GlobalAssetObject } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { defaultGlobalAssetObjects, normalizeGlobalAssets } from '@/lib/global-assets';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
@@ -387,6 +388,11 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
     setOpenRecordIds((current) => [...current, nextId]);
     setPendingScrollTarget(`master-data-record-row-${nextId}`);
   }
+
+  useRegisterShortcutScope(`master-data-${objectId}`, object?.name ? `${object.name} レコード` : 'マスターデータ詳細', {
+    save_current: object && canManageGlobalAssets ? () => persist(data) : undefined,
+    new_record: object && canManageGlobalAssets ? addRecord : undefined,
+  });
 
   function updateRecord(recordIndex: number, values: Record<string, string>) {
     if (!object) return;
