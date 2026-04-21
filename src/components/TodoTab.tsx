@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import type { Todo, TodoStatus, TodoPriority, ProjectUser, ProjectPhase } from '@/types';
 import { TODO_STATUS_LABELS, TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS } from '@/types';
 import { withBasePath } from '@/lib/paths';
@@ -291,20 +291,21 @@ interface CreateModalProps {
   assignableUsers: ProjectUser[];
   phases: ProjectPhase[];
   parentTodo?: Todo | null;
+  initialValues?: Partial<Todo> | null;
   onSave: (data: Partial<Todo>) => void;
   onCancel: () => void;
   saveLabel?: string;
 }
 
-function TodoCreateModal({ assignableUsers, phases, parentTodo, onSave, onCancel, saveLabel = '作成' }: CreateModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<TodoStatus>('todo');
-  const [priority, setPriority] = useState<TodoPriority>('medium');
-  const [assigneeId, setAssigneeId] = useState('');
-  const [phaseKey, setPhaseKey] = useState(parentTodo?.phase_key ?? '');
-  const [startDate, setStartDate] = useState('');
-  const [dueDate, setDueDate] = useState('');
+function TodoCreateModal({ assignableUsers, phases, parentTodo, initialValues, onSave, onCancel, saveLabel = '作成' }: CreateModalProps) {
+  const [title, setTitle] = useState(initialValues?.title ?? '');
+  const [description, setDescription] = useState(initialValues?.description ?? '');
+  const [status, setStatus] = useState<TodoStatus>((initialValues?.status as TodoStatus | undefined) ?? 'todo');
+  const [priority, setPriority] = useState<TodoPriority>((initialValues?.priority as TodoPriority | undefined) ?? 'medium');
+  const [assigneeId, setAssigneeId] = useState(initialValues?.assignee_id ?? '');
+  const [phaseKey, setPhaseKey] = useState(parentTodo?.phase_key ?? initialValues?.phase_key ?? '');
+  const [startDate, setStartDate] = useState(initialValues?.start_date ?? '');
+  const [dueDate, setDueDate] = useState(initialValues?.due_date ?? '');
 
   function handleSave() {
     if (!title.trim()) return;
@@ -612,12 +613,19 @@ interface GanttOverride {
   due_date: string;
 }
 
+interface GanttCreateState {
+  startX: number;
+  currentX: number;
+}
+
 function GanttView({
-  todos, onOpen, onUpdate, scale, onScaleChange, hideScaleUI = false, onExpand,
+  todos, onOpen, onUpdate, onCreate, canEdit, scale, onScaleChange, hideScaleUI = false, onExpand,
 }: {
   todos: Todo[];
   onOpen: (todo: Todo) => void;
   onUpdate: (id: string, data: Partial<Todo>) => void;
+  onCreate: (data: Partial<Todo>) => Promise<void> | void;
+  canEdit: boolean;
   scale: GanttScale;
   onScaleChange: (s: GanttScale) => void;
   hideScaleUI?: boolean;
@@ -625,10 +633,29 @@ function GanttView({
 }) {
   const [dragState, setDragState] = useState<GanttDragState | null>(null);
   const [override, setOverride] = useState<GanttOverride | null>(null);
+  const [createState, setCreateState] = useState<GanttCreateState | null>(null);
+  const [ganttDropTarget, setGanttDropTarget] = useState(false);
+  const [laneHoverX, setLaneHoverX] = useState<number | null>(null);
+  const [barContainerWidth, setBarContainerWidth] = useState(800);
   const svgRef = useRef<SVGSVGElement>(null);
+  const barContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = barContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      setBarContainerWidth(Math.floor(entries[0].contentRect.width));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const datedTodos = useMemo(
     () => todos.filter(t => t.start_date || t.due_date),
+    [todos]
+  );
+  const unscheduledTodos = useMemo(
+    () => todos.filter(t => !t.start_date && !t.due_date),
     [todos]
   );
 
@@ -636,10 +663,14 @@ function GanttView({
   const { minDateBase, maxDateBase, totalDays } = useMemo(() => {
     if (datedTodos.length === 0) {
       const today = new Date();
+      const min = new Date(today);
+      const max = new Date(today);
+      min.setDate(min.getDate() - 7);
+      max.setDate(max.getDate() + 7);
       return {
-        minDateBase: today,
-        maxDateBase: today,
-        totalDays: 1,
+        minDateBase: min,
+        maxDateBase: max,
+        totalDays: 15,
       };
     }
     const dates = datedTodos.flatMap(t => [t.start_date, t.due_date].filter(Boolean) as string[]);
@@ -675,9 +706,47 @@ function GanttView({
     return Math.round(deltaX / avgW);
   }
 
-  // barSvgWidth: maxDateBase の x座標
+  function xToDateString(rawX: number): string {
+    const x = Math.max(0, rawX);
+    if (scale === 'day') {
+      return addDays(minDateBase.toISOString().slice(0, 10), Math.max(0, Math.floor(x / SCALE_DAY_W)));
+    }
+    if (scale === 'week') {
+      return addDays(minDateBase.toISOString().slice(0, 10), Math.max(0, Math.floor(x / (SCALE_WEEK_W / 7))));
+    }
+    // week5: まず既知の日付範囲内で探索
+    let accumulated = 0;
+    for (let d = 0; d < totalDays; d++) {
+      const dow = new Date(minDateBase.getTime() + d * 86400000).getDay();
+      const width = (dow === 0 || dow === 6) ? SCALE_WEEK5_WEEKEND_W : SCALE_WEEK5_WEEKDAY_W;
+      if (x < accumulated + width) {
+        return addDays(minDateBase.toISOString().slice(0, 10), d);
+      }
+      accumulated += width;
+    }
+    // 日付範囲外: 平均幅で外挿
+    const avgW = (5 * SCALE_WEEK5_WEEKDAY_W + 2 * SCALE_WEEK5_WEEKEND_W) / 7;
+    const extraDays = Math.max(0, Math.floor((x - accumulated) / avgW));
+    return addDays(minDateBase.toISOString().slice(0, 10), totalDays + extraDays);
+  }
+
+  // barSvgWidth: maxDateBase の x座標（日付範囲のみ）
   const barSvgWidth = useMemo(() => Math.max(100, dateToX(maxDateBase.toISOString().slice(0, 10))), [maxDateBase, scale]);
-  const svgHeight = useMemo(() => GANTT_HEADER_H + (datedTodos.length + 0.5) * GANTT_ROW_H, [datedTodos.length]);
+  // effectiveSvgWidth: コンテナ幅まで拡張して右余白を埋める
+  const effectiveSvgWidth = useMemo(() => Math.max(barSvgWidth, barContainerWidth), [barSvgWidth, barContainerWidth]);
+  const contentRowCount = useMemo(
+    () => (datedTodos.length === 0 ? (canEdit ? 4 : 3) : datedTodos.length + (canEdit ? 1 : 0) + 0.5),
+    [canEdit, datedTodos.length]
+  );
+  const svgHeight = useMemo(
+    () => GANTT_HEADER_H + contentRowCount * GANTT_ROW_H,
+    [contentRowCount]
+  );
+  // 新規タスクレーンのy: 空状態のときは最下部に配置して空メッセージと重ならないようにする
+  const newTaskLaneY = useMemo(
+    () => datedTodos.length === 0 ? svgHeight - GANTT_ROW_H : GANTT_HEADER_H + datedTodos.length * GANTT_ROW_H,
+    [datedTodos.length, svgHeight]
+  );
 
   // 月ヘッダー
   const months = useMemo(() => {
@@ -754,6 +823,13 @@ function GanttView({
   }
 
   function handleMouseMove(e: React.MouseEvent) {
+    if (createState) {
+      const svgRect = svgRef.current?.getBoundingClientRect();
+      if (!svgRect) return;
+      setCreateState((current) => current ? { ...current, currentX: e.clientX - svgRect.left } : null);
+      return;
+    }
+
     if (!dragState) return;
     const deltaX = e.clientX - dragState.startClientX;
     const deltaDays = xToDeltaDays(deltaX);
@@ -775,7 +851,20 @@ function GanttView({
     }
   }
 
-  function handleMouseUp() {
+  async function handleMouseUp() {
+    if (createState) {
+      const left = Math.min(createState.startX, createState.currentX);
+      const right = Math.max(createState.startX, createState.currentX);
+      const startDate = xToDateString(left);
+      const endDate = xToDateString(Math.max(left + minBarW, right));
+      setCreateState(null);
+      await onCreate({
+        start_date: startDate,
+        due_date: endDate,
+      });
+      return;
+    }
+
     if (!dragState || !override) { setDragState(null); setOverride(null); return; }
     const { todoId, origStart, origEnd } = dragState;
     if (override.start_date !== origStart || override.due_date !== origEnd) {
@@ -796,17 +885,64 @@ function GanttView({
   const minBarW = scale === 'day' ? SCALE_DAY_W : scale === 'week' ? SCALE_WEEK_W / 7 : SCALE_WEEK5_WEEKDAY_W;
 
   if (datedTodos.length === 0) {
-    return (
-      <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
-        <p className="text-2xl mb-2">📅</p>
-        <p className="text-sm">開始日または期日が設定されたタスクがありません</p>
-        <p className="text-xs mt-1">リストビューでタスクに日付を設定してください</p>
-      </div>
-    );
+    // 未スケジュールから配置できるように、空でもガント本体は表示する
   }
 
   return (
     <div>
+      {unscheduledTodos.length > 0 && (
+        <div className="mb-3 rounded-xl border overflow-hidden" style={{ borderColor: '#e2e8f0', borderLeftColor: '#f59e0b', borderLeftWidth: 4 }}>
+          <div className="px-4 py-2 flex items-center justify-between gap-3" style={{ backgroundColor: 'rgba(255,251,235,0.8)', borderBottom: '1px solid #fde68a' }}>
+            <div className="flex items-center gap-2">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                <circle cx="8" cy="8" r="6.5" stroke="#d97706" strokeWidth="1.5" />
+                <path d="M8 5v3.5l2 1.5" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <p className="text-sm font-semibold" style={{ color: '#92400e' }}>未スケジュール</p>
+              <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#fcd34d', color: '#78350f' }}>
+                {unscheduledTodos.length}
+              </span>
+            </div>
+            <p className="text-xs" style={{ color: '#b45309' }}>
+              ガント上へドラッグ → 日程設定
+            </p>
+          </div>
+          <div className="px-4 py-2.5 flex flex-wrap gap-2" style={{ backgroundColor: 'rgba(255,251,235,0.3)' }}>
+            {unscheduledTodos.map((todo) => (
+              <div
+                key={todo.id}
+                draggable={canEdit}
+                onDragStart={(event) => {
+                  event.dataTransfer.setData('unscheduledTodoId', todo.id);
+                  event.dataTransfer.setData('text/plain', `unscheduled:${todo.id}`);
+                  event.dataTransfer.effectAllowed = 'move';
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-shadow hover:shadow-sm active:opacity-70"
+                style={{
+                  borderColor: '#e2e8f0',
+                  backgroundColor: 'white',
+                  color: 'var(--text-primary)',
+                  cursor: canEdit ? 'grab' : 'default',
+                }}
+              >
+                {canEdit && (
+                  <svg width="8" height="12" viewBox="0 0 8 12" fill="none" style={{ opacity: 0.25, flexShrink: 0 }}>
+                    <circle cx="2" cy="2" r="1.5" fill="#64748b" />
+                    <circle cx="6" cy="2" r="1.5" fill="#64748b" />
+                    <circle cx="2" cy="6" r="1.5" fill="#64748b" />
+                    <circle cx="6" cy="6" r="1.5" fill="#64748b" />
+                    <circle cx="2" cy="10" r="1.5" fill="#64748b" />
+                    <circle cx="6" cy="10" r="1.5" fill="#64748b" />
+                  </svg>
+                )}
+                <span className="font-medium">{todo.title}</span>
+                <PriorityBadge priority={todo.priority} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* スケール切替（フルスクリーン時はサイドバーに移動するため非表示） */}
       {!hideScaleUI && (
         <div className="flex items-center gap-2 mb-2">
@@ -839,6 +975,18 @@ function GanttView({
               <rect x={0} y={GANTT_MONTH_H} width={GANTT_LABEL_W} height={GANTT_DAY_H} fill="#f8fafc" />
               <line x1={0} y1={GANTT_MONTH_H} x2={GANTT_LABEL_W} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
               <line x1={0} y1={GANTT_HEADER_H} x2={GANTT_LABEL_W} y2={GANTT_HEADER_H} stroke="#cbd5e1" strokeWidth={1} />
+              {datedTodos.length === 0 && (
+                <g>
+                  <rect x={0} y={GANTT_HEADER_H} width={GANTT_LABEL_W} height={svgHeight - GANTT_HEADER_H}
+                    fill="#f8fafc" />
+                  <text x={10} y={GANTT_HEADER_H + 26} fontSize={11} fill="#64748b" fontWeight={600}>
+                    日程未設定
+                  </text>
+                  <text x={10} y={GANTT_HEADER_H + 42} fontSize={10} fill="#94a3b8">
+                    右へドラッグして配置
+                  </text>
+                </g>
+              )}
               {datedTodos.map((todo, i) => {
                 const y = GANTT_HEADER_H + i * GANTT_ROW_H;
                 const priorityColor = TODO_PRIORITY_COLORS[todo.priority];
@@ -869,21 +1017,78 @@ function GanttView({
                   </g>
                 );
               })}
+              {canEdit && (
+                <g>
+                  {(() => {
+                    const y = newTaskLaneY;
+                    return (
+                      <>
+                        <rect x={0} y={y} width={GANTT_LABEL_W} height={GANTT_ROW_H} fill="#f8fafc" />
+                        <line x1={0} y1={y} x2={GANTT_LABEL_W} y2={y} stroke="#e2e8f0" strokeWidth={1} strokeDasharray="4 3" />
+                        <line x1={0} y1={y + GANTT_ROW_H} x2={GANTT_LABEL_W} y2={y + GANTT_ROW_H}
+                          stroke="#e2e8f0" strokeWidth={1} />
+                        <text x={10} y={y + GANTT_ROW_H * 0.55} fontSize={11} fill="#64748b" fontWeight={500}>
+                          ＋ 新規タスク
+                        </text>
+                        <text x={10} y={y + GANTT_ROW_H * 0.8} fontSize={9} fill="#94a3b8">
+                          右をドラッグして期間設定
+                        </text>
+                      </>
+                    );
+                  })()}
+                </g>
+              )}
             </svg>
           </div>
 
           {/* ──── 右: バー列（横スクロール） ──── */}
-          <div className="overflow-x-auto flex-1">
+          <div className="overflow-x-auto flex-1" ref={barContainerRef}>
             <svg
               ref={svgRef}
-              width={barSvgWidth}
+              width={effectiveSvgWidth}
               height={svgHeight}
-              style={{ minWidth: barSvgWidth, display: 'block' }}
+              style={{ minWidth: effectiveSvgWidth, display: 'block' }}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
+              onDragOver={(event) => {
+                if (!canEdit) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+              }}
+              onDragEnter={(event) => {
+                if (!canEdit) return;
+                event.preventDefault();
+                setGanttDropTarget(true);
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                  setGanttDropTarget(false);
+                }
+              }}
+              onDrop={(event) => {
+                if (!canEdit) return;
+                event.preventDefault();
+                setGanttDropTarget(false);
+                const explicitTodoId = event.dataTransfer.getData('unscheduledTodoId');
+                const plainText = event.dataTransfer.getData('text/plain');
+                const todoId = explicitTodoId || (plainText.startsWith('unscheduled:') ? plainText.slice('unscheduled:'.length) : '');
+                if (!todoId) return;
+                const rect = svgRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                const x = event.clientX - rect.left;
+                const date = xToDateString(x);
+                onUpdate(todoId, { start_date: date, due_date: date });
+              }}
             >
-              <rect width={barSvgWidth} height={svgHeight} fill="white" />
+              <defs>
+                <pattern id="newTaskLaneDots" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
+                  <rect width="16" height="16" fill="#f8fafc" />
+                  <circle cx="3" cy="3" r="1.2" fill="#cbd5e1" />
+                  <circle cx="11" cy="11" r="1.2" fill="#cbd5e1" />
+                </pattern>
+              </defs>
+              <rect width={effectiveSvgWidth} height={svgHeight} fill="white" />
 
               {/* 月ヘッダー */}
               {months.map((m, i) => (
@@ -896,9 +1101,13 @@ function GanttView({
                   <line x1={m.x} y1={0} x2={m.x} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
                 </g>
               ))}
+              {/* 日付範囲外の右余白ヘッダー */}
+              {effectiveSvgWidth > barSvgWidth && (
+                <rect x={barSvgWidth} y={0} width={effectiveSvgWidth - barSvgWidth} height={GANTT_HEADER_H} fill="#f1f5f9" />
+              )}
 
               {/* 日付ヘッダー */}
-              <rect x={0} y={GANTT_MONTH_H} width={barSvgWidth} height={GANTT_DAY_H} fill="#f8fafc" />
+              <rect x={0} y={GANTT_MONTH_H} width={effectiveSvgWidth} height={GANTT_DAY_H} fill="#f8fafc" />
               {dayTicks.map((tick, i) => (
                 <g key={i}>
                   {tick.isWeekend && (
@@ -916,8 +1125,8 @@ function GanttView({
               ))}
 
               {/* ヘッダー区切り線 */}
-              <line x1={0} y1={GANTT_MONTH_H} x2={barSvgWidth} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
-              <line x1={0} y1={GANTT_HEADER_H} x2={barSvgWidth} y2={GANTT_HEADER_H} stroke="#cbd5e1" strokeWidth={1} />
+              <line x1={0} y1={GANTT_MONTH_H} x2={effectiveSvgWidth} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
+              <line x1={0} y1={GANTT_HEADER_H} x2={effectiveSvgWidth} y2={GANTT_HEADER_H} stroke="#cbd5e1" strokeWidth={1} />
 
               {/* 週末ハイライト（縦帯） */}
               {dayTicks.filter(t => t.isWeekend).map((tick, i) => (
@@ -989,6 +1198,157 @@ function GanttView({
                   </g>
                 );
               })}
+
+              {datedTodos.length === 0 && (() => {
+                const emptyH = newTaskLaneY - GANTT_HEADER_H - 12;
+                const cx = effectiveSvgWidth / 2;
+                return (
+                  <g>
+                    <rect
+                      x={12}
+                      y={GANTT_HEADER_H + 8}
+                      width={Math.max(120, effectiveSvgWidth - 24)}
+                      height={Math.max(40, emptyH)}
+                      rx={10}
+                      fill={ganttDropTarget ? 'rgba(15,154,177,0.07)' : '#f8fafc'}
+                      stroke={ganttDropTarget ? '#0f9ab1' : '#cbd5e1'}
+                      strokeDasharray="6 4"
+                      strokeWidth={ganttDropTarget ? 1.5 : 1}
+                    />
+                    <g transform={`translate(${cx - 10}, ${GANTT_HEADER_H + 18})`} opacity={ganttDropTarget ? 1 : 0.4}>
+                      <rect width={20} height={20} rx={10} fill={ganttDropTarget ? '#0f9ab1' : '#94a3b8'} />
+                      <path d="M10 6v8M6 11l4 4 4-4" stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    </g>
+                    <text
+                      x={cx}
+                      y={GANTT_HEADER_H + 52}
+                      textAnchor="middle"
+                      fontSize={12}
+                      fill={ganttDropTarget ? '#0f9ab1' : '#64748b'}
+                      fontWeight={600}
+                    >
+                      {ganttDropTarget ? 'ここにドロップして日程を設定' : '日程付きタスクがまだありません'}
+                    </text>
+                    {!ganttDropTarget && (
+                      <text
+                        x={cx}
+                        y={GANTT_HEADER_H + 70}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fill="#94a3b8"
+                      >
+                        上の「未スケジュール」エリアからドラッグして配置できます
+                      </text>
+                    )}
+                  </g>
+                );
+              })()}
+
+              {canEdit && (
+                <g>
+                  {(() => {
+                    const y = newTaskLaneY;
+                    const laneX = createState ? Math.min(createState.startX, createState.currentX) : 0;
+                    const laneW = createState ? Math.max(minBarW, Math.abs(createState.currentX - createState.startX)) : 0;
+                    return (
+                      <>
+                        {/* レーン背景: ホバー時に少し明るく */}
+                        <rect x={0} y={y} width={effectiveSvgWidth} height={GANTT_ROW_H}
+                          fill={laneHoverX !== null && !createState ? '#f1f5f9' : 'url(#newTaskLaneDots)'} />
+                        <line x1={0} y1={y} x2={effectiveSvgWidth} y2={y} stroke="#e2e8f0" strokeWidth={1} strokeDasharray="4 3" />
+                        <line x1={0} y1={y + GANTT_ROW_H} x2={effectiveSvgWidth} y2={y + GANTT_ROW_H} stroke="#e2e8f0" strokeWidth={1} />
+
+                        {/* インタラクション透明レイヤー */}
+                        <rect
+                          x={0} y={y} width={effectiveSvgWidth} height={GANTT_ROW_H}
+                          fill="transparent"
+                          style={{ cursor: 'crosshair' }}
+                          onMouseMove={(event) => {
+                            if (createState) return;
+                            const r = svgRef.current?.getBoundingClientRect();
+                            if (!r) return;
+                            setLaneHoverX(event.clientX - r.left);
+                          }}
+                          onMouseLeave={() => setLaneHoverX(null)}
+                          onMouseDown={(event) => {
+                            const rect = svgRef.current?.getBoundingClientRect();
+                            if (!rect) return;
+                            const startX = event.clientX - rect.left;
+                            setCreateState({ startX, currentX: startX });
+                          }}
+                        />
+
+                        {/* ホバー時: カーソル追従ガイドライン + 日付ラベル */}
+                        {laneHoverX !== null && !createState && (() => {
+                          const hx = laneHoverX;
+                          const dateLabel = xToDateString(hx).slice(5); // MM-DD
+                          const labelW = 44;
+                          const labelX = Math.min(hx - labelW / 2, effectiveSvgWidth - labelW - 4);
+                          return (
+                            <g style={{ pointerEvents: 'none' }}>
+                              {/* 縦ガイドライン */}
+                              <line x1={hx} y1={y} x2={hx} y2={y + GANTT_ROW_H}
+                                stroke="#94a3b8" strokeWidth={1} opacity={0.7} />
+                              {/* 上端ノッチ */}
+                              <circle cx={hx} cy={y} r={2.5} fill="#94a3b8" opacity={0.7} />
+                              {/* 日付ラベル */}
+                              <rect x={labelX} y={y + 9} width={labelW} height={16} rx={3}
+                                fill="#475569" opacity={0.85} />
+                              <text x={labelX + labelW / 2} y={y + 20}
+                                textAnchor="middle" fontSize={9.5} fill="white" fontWeight={600}
+                                style={{ pointerEvents: 'none' }}>
+                                {dateLabel}
+                              </text>
+                            </g>
+                          );
+                        })()}
+
+                        {/* ドラッグ中のプレビューバー */}
+                        {createState && (
+                          <g style={{ pointerEvents: 'none' }}>
+                            <rect x={laneX} y={y + 9} width={laneW} height={GANTT_ROW_H - 18}
+                              rx={4} fill="#64748b" opacity={0.12}
+                              stroke="#94a3b8" strokeWidth={1} strokeDasharray="4 2" />
+                            {(() => {
+                              const startLabel = xToDateString(laneX).slice(5);
+                              const endLabel = xToDateString(laneX + laneW).slice(5);
+                              return (
+                                <>
+                                  <rect x={laneX} y={y + 9} width={44} height={16} rx={3}
+                                    fill="#475569" opacity={0.85} />
+                                  <text x={laneX + 22} y={y + 20}
+                                    textAnchor="middle" fontSize={9.5} fill="white" fontWeight={600}>
+                                    {startLabel}
+                                  </text>
+                                  {laneW > 60 && (
+                                    <>
+                                      <rect x={laneX + laneW - 44} y={y + 9} width={44} height={16} rx={3}
+                                        fill="#475569" opacity={0.85} />
+                                      <text x={laneX + laneW - 22} y={y + 20}
+                                        textAnchor="middle" fontSize={9.5} fill="white" fontWeight={600}>
+                                        {endLabel}
+                                      </text>
+                                    </>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </g>
+                        )}
+
+                        {/* 非ホバー時のヒントテキスト */}
+                        {laneHoverX === null && !createState && (
+                          <text x={effectiveSvgWidth / 2} y={y + GANTT_ROW_H * 0.65}
+                            textAnchor="middle" fontSize={10} fill="#94a3b8"
+                            style={{ pointerEvents: 'none' }}>
+                            ＋ ここをドラッグして期間付きタスクを作成
+                          </text>
+                        )}
+                      </>
+                    );
+                  })()}
+                </g>
+              )}
             </svg>
           </div>
         </div>
@@ -996,7 +1356,7 @@ function GanttView({
         {/* ──── フッター（スクロール非依存） ──── */}
         <div className="flex items-center justify-between mt-2 px-1 flex-wrap gap-2">
           <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-            バー中央をドラッグ: 期間移動 ／ 右端をドラッグ: 期日変更 ／ ダブルクリック: 詳細を開く
+            バー中央をドラッグ: 期間移動 ／ 右端をドラッグ: 期日変更 ／ 未スケジュールからドラッグ: 日付付与 ／ 最下段をドラッグ: 新規タスク作成
           </p>
           <div className="flex items-center gap-3">
             {(['todo', 'in_progress', 'done'] as const).map(s => (
@@ -1033,6 +1393,7 @@ interface TodoTabProps {
 export default function TodoTab({ projectId, todos, assignableUsers, phases, canEdit, onTodosChange }: TodoTabProps) {
   const [view, setView] = useState<TodoView>('list');
   const [creating, setCreating] = useState(false);
+  const [createDefaults, setCreateDefaults] = useState<Partial<Todo> | null>(null);
   const [creatingSubtaskFor, setCreatingSubtaskFor] = useState<string | null>(null);
   const [detailTodo, setDetailTodo] = useState<Todo | null>(null);
   const [dragOver, setDragOver] = useState<TodoStatus | null>(null);
@@ -1101,7 +1462,10 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   );
 
   useRegisterShortcutScope(`todo-tab-${projectId}`, 'タスク', {
-    new_record: canEdit ? () => setCreating(true) : undefined,
+    new_record: canEdit ? () => {
+      setCreateDefaults(null);
+      setCreating(true);
+    } : undefined,
   });
 
   // ──── API ────
@@ -1124,7 +1488,9 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     }
     setPendingScrollTarget(`todo-row-${created.id}`);
     setCreating(false);
+    setCreateDefaults(null);
     setCreatingSubtaskFor(null);
+    return created;
   }, [projectId, todos, onTodosChange]);
 
   const updateTodo = useCallback(async (id: string, data: Partial<Todo>) => {
@@ -1219,7 +1585,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
           )}
         </div>
         {canEdit && !creating && !creatingSubtaskFor && (
-          <button onClick={() => setCreating(true)} className="btn-primary text-sm">+ タスク追加</button>
+          <button onClick={() => { setCreateDefaults(null); setCreating(true); }} className="btn-primary text-sm">+ タスク追加</button>
         )}
       </div>
 
@@ -1315,9 +1681,11 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
           assignableUsers={assignableUsers}
           phases={phases}
           parentTodo={creatingSubtaskFor ? todos.find((todo) => todo.id === creatingSubtaskFor) ?? null : null}
+          initialValues={createDefaults}
           onSave={data => createTodo(data, creatingSubtaskFor ?? undefined)}
           onCancel={() => {
             setCreating(false);
+            setCreateDefaults(null);
             setCreatingSubtaskFor(null);
           }}
           saveLabel={creatingSubtaskFor ? 'サブタスク作成' : '作成'}
@@ -1344,7 +1712,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
             <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
               <p className="text-2xl mb-2">✓</p>
               <p className="text-sm">タスクがありません</p>
-              {canEdit && <button onClick={() => setCreating(true)} className="btn-primary text-sm mt-4">タスクを追加</button>}
+              {canEdit && <button onClick={() => { setCreateDefaults(null); setCreating(true); }} className="btn-primary text-sm mt-4">タスクを追加</button>}
             </div>
           ) : filteredTodos.length === 0 && !creating ? (
             <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
@@ -1358,7 +1726,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
                 onStatusChange={(id, s) => updateTodo(id, { status: s })}
                 onOpen={setDetailTodo}
                 onDelete={deleteTodo}
-                onAddSubtask={id => setCreatingSubtaskFor(id)}
+                onAddSubtask={id => { setCreateDefaults(null); setCreatingSubtaskFor(id); }}
               />
               {(todo.subtasks ?? []).map(sub => (
                 <div key={sub.id} id={`todo-row-${sub.id}`}>
@@ -1424,7 +1792,18 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
       {view === 'gantt' && (
         <div className="card overflow-hidden p-3">
           <GanttView
-            todos={filteredTodos} onOpen={setDetailTodo} onUpdate={updateTodo}
+            todos={filteredTodos}
+            onOpen={setDetailTodo}
+            onUpdate={updateTodo}
+            onCreate={(data) => {
+              setCreateDefaults({
+                status: 'todo',
+                priority: 'medium',
+                ...data,
+              });
+              setCreating(true);
+            }}
+            canEdit={canEdit}
             scale={ganttScale} onScaleChange={setGanttScale}
             onExpand={() => setGanttFullscreen(true)}
           />
@@ -1553,10 +1932,21 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
 
           {/* メインエリア */}
           <div className="flex-1 h-full overflow-auto p-4">
-            <GanttView
-              todos={filteredTodos} onOpen={setDetailTodo} onUpdate={updateTodo}
-              scale={ganttScale} onScaleChange={setGanttScale} hideScaleUI
-            />
+              <GanttView
+                todos={filteredTodos}
+                onOpen={setDetailTodo}
+                onUpdate={updateTodo}
+                onCreate={(data) => {
+                  setCreateDefaults({
+                    status: 'todo',
+                    priority: 'medium',
+                    ...data,
+                  });
+                  setCreating(true);
+                }}
+                canEdit={canEdit}
+                scale={ganttScale} onScaleChange={setGanttScale} hideScaleUI
+              />
           </div>
         </div>
       )}
