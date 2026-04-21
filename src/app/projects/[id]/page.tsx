@@ -11,6 +11,8 @@ import TodoTab from '@/components/TodoTab';
 import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
+type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks';
+
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
     ...project,
@@ -953,8 +955,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'todos' ? 'tasks' : 'fields';
-  const [tab, setTab] = useState<'fields' | 'assets' | 'notes' | 'members' | 'tasks'>(initialTab);
+  const initialTab: ProjectDetailTabKey = searchParams.get('tab') === 'todos' ? 'tasks' : 'fields';
+  const [primaryTab, setPrimaryTab] = useState<ProjectDetailTabKey>(initialTab);
+  const [splitView, setSplitView] = useState(false);
+  const [secondaryTab, setSecondaryTab] = useState<ProjectDetailTabKey>('notes');
+  const [splitRatio, setSplitRatio] = useState(0.5);
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
@@ -1280,7 +1285,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         return;
       }
       await loadAssets(true);
-      setTab('assets');
+      if (splitView && primaryTab !== 'assets') {
+        setSecondaryTab('assets');
+      } else {
+        setPrimaryTab('assets');
+      }
     } finally {
       setGenerating(false);
     }
@@ -1367,14 +1376,15 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     if (!project) return;
-    if (tab === 'assets') void loadAssets();
-    if (tab === 'tasks' || hasInlineTodoWidget) void loadTodos();
-    if (tab === 'notes' || hasInlineNoteWidget || canViewNotes) void loadNotes();
-  }, [project, tab, hasInlineNoteWidget, hasInlineTodoWidget, loadAssets, loadTodos, loadNotes]);
+    const visibleTabs = new Set<ProjectDetailTabKey>(splitView ? [primaryTab, secondaryTab] : [primaryTab]);
+    if (visibleTabs.has('assets')) void loadAssets();
+    if (visibleTabs.has('tasks') || hasInlineTodoWidget) void loadTodos();
+    if (visibleTabs.has('notes') || hasInlineNoteWidget || project.current_permissions?.can_view_notes) void loadNotes();
+  }, [project, splitView, primaryTab, secondaryTab, hasInlineNoteWidget, hasInlineTodoWidget, loadAssets, loadTodos, loadNotes]);
 
   usePendingScrollTarget(
     pendingNoteScrollTarget,
-    [notes, tab],
+    [notes, primaryTab, secondaryTab, splitView],
     setPendingNoteScrollTarget,
     scrollOptions,
   );
@@ -1484,10 +1494,71 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const canEditNotes = Boolean(currentPermissions?.can_edit_notes);
   const canDeleteProject = Boolean(currentPermissions?.can_delete);
   const projectRoleDefinitions = project?.project_role_definitions ?? [];
+  const tabOptions = useMemo(() => ([
+    ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
+    ...(canViewItems ? [{ k: 'tasks' as const, l: 'タスク' }] : []),
+    ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
+    ...(canViewNotes ? [{ k: 'notes' as const, l: 'ノート' }] : []),
+    ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
+  ]), [canViewContent, canViewItems, canViewNotes]);
+
+  const findAlternateTab = useCallback((current: ProjectDetailTabKey) => {
+    return tabOptions.find((option) => option.k !== current)?.k ?? current;
+  }, [tabOptions]);
+
+  useEffect(() => {
+    if (!tabOptions.some((option) => option.k === primaryTab)) {
+      setPrimaryTab(tabOptions[0]?.k ?? 'fields');
+    }
+  }, [primaryTab, tabOptions]);
+
+  useEffect(() => {
+    if (!splitView) return;
+    if (!tabOptions.some((option) => option.k === secondaryTab)) {
+      setSecondaryTab(findAlternateTab(primaryTab));
+      return;
+    }
+    if (secondaryTab === primaryTab) {
+      setSecondaryTab(findAlternateTab(primaryTab));
+    }
+  }, [findAlternateTab, primaryTab, secondaryTab, splitView, tabOptions]);
+
+  const setPaneTab = useCallback((pane: 'primary' | 'secondary', nextTab: ProjectDetailTabKey) => {
+    const currentTab = pane === 'primary' ? primaryTab : secondaryTab;
+    if (currentTab === nextTab) return;
+    if (!confirmLeaveUnsaved()) return;
+    if (pane === 'primary') {
+      if (splitView && nextTab === secondaryTab) {
+        setSecondaryTab(primaryTab);
+      }
+      setPrimaryTab(nextTab);
+      return;
+    }
+    if (nextTab === primaryTab) {
+      setPrimaryTab(secondaryTab);
+    }
+    setSecondaryTab(nextTab);
+  }, [confirmLeaveUnsaved, primaryTab, secondaryTab, splitView]);
+
+  const noteTabVisible = splitView ? (primaryTab === 'notes' || secondaryTab === 'notes') : primaryTab === 'notes';
+
+  const noteSaveHandler = useMemo(() => {
+    if (!noteTabVisible) return undefined;
+    if (noteCreating && canEditNotes) return createNote;
+    if (noteEditingId && canEditNotes) {
+      const editId = noteEditingId;
+      return async () => {
+        await updateNote(editId, { title: noteDraft.title, body: noteDraft.body });
+        setNoteEditingId(null);
+      };
+    }
+    return undefined;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteTabVisible, noteCreating, noteEditingId, canEditNotes, noteDraft]);
 
   useRegisterShortcutScope(`project-${id}`, project?.name ? `${project.name}` : 'プロジェクト詳細', {
-    save_current: project && tab === 'fields' && canEditProject ? () => save(project) : undefined,
-    new_record: tab === 'notes' && canEditNotes
+    save_current: noteSaveHandler ?? (project && (primaryTab === 'fields' || (splitView && secondaryTab === 'fields')) && canEditProject ? () => save(project) : undefined),
+    new_record: noteTabVisible && canEditNotes
       ? () => {
           if (noteCreating) return;
           if (!confirmLeaveUnsaved()) return;
@@ -1536,6 +1607,502 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       <p>{loadError || '読み込み中...'}</p>
     </div>
   );
+
+  const renderTabContent = (tabKey: ProjectDetailTabKey, pane: 'primary' | 'secondary') => {
+    if (tabKey === 'tasks' && canViewItems) {
+      return (
+        <section className="space-y-4">
+          {todosLoading && !todosLoaded ? (
+            <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-sm">タスクを読み込み中...</p>
+            </div>
+          ) : (
+            <TodoTab
+              projectId={id}
+              todos={todos}
+              assignableUsers={project.assignable_users ?? []}
+              phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
+              canEdit={canEditItems}
+              onTodosChange={setTodos}
+            />
+          )}
+        </section>
+      );
+    }
+
+    if (tabKey === 'notes' && canViewNotes) {
+      return (
+        <section className="space-y-4">
+          {noteCreating ? (
+            <div className="card p-4">
+              <MarkdownRichTextEditor
+                title={noteDraft.title}
+                body={noteDraft.body}
+                onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
+                onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
+                onSave={createNote}
+                onCancel={() => { setNoteCreating(false); setNoteDraft({ title: '', body: '' }); }}
+                saveLabel="作成"
+                bodyLabel="本文"
+                isDirty={noteCreateDirty}
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                if (!confirmLeaveUnsaved()) return;
+                setNoteCreating(true);
+              }}
+              disabled={!canEditNotes}
+              className="btn-secondary w-full justify-center text-sm"
+            >
+              + 新しいノートを作成
+            </button>
+          )}
+
+          {noteLoading ? (
+            <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>読み込み中...</p>
+          ) : notes.length === 0 ? (
+            <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-sm">ノートはありません</p>
+              <p className="text-xs mt-1">「新しいノートを作成」から追加してください</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {notes.map(note => (
+                <div key={note.id} id={`project-note-${note.id}`} className="card overflow-hidden">
+                  {noteEditingId === note.id ? (
+                    <div className="p-4">
+                      <MarkdownRichTextEditor
+                        title={noteDraft.title}
+                        body={noteDraft.body}
+                        onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
+                        onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
+                        onSave={async () => {
+                          await updateNote(note.id, { title: noteDraft.title, body: noteDraft.body });
+                          setNoteEditingId(null);
+                        }}
+                        onCancel={() => setNoteEditingId(null)}
+                        bodyLabel="本文"
+                        isDirty={noteEditDirty}
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {note.pinned === 1 && <span className="text-sm shrink-0">📌</span>}
+                          <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                            {note.title || '（無題）'}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => updateNote(note.id, { pinned: note.pinned === 1 ? 0 : 1 })}
+                            disabled={!canEditNotes}
+                            title={note.pinned === 1 ? 'ピン留めを外す' : 'ピン留め'}
+                            className="p-1 rounded transition-colors text-sm"
+                            style={{ color: note.pinned === 1 ? 'var(--accent)' : 'var(--text-muted)', opacity: note.pinned === 1 ? 1 : 0.4 }}
+                          >
+                            📌
+                          </button>
+                          <button
+                            disabled={!canEditNotes}
+                            onClick={() => {
+                              if (!confirmLeaveUnsaved()) return;
+                              setNoteEditingId(note.id);
+                              setNoteDraft({ title: note.title, body: note.body });
+                            }}
+                            className="px-2 py-1 rounded transition-colors text-xs"
+                            style={{ color: 'var(--text-secondary)' }}
+                          >
+                            編集
+                          </button>
+                          <button
+                            onClick={() => deleteNote(note.id)}
+                            disabled={!canEditNotes}
+                            className="px-2 py-1 rounded transition-colors text-xs"
+                            style={{ color: '#b34a4a' }}
+                          >
+                            削除
+                          </button>
+                        </div>
+                      </div>
+                      {note.body && (
+                        <MarkdownViewer content={note.body} className="text-sm" />
+                      )}
+                      <p className="text-xs mt-3" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                        更新: {new Date(note.updated_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      );
+    }
+
+    if (tabKey === 'members' && canViewItems) {
+      return (
+        <section className="space-y-5">
+          <div className="card p-5 space-y-4">
+            <div>
+              <h2 className="section-title">主担当</h2>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                プロジェクト全体の代表担当者です。Todo/KANBAN/WBSの担当者フィルタでも使います。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+              <div>
+                <label className="field-label">主担当者</label>
+                <select
+                  className="field-input"
+                  value={project.primary_assignee_id ?? ''}
+                  disabled={!canEditProject}
+                  onChange={(e) => setProject({ ...project, primary_assignee_id: e.target.value || null })}
+                >
+                  <option value="">未設定</option>
+                  {assignableUsers.map((assignee) => (
+                    <option key={assignee.id} value={assignee.id}>
+                      {userDisplayName(assignee)} / {assignee.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button onClick={() => save(project)} disabled={saving || !canEditProject} className="btn-primary text-sm">
+                主担当を保存
+              </button>
+            </div>
+            <div className="rounded-xl border p-3 flex items-center gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
+              {primaryAssignee?.avatar_url ? (
+                <img src={primaryAssignee.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
+              ) : (
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                  {primaryAssignee ? userInitials(primaryAssignee) : '未'}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{primaryAssignee ? userDisplayName(primaryAssignee) : '未設定'}</p>
+                <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{primaryAssignee?.email ?? '主担当が設定されていません'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-5 space-y-4">
+            <div>
+              <h2 className="section-title">メンバー</h2>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                登録済みユーザーだけをプロジェクトに追加できます。未登録ユーザーを追加する場合は、先にユーザー管理で作成してください。
+              </p>
+            </div>
+
+            {canManageMembers && (
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
+                <div>
+                  <label className="field-label">追加するユーザー</label>
+                  <select className="field-input" value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)}>
+                    <option value="">登録済みユーザーを選択</option>
+                    {selectableProjectUsers.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {userDisplayName(candidate)} / {candidate.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label">プロジェクトロール</label>
+                  <select className="field-input" value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                    {projectRoleDefinitions.map((role) => (
+                      <option key={role.key} value={role.key}>{role.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <button onClick={addProjectMember} disabled={memberSaving || !memberUserId} className="btn-secondary text-sm">
+                  {memberSaving ? '追加中...' : '追加'}
+                </button>
+                {memberMessage && (
+                  <p className="md:col-span-3 text-xs" style={{ color: memberMessage === 'メンバーを更新しました' ? 'var(--success)' : '#b34a4a' }}>
+                    {memberMessage}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="divide-y divide-slate-200/70">
+              {project.owner && (
+                <div className="py-3 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>
+                    {userInitials(project.owner)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{userDisplayName(project.owner)}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{project.owner.email}</p>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>オーナー</span>
+                </div>
+              )}
+              {(project.members ?? []).map((member) => (
+                <div key={member.user.id} className="py-3 flex items-center gap-3">
+                  {member.user.avatar_url ? (
+                    <img src={member.user.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                      {userInitials(member.user)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{userDisplayName(member.user)}</p>
+                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{member.user.email}</p>
+                  </div>
+                  {canManageMembers ? (
+                    <select className="field-input text-xs py-1.5 w-52" value={member.role} onChange={(e) => updateProjectMemberRole(member.user.id, e.target.value)}>
+                      {projectRoleDefinitions.map((role) => (
+                        <option key={role.key} value={role.key}>{role.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>{roleLabel(member.role)}</span>
+                  )}
+                  {canManageMembers && (
+                    <button onClick={() => removeProjectMember(member.user.id)} className="btn-danger text-xs px-2 py-1">
+                      外す
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    if (tabKey === 'fields' && canViewItems) {
+      return (
+        <>
+          {(() => {
+            type RenderItem =
+              | { type: 'field'; field: CustomField; layout: string; key: string }
+              | { type: 'widget'; kind: string; layout: string; key: string };
+
+            const renderSection = (
+              secId: string,
+              secName: string,
+              secColor: string | undefined,
+              renderItems: RenderItem[]
+            ) => {
+              if (renderItems.length === 0) return null;
+              const isOpen = openFieldSections.includes(secName);
+              return (
+                <section key={secId}>
+                  <div className="card overflow-hidden">
+                    {secColor && <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />}
+                    <button type="button" onClick={() => toggleFieldSection(secName)} className="row-hover w-full px-5 py-4 flex items-center justify-between gap-3 text-left">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {secColor && <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />}
+                        <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{secName}</h2>
+                      </div>
+                      <span className="text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>{isOpen ? '▲ 閉じる' : '▼ 開く'}</span>
+                    </button>
+                    {isOpen && (
+                      <div className="px-5 pb-5 grid grid-cols-2 gap-4">
+                        {renderItems.map(item => {
+                          if (item.type === 'widget') {
+                            return (
+                              <SectionInfoWidget
+                                key={item.key}
+                                kind={item.kind}
+                                layout={item.layout as 'half' | 'full'}
+                                project={project}
+                                projectType={currentProjectType}
+                                phases={currentPhases}
+                                typeLabel={typeLabel}
+                                notes={notes}
+                                todos={todos}
+                                todosLoading={todosLoading}
+                                members={assignableUsers}
+                                onNotesTabClick={() => setPaneTab(pane, 'notes')}
+                                onTasksTabClick={() => setPaneTab(pane, 'tasks')}
+                              />
+                            );
+                          }
+                          const f = item.field;
+                          const globalIdx = fieldIndexById.get(f.id) ?? -1;
+                          return (
+                            <div key={item.key} className={item.layout === 'full' ? 'col-span-2' : ''}>
+                              <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} showFieldKeys={devSettings.showFieldKeys} showFieldTypes={devSettings.showFieldTypes} showFieldIds={devSettings.showFieldIds} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              );
+            };
+
+            return (
+              <>
+                {definedSections.map(secDef => {
+                  const items: RenderItem[] = secDef.items.flatMap((item): RenderItem[] => {
+                    const kind = item.kind ?? 'field';
+                    if (kind !== 'field') {
+                      return [{ type: 'widget', kind, layout: item.layout, key: item.id }];
+                    }
+                    const field = fieldByTemplateId.get(item.field_id);
+                    if (!field) return [];
+                    return [{ type: 'field', field, layout: item.layout, key: item.id }];
+                  });
+                  const fallback = secDef.items.length === 0
+                    ? (fieldsBySection[secDef.name] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }))
+                    : [];
+                  return renderSection(secDef.id, secDef.name, secDef.color, [...items, ...fallback]);
+                })}
+
+                {extraSectionNames.map(sec => {
+                  const items = (fieldsBySection[sec] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }));
+                  return renderSection(`extra-${sec}`, sec, undefined, items);
+                })}
+
+                {definedSections.length === 0 && extraSectionNames.length === 0 && (
+                  <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
+                    <p className="text-sm">このプロジェクト種別には項目がありません</p>
+                    <p className="text-xs mt-1">プロジェクト種別設定で項目を追加してください</p>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {suggestions.length > 0 && (
+            <section>
+              <h2 className="section-title mb-3">AI補完サジェスト</h2>
+              <div className="space-y-2">
+                {suggestions.map(s => (
+                  <div key={s.field_id} className="card p-4 flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{s.label}</p>
+                      <p className="text-sm mt-1">{s.suggested_value}</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{s.reason}</p>
+                    </div>
+                    <button onClick={() => applySuggestion(s)} className="btn-primary text-xs shrink-0">適用</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      );
+    }
+
+    if (tabKey === 'assets' && canViewContent) {
+      return (
+        <section>
+          {assetsLoading && !assetsLoaded ? (
+            <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
+              <p>生成コンテンツを読み込み中...</p>
+            </div>
+          ) : assets.length === 0 ? (
+            <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
+              <p>まだコンテンツは生成されていません</p>
+              <p className="text-xs mt-1">右パネルから生成対象を選んで実行してください</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {assets.map(a => (
+                <AssetCard
+                  key={a.id}
+                  asset={a}
+                  onDelete={() => deleteAsset(a.id)}
+                  onSaved={updateAsset}
+                  onDirtyChange={(assetId, dirty) => {
+                    setAssetDirtyMap((current) => {
+                      if (current[assetId] === dirty) return current;
+                      return { ...current, [assetId]: dirty };
+                    });
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      );
+    }
+
+    return (
+      <section>
+        <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-sm">この情報を表示する権限がありません</p>
+        </div>
+      </section>
+    );
+  };
+
+  const renderPaneTabs = (currentTab: ProjectDetailTabKey, pane: 'primary' | 'secondary') => (
+    <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex gap-2 flex-wrap">
+        {tabOptions.map((option) => (
+          <button
+            key={`${pane}-${option.k}`}
+            onClick={() => setPaneTab(pane, option.k)}
+            className={`tab-btn${currentTab === option.k ? ' active' : ''}`}
+          >
+            {option.l}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {!splitView && tabOptions.length > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              const nextSecondary = findAlternateTab(primaryTab);
+              setSecondaryTab(nextSecondary);
+              setSplitView(true);
+            }}
+            className="btn-secondary text-xs"
+          >
+            2画面表示
+          </button>
+        )}
+        {splitView && pane === 'secondary' && (
+          <button type="button" onClick={() => setSplitView(false)} className="btn-secondary text-xs">
+            分割解除
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderPane = (currentTab: ProjectDetailTabKey, pane: 'primary' | 'secondary') => (
+    <div className="min-h-0 flex flex-col">
+      <div>
+        {renderPaneTabs(currentTab, pane)}
+      </div>
+      <div className="min-h-0 overflow-y-auto pt-6 space-y-6">
+        {renderTabContent(currentTab, pane)}
+      </div>
+    </div>
+  );
+
+  const startSplitResize = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startRatio = splitRatio;
+    const handleMove = (moveEvent: MouseEvent) => {
+      const viewportWidth = window.innerWidth || 1;
+      const deltaRatio = (moveEvent.clientX - startX) / viewportWidth;
+      const nextRatio = Math.min(0.72, Math.max(0.28, startRatio + deltaRatio));
+      setSplitRatio(nextRatio);
+    };
+    const handleUp = () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -1743,448 +2310,38 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       
       {/* 本体 */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* 左: フィールド編集 */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* タブ切り替え */}
-          <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-            {([
-              ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
-              ...(canViewItems ? [{ k: 'tasks' as const, l: 'タスク' }] : []),
-              ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
-              ...(canViewNotes ? [{ k: 'notes' as const, l: 'ノート' }] : []),
-              ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
-            ]).map(t => (
-              <button
-                key={t.k}
-                onClick={() => {
-                  if (tab === t.k) return;
-                  if (!confirmLeaveUnsaved()) return;
-                  setTab(t.k);
-                }}
-                className={`tab-btn${tab === t.k ? ' active' : ''}`}
-              >
-                {t.l}
-              </button>
-            ))}
-          </div>
-
-          {tab === 'tasks' && canViewItems ? (
-            <section className="space-y-4">
-              {todosLoading && !todosLoaded ? (
-                <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                  <p className="text-sm">タスクを読み込み中...</p>
+        <div className="flex-1 min-h-0 p-6">
+          {splitView ? (
+            <div className="h-full min-h-0">
+              <div className="hidden xl:flex h-full min-h-0">
+                <div className="min-w-0 pr-4" style={{ flex: splitRatio }}>
+                  {renderPane(primaryTab, 'primary')}
                 </div>
-              ) : (
-                <TodoTab
-                  projectId={id}
-                  todos={todos}
-                  assignableUsers={project.assignable_users ?? []}
-                  phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
-                  canEdit={canEditItems}
-                  onTodosChange={setTodos}
-                />
-              )}
-            </section>
-          ) : tab === 'notes' && canViewNotes ? (
-            <section className="space-y-4">
-              {/* 新規作成フォーム */}
-              {noteCreating ? (
-                <div className="card p-4">
-                  <MarkdownRichTextEditor
-                    title={noteDraft.title}
-                    body={noteDraft.body}
-                    onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
-                    onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
-                    onSave={createNote}
-                    onCancel={() => { setNoteCreating(false); setNoteDraft({ title: '', body: '' }); }}
-                    saveLabel="作成"
-                    bodyLabel="本文"
-                    isDirty={noteCreateDirty}
-                  />
-                </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (!confirmLeaveUnsaved()) return;
-                    setNoteCreating(true);
-                  }}
-                  disabled={!canEditNotes}
-                  className="btn-secondary w-full justify-center text-sm"
-                >
-                  + 新しいノートを作成
-                </button>
-              )}
-
-              {/* ノート一覧 */}
-              {noteLoading ? (
-                <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>読み込み中...</p>
-              ) : notes.length === 0 ? (
-                <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                  <p className="text-sm">ノートはありません</p>
-                  <p className="text-xs mt-1">「新しいノートを作成」から追加してください</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {notes.map(note => (
-                    <div key={note.id} id={`project-note-${note.id}`} className="card overflow-hidden">
-                      {noteEditingId === note.id ? (
-                        /* 編集モード */
-                        <div className="p-4">
-                          <MarkdownRichTextEditor
-                            title={noteDraft.title}
-                            body={noteDraft.body}
-                            onTitleChange={v => setNoteDraft(d => ({ ...d, title: v }))}
-                            onBodyChange={v => setNoteDraft(d => ({ ...d, body: v }))}
-                            onSave={async () => {
-                              await updateNote(note.id, { title: noteDraft.title, body: noteDraft.body });
-                              setNoteEditingId(null);
-                            }}
-                            onCancel={() => setNoteEditingId(null)}
-                            bodyLabel="本文"
-                            isDirty={noteEditDirty}
-                          />
-                        </div>
-                      ) : (
-                        /* 表示モード */
-                        <div className="p-4">
-                          <div className="flex items-start justify-between gap-2 mb-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {note.pinned === 1 && <span className="text-sm shrink-0">📌</span>}
-                              <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                                {note.title || '（無題）'}
-                              </h3>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => updateNote(note.id, { pinned: note.pinned === 1 ? 0 : 1 })}
-                                disabled={!canEditNotes}
-                                title={note.pinned === 1 ? 'ピン留めを外す' : 'ピン留め'}
-                                className="p-1 rounded transition-colors text-sm"
-                                style={{ color: note.pinned === 1 ? 'var(--accent)' : 'var(--text-muted)', opacity: note.pinned === 1 ? 1 : 0.4 }}
-                              >
-                                📌
-                              </button>
-                              <button
-                                disabled={!canEditNotes}
-                                onClick={() => {
-                                  if (!confirmLeaveUnsaved()) return;
-                                  setNoteEditingId(note.id);
-                                  setNoteDraft({ title: note.title, body: note.body });
-                                }}
-                                className="px-2 py-1 rounded transition-colors text-xs"
-                                style={{ color: 'var(--text-secondary)' }}
-                              >
-                                編集
-                              </button>
-                              <button
-                                onClick={() => deleteNote(note.id)}
-                                disabled={!canEditNotes}
-                                className="px-2 py-1 rounded transition-colors text-xs"
-                                style={{ color: '#b34a4a' }}
-                              >
-                                削除
-                              </button>
-                            </div>
-                          </div>
-                          {note.body && (
-                            <MarkdownViewer content={note.body} className="text-sm" />
-                          )}
-                          <p className="text-xs mt-3" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                            更新: {new Date(note.updated_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          ) : tab === 'members' && canViewItems ? (
-            <section className="space-y-5">
-              <div className="card p-5 space-y-4">
-                <div>
-                  <h2 className="section-title">主担当</h2>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                    プロジェクト全体の代表担当者です。Todo/KANBAN/WBSの担当者フィルタでも使います。
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
-                  <div>
-                    <label className="field-label">主担当者</label>
-                    <select
-                      className="field-input"
-                      value={project.primary_assignee_id ?? ''}
-                      disabled={!canEditProject}
-                      onChange={(e) => setProject({ ...project, primary_assignee_id: e.target.value || null })}
-                    >
-                      <option value="">未設定</option>
-                      {assignableUsers.map((assignee) => (
-                        <option key={assignee.id} value={assignee.id}>
-                          {userDisplayName(assignee)} / {assignee.email}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button onClick={() => save(project)} disabled={saving || !canEditProject} className="btn-primary text-sm">
-                    主担当を保存
+                <div className="shrink-0 flex items-stretch">
+                  <button
+                    type="button"
+                    onMouseDown={startSplitResize}
+                    className="w-4 -mx-2 cursor-col-resize relative flex items-center justify-center"
+                    aria-label="表示幅を調整"
+                  >
+                    <span className="w-px self-stretch" style={{ backgroundColor: 'var(--border)' }} />
+                    <span
+                      className="absolute w-1.5 h-10 rounded-full"
+                      style={{ backgroundColor: 'rgba(15,154,177,0.14)', border: '1px solid rgba(15,154,177,0.18)' }}
+                    />
                   </button>
                 </div>
-                <div className="rounded-xl border p-3 flex items-center gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
-                  {primaryAssignee?.avatar_url ? (
-                    <img src={primaryAssignee.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
-                      {primaryAssignee ? userInitials(primaryAssignee) : '未'}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{primaryAssignee ? userDisplayName(primaryAssignee) : '未設定'}</p>
-                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{primaryAssignee?.email ?? '主担当が設定されていません'}</p>
-                  </div>
+                <div className="min-w-0 pl-4" style={{ flex: 1 - splitRatio }}>
+                  {renderPane(secondaryTab, 'secondary')}
                 </div>
               </div>
-
-              <div className="card p-5 space-y-4">
-                <div>
-                  <h2 className="section-title">メンバー</h2>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                    登録済みユーザーだけをプロジェクトに追加できます。未登録ユーザーを追加する場合は、先にユーザー管理で作成してください。
-                  </p>
-                </div>
-
-                {canManageMembers && (
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
-                    <div>
-                      <label className="field-label">追加するユーザー</label>
-                      <select className="field-input" value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)}>
-                        <option value="">登録済みユーザーを選択</option>
-                        {selectableProjectUsers.map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {userDisplayName(candidate)} / {candidate.email}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="field-label">プロジェクトロール</label>
-                      <select className="field-input" value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-                        {projectRoleDefinitions.map((role) => (
-                          <option key={role.key} value={role.key}>{role.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <button onClick={addProjectMember} disabled={memberSaving || !memberUserId} className="btn-secondary text-sm">
-                      {memberSaving ? '追加中...' : '追加'}
-                    </button>
-                    {memberMessage && (
-                      <p className="md:col-span-3 text-xs" style={{ color: memberMessage === 'メンバーを更新しました' ? 'var(--success)' : '#b34a4a' }}>
-                        {memberMessage}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div className="divide-y divide-slate-200/70">
-                  {project.owner && (
-                    <div className="py-3 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>
-                        {userInitials(project.owner)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{userDisplayName(project.owner)}</p>
-                        <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{project.owner.email}</p>
-                      </div>
-                      <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(31,157,114,0.1)', color: 'var(--success)' }}>オーナー</span>
-                    </div>
-                  )}
-                  {(project.members ?? []).map((member) => (
-                    <div key={member.user.id} className="py-3 flex items-center gap-3">
-                      {member.user.avatar_url ? (
-                        <img src={member.user.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
-                          {userInitials(member.user)}
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{userDisplayName(member.user)}</p>
-                        <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{member.user.email}</p>
-                      </div>
-                      {canManageMembers ? (
-                        <select className="field-input text-xs py-1.5 w-52" value={member.role} onChange={(e) => updateProjectMemberRole(member.user.id, e.target.value)}>
-                          {projectRoleDefinitions.map((role) => (
-                            <option key={role.key} value={role.key}>{role.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>{roleLabel(member.role)}</span>
-                      )}
-                      {canManageMembers && (
-                        <button onClick={() => removeProjectMember(member.user.id)} className="btn-danger text-xs px-2 py-1">
-                          外す
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="grid grid-cols-1 gap-6 h-full min-h-0 xl:hidden">
+                {renderPane(primaryTab, 'primary')}
+                {renderPane(secondaryTab, 'secondary')}
               </div>
-            </section>
-          ) : tab === 'fields' && canViewItems ? (
-            <>
-              {/* セクション別フィールド表示 */}
-              {(() => {
-                type RenderItem =
-                  | { type: 'field'; field: CustomField; layout: string; key: string }
-                  | { type: 'widget'; kind: string; layout: string; key: string };
-
-                const renderSection = (
-                  secId: string,
-                  secName: string,
-                  secColor: string | undefined,
-                  renderItems: RenderItem[]
-                ) => {
-                  if (renderItems.length === 0) return null;
-                  const isOpen = openFieldSections.includes(secName);
-                  return (
-                    <section key={secId}>
-                      <div className="card overflow-hidden">
-                        {secColor && <div style={{ height: 3, backgroundColor: secColor, opacity: 0.6 }} />}
-                        <button type="button" onClick={() => toggleFieldSection(secName)} className="row-hover w-full px-5 py-4 flex items-center justify-between gap-3 text-left">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {secColor && <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: secColor }} />}
-                            <h2 className="section-title" style={secColor ? { color: secColor } : undefined}>{secName}</h2>
-                          </div>
-                          <span className="text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>{isOpen ? '▲ 閉じる' : '▼ 開く'}</span>
-                        </button>
-                        {isOpen && (
-                          <div className="px-5 pb-5 grid grid-cols-2 gap-4">
-                            {renderItems.map(item => {
-                              if (item.type === 'widget') {
-                                return (
-                                  <SectionInfoWidget
-                                    key={item.key}
-                                    kind={item.kind}
-                                    layout={item.layout as 'half' | 'full'}
-                                    project={project}
-                                    projectType={currentProjectType}
-                                    phases={currentPhases}
-                                    typeLabel={typeLabel}
-                                    notes={notes}
-                                    todos={todos}
-                                    todosLoading={todosLoading}
-                                    members={assignableUsers}
-                                    onNotesTabClick={() => setTab('notes')}
-                                    onTasksTabClick={() => setTab('tasks')}
-                                  />
-                                );
-                              }
-                              const f = item.field;
-                              const globalIdx = fieldIndexById.get(f.id) ?? -1;
-                              return (
-                                <div key={item.key} className={item.layout === 'full' ? 'col-span-2' : ''}>
-                                  <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} showFieldKeys={devSettings.showFieldKeys} showFieldTypes={devSettings.showFieldTypes} showFieldIds={devSettings.showFieldIds} />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  );
-                };
-
-                return (
-                  <>
-                    {/* 定義済みセクション: items順に描画（フィールド＋情報ウィジェット） */}
-                    {definedSections.map(secDef => {
-                      const items: RenderItem[] = secDef.items.flatMap((item): RenderItem[] => {
-                        const kind = item.kind ?? 'field';
-                        if (kind !== 'field') {
-                          return [{ type: 'widget', kind, layout: item.layout, key: item.id }];
-                        }
-                        const field = fieldByTemplateId.get(item.field_id);
-                        if (!field) return [];
-                        return [{ type: 'field', field, layout: item.layout, key: item.id }];
-                      });
-                      // items未設定のセクション（レガシー）: section名でフィールドを検索
-                      const fallback = secDef.items.length === 0
-                        ? (fieldsBySection[secDef.name] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }))
-                        : [];
-                      return renderSection(secDef.id, secDef.name, secDef.color, [...items, ...fallback]);
-                    })}
-
-                    {/* 定義外セクション（レガシーフィールド） */}
-                    {extraSectionNames.map(sec => {
-                      const items = (fieldsBySection[sec] ?? []).map(f => ({ type: 'field' as const, field: f, layout: f.layout || 'half', key: f.id }));
-                      return renderSection(`extra-${sec}`, sec, undefined, items);
-                    })}
-
-                    {/* セクション定義も対象フィールドもない場合 */}
-                    {definedSections.length === 0 && extraSectionNames.length === 0 && (
-                      <div className="card p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-                        <p className="text-sm">このプロジェクト種別には項目がありません</p>
-                        <p className="text-xs mt-1">プロジェクト種別設定で項目を追加してください</p>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-
-              {/* AI補完サジェスト */}
-              {suggestions.length > 0 && (
-                <section>
-                  <h2 className="section-title mb-3">AI補完サジェスト</h2>
-                  <div className="space-y-2">
-                    {suggestions.map(s => (
-                      <div key={s.field_id} className="card p-4 flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{s.label}</p>
-                          <p className="text-sm mt-1">{s.suggested_value}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{s.reason}</p>
-                        </div>
-                        <button onClick={() => applySuggestion(s)} className="btn-primary text-xs shrink-0">適用</button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-            </>
-          ) : tab === 'assets' && canViewContent ? (
-            <section>
-              {assetsLoading && !assetsLoaded ? (
-                <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
-                  <p>生成コンテンツを読み込み中...</p>
-                </div>
-              ) : assets.length === 0 ? (
-                <div className="card p-10 text-center" style={{ color: 'var(--text-muted)' }}>
-                  <p>まだコンテンツは生成されていません</p>
-                  <p className="text-xs mt-1">右パネルから生成対象を選んで実行してください</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {assets.map(a => (
-                    <AssetCard
-                      key={a.id}
-                      asset={a}
-                      onDelete={() => deleteAsset(a.id)}
-                      onSaved={updateAsset}
-                      onDirtyChange={(assetId, dirty) => {
-                        setAssetDirtyMap((current) => {
-                          if (current[assetId] === dirty) return current;
-                          return { ...current, [assetId]: dirty };
-                        });
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+            </div>
           ) : (
-            <section>
-              <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
-                <p className="text-sm">この情報を表示する権限がありません</p>
-              </div>
-            </section>
+            renderPane(primaryTab, 'primary')
           )}
         </div>
 
