@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/components/AuthContext';
 import { withBasePath } from '@/lib/paths';
 import type { ProjectRoleDefinition, ProjectRolePermissionKey, ProjectRolePermissions } from '@/types';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 const PERMISSIONS: Array<{ key: ProjectRolePermissionKey; label: string; description: string }> = [
   { key: 'can_view', label: 'プロジェクト表示', description: 'プロジェクト自体を開ける' },
@@ -37,6 +38,8 @@ export default function ProjectRolesSettingsPage() {
   const [roles, setRoles] = useState<ProjectRoleDefinition[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [pendingRoleScrollTarget, setPendingRoleScrollTarget] = useState<string | null>(null);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -46,6 +49,13 @@ export default function ProjectRolesSettingsPage() {
     }
     loadRoles();
   }, [authLoading, router, user]);
+
+  usePendingScrollTarget(
+    pendingRoleScrollTarget,
+    [roles],
+    setPendingRoleScrollTarget,
+    scrollOptions,
+  );
 
   async function loadRoles() {
     const res = await fetch(withBasePath('/api/project-roles'));
@@ -72,10 +82,11 @@ export default function ProjectRolesSettingsPage() {
 
   function addRole() {
     const nextNumber = roles.length + 1;
+    const nextRoleId = uuidv4();
     setRoles((current) => [
       ...current,
       {
-        id: uuidv4(),
+        id: nextRoleId,
         key: `PROJECT_ROLE_${nextNumber}`,
         name: `プロジェクトロール ${nextNumber}`,
         description: '',
@@ -84,6 +95,7 @@ export default function ProjectRolesSettingsPage() {
         sort_order: current.length,
       },
     ]);
+    setPendingRoleScrollTarget(`project-role-row-${nextRoleId}`);
   }
 
   function removeRole(roleId: string) {
@@ -135,7 +147,7 @@ export default function ProjectRolesSettingsPage() {
 
       <div className="space-y-4">
         {roles.map((role) => (
-          <section key={role.id} className="card p-5 space-y-4">
+          <section key={role.id} id={`project-role-row-${role.id}`} className="card p-5 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-[200px_220px_1fr_auto] gap-3 items-start">
               <div>
                 <label className="field-label">ロールキー</label>

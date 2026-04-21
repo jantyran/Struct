@@ -3,6 +3,7 @@ import { useState, useCallback, useRef, useMemo } from 'react';
 import type { Todo, TodoStatus, TodoPriority, ProjectUser, ProjectPhase } from '@/types';
 import { TODO_STATUS_LABELS, TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS } from '@/types';
 import { withBasePath } from '@/lib/paths';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 // ──────────────────────────────────────────
 // 定数
@@ -982,6 +983,8 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   const [creatingSubtaskFor, setCreatingSubtaskFor] = useState<string | null>(null);
   const [detailTodo, setDetailTodo] = useState<Todo | null>(null);
   const [dragOver, setDragOver] = useState<TodoStatus | null>(null);
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   // ──── ガント拡張表示 ────
   const [ganttFullscreen, setGanttFullscreen] = useState(false);
@@ -1037,6 +1040,13 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     [todos, filterStatuses, filterPriorities, filterAssigneeId]
   );
 
+  usePendingScrollTarget(
+    pendingScrollTarget,
+    [todos, filteredTodos, view],
+    setPendingScrollTarget,
+    scrollOptions,
+  );
+
   // ──── API ────
 
   const createTodo = useCallback(async (data: Partial<Todo>, parentId?: string) => {
@@ -1055,6 +1065,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     } else {
       onTodosChange([...todos, { ...created, subtasks: [] }]);
     }
+    setPendingScrollTarget(`todo-row-${created.id}`);
     setCreating(false);
     setCreatingSubtaskFor(null);
   }, [projectId, todos, onTodosChange]);
@@ -1275,7 +1286,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
             </div>
           ) : null}
           {filteredTodos.map(todo => (
-            <div key={todo.id}>
+            <div key={todo.id} id={`todo-row-${todo.id}`}>
               <TodoRow
                 todo={todo} phases={phases} depth={0} canEdit={canEdit}
                 onStatusChange={(id, s) => updateTodo(id, { status: s })}
@@ -1292,13 +1303,15 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
                 </div>
               )}
               {(todo.subtasks ?? []).map(sub => (
-                <TodoRow
-                  key={sub.id} todo={sub} phases={phases} depth={1} canEdit={canEdit}
-                  onStatusChange={(id, s) => updateTodo(id, { status: s })}
-                  onOpen={setDetailTodo}
-                  onDelete={deleteTodo}
-                  onAddSubtask={() => {}}
-                />
+                <div key={sub.id} id={`todo-row-${sub.id}`}>
+                  <TodoRow
+                    todo={sub} phases={phases} depth={1} canEdit={canEdit}
+                    onStatusChange={(id, s) => updateTodo(id, { status: s })}
+                    onOpen={setDetailTodo}
+                    onDelete={deleteTodo}
+                    onAddSubtask={() => {}}
+                  />
+                </div>
               ))}
             </div>
           ))}
@@ -1331,11 +1344,14 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{columnTodos.length}</span>
                 </div>
                 {columnTodos.map(todo => (
-                  <KanbanCard key={todo.id} todo={todo}
-                    onOpen={setDetailTodo}
-                    onDelete={deleteTodo}
-                    onDragStart={handleDragStart}
-                  />
+                  <div key={todo.id} id={`todo-row-${todo.id}`}>
+                    <KanbanCard
+                      todo={todo}
+                      onOpen={setDetailTodo}
+                      onDelete={deleteTodo}
+                      onDragStart={handleDragStart}
+                    />
+                  </div>
                 ))}
                 {columnTodos.length === 0 && (
                   <div className="text-center py-6 text-xs" style={{ color: 'var(--text-muted)' }}>タスクなし</div>

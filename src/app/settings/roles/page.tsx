@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '@/components/AuthContext';
 import { withBasePath } from '@/lib/paths';
 import type { RoleDefinition, SystemPermissionKey, SystemPermissions } from '@/types';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 const PERMISSIONS: Array<{ key: SystemPermissionKey; label: string; description: string }> = [
   { key: 'manage_organization_settings', label: '組織設定管理', description: '組織設定全体と組織基本設定を表示・変更' },
@@ -37,6 +38,8 @@ export default function RolesSettingsPage() {
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [pendingRoleScrollTarget, setPendingRoleScrollTarget] = useState<string | null>(null);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -46,6 +49,13 @@ export default function RolesSettingsPage() {
     }
     loadRoles();
   }, [authLoading, router, user]);
+
+  usePendingScrollTarget(
+    pendingRoleScrollTarget,
+    [roles],
+    setPendingRoleScrollTarget,
+    scrollOptions,
+  );
 
   async function loadRoles() {
     const res = await fetch(withBasePath('/api/roles'));
@@ -78,10 +88,11 @@ export default function RolesSettingsPage() {
 
   function addRole() {
     const nextNumber = roles.length + 1;
+    const nextRoleId = uuidv4();
     setRoles((current) => [
       ...current,
       {
-        id: uuidv4(),
+        id: nextRoleId,
         key: `ROLE_${nextNumber}`,
         name: `ロール ${nextNumber}`,
         description: '',
@@ -90,6 +101,7 @@ export default function RolesSettingsPage() {
         sort_order: current.length,
       },
     ]);
+    setPendingRoleScrollTarget(`system-role-row-${nextRoleId}`);
   }
 
   function removeRole(roleId: string) {
@@ -149,7 +161,7 @@ export default function RolesSettingsPage() {
 
       <div className="space-y-4">
         {roles.map((role) => (
-          <section key={role.id} className="card p-5 space-y-4">
+          <section key={role.id} id={`system-role-row-${role.id}`} className="card p-5 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-[180px_220px_1fr_auto] gap-3 items-start">
               <div>
                 <label className="field-label">ロールキー</label>

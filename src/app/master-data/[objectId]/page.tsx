@@ -8,6 +8,7 @@ import type { GlobalAssets, GlobalAssetField, GlobalAssetFieldType, GlobalAssetO
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { defaultGlobalAssetObjects, normalizeGlobalAssets } from '@/lib/global-assets';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 function parseFieldOptions(options?: string) {
   try {
@@ -236,6 +237,8 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
   const [objectSettingsOpen, setObjectSettingsOpen] = useState(false);
   const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false);
   const [openRecordIds, setOpenRecordIds] = useState<string[]>([]);
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -273,6 +276,13 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
   );
   const object = objectIndex >= 0 ? data.objects[objectIndex] : null;
 
+  usePendingScrollTarget(
+    pendingScrollTarget,
+    [object?.fields, object?.records, openRecordIds],
+    setPendingScrollTarget,
+    scrollOptions,
+  );
+
   async function persist(nextData: GlobalAssets) {
     setSaving(true);
     const res = await fetch(withBasePath('/api/master-data'), {
@@ -308,12 +318,13 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
   function addField() {
     if (!object) return;
     const nextFieldKey = `field_${object.fields.length + 1}`;
+    const nextFieldId = uuidv4();
     updateObject({
       ...object,
       fields: [
         ...object.fields,
         {
-          id: uuidv4(),
+          id: nextFieldId,
           key: nextFieldKey,
           label: '新しい項目',
           type: 'text',
@@ -325,6 +336,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
         values: { ...record.values, [nextFieldKey]: '' },
       })),
     });
+    setPendingScrollTarget(`master-data-field-row-${nextFieldId}`);
   }
 
   function updateField(fieldIndex: number, nextField: GlobalAssetField) {
@@ -373,6 +385,7 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
       ],
     });
     setOpenRecordIds((current) => [...current, nextId]);
+    setPendingScrollTarget(`master-data-record-row-${nextId}`);
   }
 
   function updateRecord(recordIndex: number, values: Record<string, string>) {
@@ -499,13 +512,14 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
             </div>
             <div className="space-y-3">
               {object.fields.map((field, fieldIndex) => (
-                <FieldRow
-                  key={field.id}
-                  field={field}
-                  objects={data.objects.filter((candidate) => candidate.id !== object.id)}
-                  onChange={(nextField) => updateField(fieldIndex, nextField)}
-                  onRemove={() => removeField(fieldIndex)}
-                />
+                <div key={field.id} id={`master-data-field-row-${field.id}`}>
+                  <FieldRow
+                    field={field}
+                    objects={data.objects.filter((candidate) => candidate.id !== object.id)}
+                    onChange={(nextField) => updateField(fieldIndex, nextField)}
+                    onRemove={() => removeField(fieldIndex)}
+                  />
+                </div>
               ))}
             </div>
           </>
@@ -525,17 +539,18 @@ export default function GlobalAssetObjectDetailPage({ params }: { params: { obje
         ) : (
           <div className="space-y-3">
             {object.records.map((record, recordIndex) => (
-              <RecordCard
-                key={record.id}
-                object={object}
-                record={record}
-                expanded={openRecordIds.includes(record.id)}
-                objects={data.objects.filter((candidate) => candidate.id !== object.id)}
-                onToggle={() => toggleRecord(record.id)}
-                onMetaChange={(patch) => updateRecordMeta(recordIndex, patch)}
-                onChange={(values) => updateRecord(recordIndex, values)}
-                onRemove={() => removeRecord(recordIndex)}
-              />
+              <div key={record.id} id={`master-data-record-row-${record.id}`}>
+                <RecordCard
+                  object={object}
+                  record={record}
+                  expanded={openRecordIds.includes(record.id)}
+                  objects={data.objects.filter((candidate) => candidate.id !== object.id)}
+                  onToggle={() => toggleRecord(record.id)}
+                  onMetaChange={(patch) => updateRecordMeta(recordIndex, patch)}
+                  onChange={(values) => updateRecord(recordIndex, values)}
+                  onRemove={() => removeRecord(recordIndex)}
+                />
+              </div>
             ))}
           </div>
         )}

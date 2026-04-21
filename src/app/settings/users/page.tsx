@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthContext';
 import { withBasePath } from '@/lib/paths';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 type UserRow = {
   id: string;
@@ -32,6 +33,8 @@ export default function UsersSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', avatar_url: '', system_role: 'USER' });
+  const [pendingUserScrollTarget, setPendingUserScrollTarget] = useState<string | null>(null);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -43,6 +46,13 @@ export default function UsersSettingsPage() {
     setAvatarUrl(user.avatar_url ?? '');
     loadUsers();
   }, [authLoading, router, user]);
+
+  usePendingScrollTarget(
+    pendingUserScrollTarget,
+    [users],
+    setPendingUserScrollTarget,
+    scrollOptions,
+  );
 
   async function loadUsers() {
     const res = await fetch(withBasePath('/api/users'));
@@ -103,7 +113,7 @@ export default function UsersSettingsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newUser),
     });
-    const payload = await res.json() as { error?: string };
+    const payload = await res.json() as { error?: string; user?: UserRow };
     setSaving(false);
 
     if (!res.ok) {
@@ -111,6 +121,9 @@ export default function UsersSettingsPage() {
       return;
     }
 
+    if (payload.user?.id) {
+      setPendingUserScrollTarget(`user-row-${payload.user.id}`);
+    }
     setNewUser({ email: '', password: '', name: '', avatar_url: '', system_role: 'USER' });
     await loadUsers();
     setMessage('ユーザーを追加しました');
@@ -226,7 +239,7 @@ export default function UsersSettingsPage() {
         </div>
         <div className="divide-y divide-slate-200/70">
           {users.map((item) => (
-            <div key={item.id} className="py-3 flex items-center gap-3">
+            <div key={item.id} id={`user-row-${item.id}`} className="py-3 flex items-center gap-3">
               {item.avatar_url ? (
                 <img src={item.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
               ) : (

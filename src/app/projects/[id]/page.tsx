@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthContext';
 import { useDevSettings } from '@/components/DevSettingsContext';
 import TodoTab from '@/components/TodoTab';
 import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
@@ -841,11 +842,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ title: string; body: string }>({ title: '', body: '' });
   const [noteCreating, setNoteCreating] = useState(false);
+  const [pendingNoteScrollTarget, setPendingNoteScrollTarget] = useState<string | null>(null);
   const [assetDirtyMap, setAssetDirtyMap] = useState<Record<string, boolean>>({});
   const [memberUserId, setMemberUserId] = useState('');
   const [memberRole, setMemberRole] = useState('MEMBER');
   const [memberMessage, setMemberMessage] = useState('');
   const [memberSaving, setMemberSaving] = useState(false);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   const loadProject = useCallback(async () => {
     setLoadError('');
@@ -1222,6 +1225,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     if (tab === 'notes' || hasInlineNoteWidget || canViewNotes) void loadNotes();
   }, [project, tab, hasInlineNoteWidget, loadAssets, loadTodos, loadNotes]);
 
+  usePendingScrollTarget(
+    pendingNoteScrollTarget,
+    [notes, tab],
+    setPendingNoteScrollTarget,
+    scrollOptions,
+  );
+
   async function createNote() {
     if (!noteDraft.title.trim() && !noteDraft.body.trim()) return;
     const res = await fetch(withBasePath(`/api/projects/${id}/notes`), {
@@ -1232,6 +1242,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     if (res.ok) {
       const created = await res.json() as ProjectNote;
       setNotes(prev => [created, ...prev]);
+      setPendingNoteScrollTarget(`project-note-${created.id}`);
       setNoteDraft({ title: '', body: '' });
       setNoteCreating(false);
     }
@@ -1657,7 +1668,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               ) : (
                 <div className="space-y-3">
                   {notes.map(note => (
-                    <div key={note.id} className="card overflow-hidden">
+                    <div key={note.id} id={`project-note-${note.id}`} className="card overflow-hidden">
                       {noteEditingId === note.id ? (
                         /* 編集モード */
                         <div className="p-4">

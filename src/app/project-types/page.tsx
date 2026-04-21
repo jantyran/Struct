@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import type { FieldLayout, GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement, SectionItemKind } from '@/types';
@@ -13,6 +13,7 @@ import {
   getProjectTypeAIReferenceOptions,
   normalizeSelectedAIReferenceKeys,
 } from '@/lib/ai/reference-sources';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   const next = [...items];
@@ -997,10 +998,11 @@ export default function ProjectTypesPage() {
   const [openAssignedWidgetPaletteIds, setOpenAssignedWidgetPaletteIds] = useState<string[]>([]);
   const [openBuiltinFieldDefinitionIds, setOpenBuiltinFieldDefinitionIds] = useState<string[]>([]);
   const [closedCustomFieldDefinitionIds, setClosedCustomFieldDefinitionIds] = useState<string[]>([]);
-  const [pendingFieldScrollTarget, setPendingFieldScrollTarget] = useState<string | null>(null);
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
   const [draggingPhase, setDraggingPhase] = useState<{ definitionId: string; index: number } | null>(null);
   const [draggingSection, setDraggingSection] = useState<{ definitionId: string; index: number } | null>(null);
   const [draggingPlacement, setDraggingPlacement] = useState<PlacementDragState | null>(null);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -1087,6 +1089,7 @@ export default function ProjectTypesPage() {
     setDefinitions((current) => [...current, nextDefinition]);
     setOpenDefinitionIds((current) => [...current, nextDefinition.id]);
     setOpenDefinitionPanels((current) => ({ ...current, [nextDefinition.id]: ['basic'] }));
+    setPendingScrollTarget(`project-type-definition-${nextDefinition.id}`);
   }
 
   function removeDefinition(index: number) {
@@ -1179,13 +1182,12 @@ export default function ProjectTypesPage() {
     };
   }
 
-  useEffect(() => {
-    if (!pendingFieldScrollTarget) return;
-    const element = document.getElementById(pendingFieldScrollTarget);
-    if (!element) return;
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setPendingFieldScrollTarget(null);
-  }, [definitions, pendingFieldScrollTarget]);
+  usePendingScrollTarget(
+    pendingScrollTarget,
+    [definitions, openDefinitionIds, openDefinitionPanels],
+    setPendingScrollTarget,
+    scrollOptions,
+  );
 
   if (authLoading) {
     return <div className="p-6 max-w-6xl mx-auto"><div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div></div>;
@@ -1244,7 +1246,7 @@ export default function ProjectTypesPage() {
 
       <div className="space-y-6">
         {definitions.map((definition, index) => (
-          <section key={definition.id} className="card overflow-hidden">
+          <section key={definition.id} id={`project-type-definition-${definition.id}`} className="card overflow-hidden">
             <button
               onClick={() => toggleDefinition(definition.id)}
               className="row-hover w-full px-5 py-4 flex items-center justify-between gap-4 text-left border-b"
@@ -1300,10 +1302,14 @@ export default function ProjectTypesPage() {
                   onToggle={() => toggleDefinitionPanel(definition.id, 'phases')}
                   action={
                     <button
-                      onClick={() => updateDefinition(index, {
-                        ...definition,
-                        phases: [...definition.phases, { id: uuidv4(), key: `phase_${definition.phases.length + 1}`, name: `フェーズ ${definition.phases.length + 1}` }],
-                      })}
+                      onClick={() => {
+                        const nextPhaseId = uuidv4();
+                        updateDefinition(index, {
+                          ...definition,
+                          phases: [...definition.phases, { id: nextPhaseId, key: `phase_${definition.phases.length + 1}`, name: `フェーズ ${definition.phases.length + 1}` }],
+                        });
+                        setPendingScrollTarget(`project-type-phase-${nextPhaseId}`);
+                      }}
                       className="btn-secondary text-xs py-1 px-3"
                     >
                       + フェーズ追加
@@ -1326,23 +1332,24 @@ export default function ProjectTypesPage() {
                   </div>
 
                   {definition.phases.map((phase, phaseIndex) => (
-                    <PhaseRow
-                      key={phase.id}
-                      phase={phase}
-                      dragging={draggingPhase?.definitionId === definition.id && draggingPhase.index === phaseIndex}
-                      onDragStart={() => setDraggingPhase({ definitionId: definition.id, index: phaseIndex })}
-                      onDrop={() => {
-                        if (!draggingPhase || draggingPhase.definitionId !== definition.id || draggingPhase.index === phaseIndex) return;
-                        updateDefinition(index, { ...definition, phases: reorderList(definition.phases, draggingPhase.index, phaseIndex) });
-                        setDraggingPhase(null);
-                      }}
-                      onChange={(nextPhase) => {
-                        const phases = [...definition.phases];
-                        phases[phaseIndex] = nextPhase;
-                        updateDefinition(index, { ...definition, phases });
-                      }}
-                      onRemove={() => updateDefinition(index, { ...definition, phases: definition.phases.filter((_, currentPhaseIndex) => currentPhaseIndex !== phaseIndex) })}
-                    />
+                    <div key={phase.id} id={`project-type-phase-${phase.id}`}>
+                      <PhaseRow
+                        phase={phase}
+                        dragging={draggingPhase?.definitionId === definition.id && draggingPhase.index === phaseIndex}
+                        onDragStart={() => setDraggingPhase({ definitionId: definition.id, index: phaseIndex })}
+                        onDrop={() => {
+                          if (!draggingPhase || draggingPhase.definitionId !== definition.id || draggingPhase.index === phaseIndex) return;
+                          updateDefinition(index, { ...definition, phases: reorderList(definition.phases, draggingPhase.index, phaseIndex) });
+                          setDraggingPhase(null);
+                        }}
+                        onChange={(nextPhase) => {
+                          const phases = [...definition.phases];
+                          phases[phaseIndex] = nextPhase;
+                          updateDefinition(index, { ...definition, phases });
+                        }}
+                        onRemove={() => updateDefinition(index, { ...definition, phases: definition.phases.filter((_, currentPhaseIndex) => currentPhaseIndex !== phaseIndex) })}
+                      />
+                    </div>
                   ))}
                 </DefinitionAccordionSection>
 
@@ -1364,10 +1371,12 @@ export default function ProjectTypesPage() {
                       <button
                         onClick={() => {
                           const colorIndex = (definition.sections ?? []).length % SECTION_COLOR_PRESETS.length;
+                          const nextSectionId = uuidv4();
                           updateDefinition(index, {
                             ...definition,
-                            sections: [...(definition.sections ?? []), { id: uuidv4(), name: `セクション ${(definition.sections ?? []).length + 1}`, color: SECTION_COLOR_PRESETS[colorIndex], items: [] }],
+                            sections: [...(definition.sections ?? []), { id: nextSectionId, name: `セクション ${(definition.sections ?? []).length + 1}`, color: SECTION_COLOR_PRESETS[colorIndex], items: [] }],
                           });
+                          setPendingScrollTarget(`project-type-section-${nextSectionId}`);
                         }}
                         className="btn-secondary text-xs py-1 px-3"
                       >
@@ -1417,86 +1426,87 @@ export default function ProjectTypesPage() {
                             <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
                               <div className="space-y-3">
                                 {(definition.sections ?? []).map((sec, secIndex) => (
-                                  <SectionPlacementPanel
-                                    key={`${sec.id}-placement`}
-                                    section={sec}
-                                    fields={definition.field_templates}
-                                    draggingPlacement={draggingPlacement}
-                                    draggingSection={draggingSection?.definitionId === definition.id && draggingSection.index === secIndex}
-                                    onDropToSection={() => {
-                                      if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
-                                      if (draggingPlacement.source === 'palette') {
-                                        const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
-                                        const widgetKind = isWidget
-                                          ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
-                                          : 'field';
-                                        const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
+                                  <div key={`${sec.id}-placement`} id={`project-type-section-${sec.id}`}>
+                                    <SectionPlacementPanel
+                                      section={sec}
+                                      fields={definition.field_templates}
+                                      draggingPlacement={draggingPlacement}
+                                      draggingSection={draggingSection?.definitionId === definition.id && draggingSection.index === secIndex}
+                                      onDropToSection={() => {
+                                        if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
+                                        if (draggingPlacement.source === 'palette') {
+                                          const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                          const widgetKind = isWidget
+                                            ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                            : 'field';
+                                          const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
+                                          updateDefinition(index, {
+                                            ...definition,
+                                            sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, undefined, draggedField?.layout || 'half', widgetKind),
+                                          });
+                                        } else {
+                                          updateDefinition(index, {
+                                            ...definition,
+                                            sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, undefined),
+                                          });
+                                        }
+                                        setDraggingPlacement(null);
+                                      }}
+                                      onDropBeforeItem={(itemIndex) => {
+                                        if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
+                                        if (draggingPlacement.source === 'palette') {
+                                          const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                          const widgetKind = isWidget
+                                            ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                            : 'field';
+                                          const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
+                                          updateDefinition(index, {
+                                            ...definition,
+                                            sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, itemIndex, draggedField?.layout || 'half', widgetKind),
+                                          });
+                                        } else {
+                                          updateDefinition(index, {
+                                            ...definition,
+                                            sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, itemIndex),
+                                          });
+                                        }
+                                        setDraggingPlacement(null);
+                                      }}
+                                      onRemoveItem={(placementId) => {
                                         updateDefinition(index, {
                                           ...definition,
-                                          sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, undefined, draggedField?.layout || 'half', widgetKind),
+                                          sections: movePlacementBetweenSections(definition.sections, placementId, null),
                                         });
-                                      } else {
-                                        updateDefinition(index, {
-                                          ...definition,
-                                          sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, undefined),
-                                        });
-                                      }
-                                      setDraggingPlacement(null);
-                                    }}
-                                    onDropBeforeItem={(itemIndex) => {
-                                      if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
-                                      if (draggingPlacement.source === 'palette') {
-                                        const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
-                                        const widgetKind = isWidget
-                                          ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
-                                          : 'field';
-                                        const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
-                                        updateDefinition(index, {
-                                          ...definition,
-                                          sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, itemIndex, draggedField?.layout || 'half', widgetKind),
-                                        });
-                                      } else {
-                                        updateDefinition(index, {
-                                          ...definition,
-                                          sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, itemIndex),
-                                        });
-                                      }
-                                      setDraggingPlacement(null);
-                                    }}
-                                    onRemoveItem={(placementId) => {
-                                      updateDefinition(index, {
+                                        setDraggingPlacement(null);
+                                      }}
+                                      onDragStart={(fieldId, sourceIndex, placementId) => setDraggingPlacement({
+                                        definitionId: definition.id,
+                                        source: 'section',
+                                        fieldId,
+                                        placementId,
+                                        sourceSectionId: sec.id,
+                                        sourceIndex,
+                                      })}
+                                      onDragEnd={() => setDraggingPlacement(null)}
+                                      onLayoutChange={(fieldId, layout) => updateDefinition(index, {
                                         ...definition,
-                                        sections: movePlacementBetweenSections(definition.sections, placementId, null),
-                                      });
-                                      setDraggingPlacement(null);
-                                    }}
-                                    onDragStart={(fieldId, sourceIndex, placementId) => setDraggingPlacement({
-                                      definitionId: definition.id,
-                                      source: 'section',
-                                      fieldId,
-                                      placementId,
-                                      sourceSectionId: sec.id,
-                                      sourceIndex,
-                                    })}
-                                    onDragEnd={() => setDraggingPlacement(null)}
-                                    onLayoutChange={(fieldId, layout) => updateDefinition(index, {
-                                      ...definition,
-                                      sections: updateSectionItemLayout(definition.sections, sec.id, fieldId, layout),
-                                    })}
-                                    onSectionDragStart={() => setDraggingSection({ definitionId: definition.id, index: secIndex })}
-                                    onSectionDragEnd={() => setDraggingSection(null)}
-                                    onSectionDrop={() => {
-                                      if (!draggingSection || draggingSection.definitionId !== definition.id || draggingSection.index === secIndex) return;
-                                      updateDefinition(index, { ...definition, sections: reorderList(definition.sections ?? [], draggingSection.index, secIndex) });
-                                      setDraggingSection(null);
-                                    }}
-                                    onSectionChange={(nextSec) => {
-                                      const sections = [...(definition.sections ?? [])];
-                                      sections[secIndex] = nextSec;
-                                      updateDefinition(index, { ...definition, sections });
-                                    }}
-                                    onSectionRemove={() => updateDefinition(index, { ...definition, sections: (definition.sections ?? []).filter((_, i) => i !== secIndex) })}
-                                  />
+                                        sections: updateSectionItemLayout(definition.sections, sec.id, fieldId, layout),
+                                      })}
+                                      onSectionDragStart={() => setDraggingSection({ definitionId: definition.id, index: secIndex })}
+                                      onSectionDragEnd={() => setDraggingSection(null)}
+                                      onSectionDrop={() => {
+                                        if (!draggingSection || draggingSection.definitionId !== definition.id || draggingSection.index === secIndex) return;
+                                        updateDefinition(index, { ...definition, sections: reorderList(definition.sections ?? [], draggingSection.index, secIndex) });
+                                        setDraggingSection(null);
+                                      }}
+                                      onSectionChange={(nextSec) => {
+                                        const sections = [...(definition.sections ?? [])];
+                                        sections[secIndex] = nextSec;
+                                        updateDefinition(index, { ...definition, sections });
+                                      }}
+                                      onSectionRemove={() => updateDefinition(index, { ...definition, sections: (definition.sections ?? []).filter((_, i) => i !== secIndex) })}
+                                    />
+                                  </div>
                                 ))}
                               </div>
 
@@ -1703,7 +1713,7 @@ export default function ProjectTypesPage() {
                           ]),
                         });
                         setClosedCustomFieldDefinitionIds((current) => current.filter((id) => id !== definition.id));
-                        setPendingFieldScrollTarget(`field-row-${definition.id}-${nextField.id}`);
+                        setPendingScrollTarget(`field-row-${definition.id}-${nextField.id}`);
                       }}
                       className="btn-secondary text-xs py-1 px-3"
                     >

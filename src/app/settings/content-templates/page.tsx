@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import type { ProjectContentTemplate } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { CONTENT_CHANNEL_OPTIONS, createContentTemplate } from '@/lib/content-templates';
+import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 function reorderList<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   const next = [...items];
@@ -144,6 +145,8 @@ export default function ContentTemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [pendingTemplateScrollTarget, setPendingTemplateScrollTarget] = useState<string | null>(null);
+  const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -173,6 +176,13 @@ export default function ContentTemplatesPage() {
       setOpenTemplateIds((current) => current.length > 0 ? current : nextTemplates.slice(0, 1).map((template: ProjectContentTemplate) => template.id));
     })();
   }, [authLoading, router, user]);
+
+  usePendingScrollTarget(
+    pendingTemplateScrollTarget,
+    [templates],
+    setPendingTemplateScrollTarget,
+    scrollOptions,
+  );
 
   async function save(nextTemplates = templates) {
     setSaving(true);
@@ -243,6 +253,7 @@ export default function ContentTemplatesPage() {
               const nextTemplate = createContentTemplate({ id: uuidv4(), key: `content_${templates.length + 1}` });
               setTemplates((current) => [...current, nextTemplate]);
               setOpenTemplateIds((current) => [...current, nextTemplate.id]);
+              setPendingTemplateScrollTarget(`content-template-row-${nextTemplate.id}`);
             }}
             className="btn-secondary"
           >
@@ -261,28 +272,29 @@ export default function ContentTemplatesPage() {
           </div>
         )}
         {templates.map((template, index) => (
-          <ContentTemplateRow
-            key={template.id}
-            template={template}
-            expanded={openTemplateIds.includes(template.id)}
-            dragging={draggingIndex === index}
-            onDragStart={() => setDraggingIndex(index)}
-            onDrop={() => {
-              if (draggingIndex === null || draggingIndex === index) return;
-              setTemplates((current) => reorderList(current, draggingIndex, index));
-              setDraggingIndex(null);
-            }}
-            onToggle={() => setOpenTemplateIds((current) => current.includes(template.id) ? current.filter((id) => id !== template.id) : [...current, template.id])}
-            onChange={(nextTemplate) => {
-              const nextTemplates = [...templates];
-              nextTemplates[index] = nextTemplate;
-              setTemplates(nextTemplates);
-            }}
-            onRemove={() => {
-              setTemplates((current) => current.filter((_, currentIndex) => currentIndex !== index));
-              setOpenTemplateIds((current) => current.filter((id) => id !== template.id));
-            }}
-          />
+          <div key={template.id} id={`content-template-row-${template.id}`}>
+            <ContentTemplateRow
+              template={template}
+              expanded={openTemplateIds.includes(template.id)}
+              dragging={draggingIndex === index}
+              onDragStart={() => setDraggingIndex(index)}
+              onDrop={() => {
+                if (draggingIndex === null || draggingIndex === index) return;
+                setTemplates((current) => reorderList(current, draggingIndex, index));
+                setDraggingIndex(null);
+              }}
+              onToggle={() => setOpenTemplateIds((current) => current.includes(template.id) ? current.filter((id) => id !== template.id) : [...current, template.id])}
+              onChange={(nextTemplate) => {
+                const nextTemplates = [...templates];
+                nextTemplates[index] = nextTemplate;
+                setTemplates(nextTemplates);
+              }}
+              onRemove={() => {
+                setTemplates((current) => current.filter((_, currentIndex) => currentIndex !== index));
+                setOpenTemplateIds((current) => current.filter((id) => id !== template.id));
+              }}
+            />
+          </div>
         ))}
       </div>
     </div>
