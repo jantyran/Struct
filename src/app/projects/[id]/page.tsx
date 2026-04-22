@@ -22,6 +22,14 @@ function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   };
 }
 
+function PencilIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11.5 2.5 13.5 4.5 5.5 12.5 2.5 13.5 3.5 10.5Z" />
+    </svg>
+  );
+}
+
 function parseUrlFieldValue(raw: string): { label: string; url: string } {
   if (!raw) return { label: '', url: '' };
   try {
@@ -244,11 +252,11 @@ function UrlFieldInput({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="shrink-0 text-xs px-1.5 py-0.5 rounded transition-colors"
+        className="shrink-0 flex items-center px-1 py-0.5 rounded transition-colors hover:opacity-70"
         style={{ color: 'var(--text-muted)' }}
         title="編集"
       >
-        ✏
+        <PencilIcon />
       </button>
     </div>
   );
@@ -520,49 +528,50 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
           onChange({ ...field, value: JSON.stringify(groupListValue.filter((_, i) => i !== idx)) });
         }
         return (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="field-label mb-0">リスト</label>
+          <div className="space-y-1.5">
+            <div className="flex justify-end">
               <button type="button" className="btn-secondary text-xs py-1 px-3" onClick={addListItem}>+ 追加</button>
             </div>
-            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
-              {groupListValue.length === 0 ? (
-                <p className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目はありません。+ 追加で作成してください。</p>
-              ) : groupListValue.map((item, itemIndex) => {
-                if (!singleTemplate) return null;
-                const childField = buildChildField(singleTemplate, item[singleTemplate.id] ?? item[singleTemplate.key], field.inherited);
-                function updateListValue(v: string) {
-                  const nextItems = [...groupListValue];
-                  nextItems[itemIndex] = { ...nextItems[itemIndex], [singleTemplate.id]: { value: v, options: singleTemplate.options } };
-                  onChange({ ...field, value: JSON.stringify(nextItems) });
-                }
-                return (
-                  <div key={`${field.id}-${itemIndex}`} className="flex items-center gap-2 px-4 py-2 border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex-1 min-w-0">
-                      {singleTemplate.type === 'url' ? (
-                        <UrlFieldInput value={childField.value} onChange={updateListValue} />
-                      ) : singleTemplate.type === 'select' ? (
-                        <select className="field-input text-xs w-full" value={childField.value} onChange={(e) => updateListValue(e.target.value)}>
-                          <option value="">（選択）</option>
-                          {(parseFieldOptions(singleTemplate.options).choices ?? []).map((opt) => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          className="field-input text-xs w-full"
-                          type={singleTemplate.type === 'date' ? 'date' : singleTemplate.type === 'number' ? 'number' : 'text'}
-                          value={childField.value}
-                          onChange={(e) => updateListValue(e.target.value)}
-                          placeholder={singleTemplate.label || '値を入力'}
-                        />
-                      )}
+            {groupListValue.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目はありません。</p>
+            ) : (
+              <div className="space-y-1">
+                {groupListValue.map((item, itemIndex) => {
+                  if (!singleTemplate) return null;
+                  const childField = buildChildField(singleTemplate, item[singleTemplate.id] ?? item[singleTemplate.key], field.inherited);
+                  function updateListValue(v: string) {
+                    const nextItems = [...groupListValue];
+                    nextItems[itemIndex] = { ...nextItems[itemIndex], [singleTemplate.id]: { value: v, options: singleTemplate.options } };
+                    onChange({ ...field, value: JSON.stringify(nextItems) });
+                  }
+                  return (
+                    <div key={`${field.id}-${itemIndex}`} className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        {singleTemplate.type === 'url' ? (
+                          <UrlFieldInput value={childField.value} onChange={updateListValue} />
+                        ) : singleTemplate.type === 'select' ? (
+                          <select className="field-input text-xs w-full" value={childField.value} onChange={(e) => updateListValue(e.target.value)}>
+                            <option value="">（選択）</option>
+                            {(parseFieldOptions(singleTemplate.options).choices ?? []).map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            className="field-input text-xs w-full"
+                            type={singleTemplate.type === 'date' ? 'date' : singleTemplate.type === 'number' ? 'number' : 'text'}
+                            value={childField.value}
+                            onChange={(e) => updateListValue(e.target.value)}
+                            placeholder={singleTemplate.label || '値を入力'}
+                          />
+                        )}
+                      </div>
+                      <button type="button" className="shrink-0 text-[0.625rem] px-1 py-0.5 rounded transition-colors hover:opacity-70" style={{ color: 'var(--text-muted)' }} onClick={() => deleteListItem(itemIndex)}>✕</button>
                     </div>
-                    <button type="button" className="shrink-0 text-[0.625rem] px-1.5 py-0.5 rounded transition-colors hover:opacity-70" style={{ color: 'var(--text-muted)' }} onClick={() => deleteListItem(itemIndex)}>✕</button>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })()}
@@ -580,8 +589,7 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
         }
         return (
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <label className="field-label mb-0">グループ一覧</label>
+            <div className="flex justify-end">
               <button type="button" className="btn-secondary text-xs py-1 px-3" onClick={addGroupItem}>+ 追加</button>
             </div>
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
@@ -2338,7 +2346,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       <div className="shrink-0">
         {renderPaneTabs(currentTab, pane)}
       </div>
-      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pt-6 space-y-6">
+      <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pt-6 pr-3 space-y-6">
         {renderTabContent(currentTab, pane)}
       </div>
     </div>
@@ -2363,7 +2371,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       {/* ヘッダー */}
       <div className="border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, #ffffff 0%, rgba(241,250,252,0.95) 100%)' }}>
         {/* 1行: 戻る | タイトル + バッジ類 | ステータス + 保存 + 削除 */}
@@ -2568,11 +2576,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       
       {/* 本体 */}
       <div className="flex-1 flex overflow-hidden min-h-0 min-w-0">
-        <div className="flex-1 min-h-0 min-w-0 overflow-hidden p-6">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden p-6 flex flex-col">
           {splitView ? (
-            <div className="h-full min-h-0">
+            <div className="h-full min-h-0 flex flex-col">
               <div className="hidden xl:flex h-full min-h-0">
-                <div className="min-w-0 pr-4" style={{ flex: splitRatio }}>
+                <div className="min-h-0 min-w-0 pr-4 flex flex-col" style={{ flex: splitRatio }}>
                   {renderPane(primaryTab, 'primary')}
                 </div>
                 <div className="shrink-0 flex items-stretch">
@@ -2589,7 +2597,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     />
                   </button>
                 </div>
-                <div className="min-w-0 pl-4" style={{ flex: 1 - splitRatio }}>
+                <div className="min-h-0 min-w-0 pl-4 flex flex-col" style={{ flex: 1 - splitRatio }}>
                   {renderPane(secondaryTab, 'secondary')}
                 </div>
               </div>
