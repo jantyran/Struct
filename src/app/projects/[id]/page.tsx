@@ -610,6 +610,103 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
 }
 
 // ============================================================
+// ノートピッカーボタン
+// ============================================================
+function NotePickerButton({
+  notes,
+  selectedIds,
+  onChange,
+}: {
+  notes: ProjectNote[];
+  selectedIds: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const count = selectedIds.size;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-colors"
+        style={{
+          borderColor: count > 0 ? 'var(--accent)' : 'var(--border)',
+          color: count > 0 ? 'var(--accent)' : 'var(--text-secondary)',
+          backgroundColor: count > 0 ? 'rgba(15,154,177,0.06)' : 'transparent',
+        }}
+      >
+        <span>📎 参照ノート</span>
+        {count > 0 && (
+          <span className="px-1.5 py-0.5 rounded-full text-[0.625rem] font-semibold" style={{ backgroundColor: 'var(--accent)', color: 'white' }}>
+            {count}
+          </span>
+        )}
+        <span style={{ color: 'var(--text-muted)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-50 left-0 mt-1 w-72 rounded-xl border shadow-lg overflow-hidden"
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
+        >
+          <div className="px-3 py-2 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>参照するノートを選択</span>
+            {count > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange(new Set())}
+                className="text-[0.625rem] transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                すべて解除
+              </button>
+            )}
+          </div>
+          {notes.length === 0 ? (
+            <p className="px-3 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>ノートがありません</p>
+          ) : (
+            <div className="max-h-52 overflow-y-auto">
+              {notes.map((note) => (
+                <label
+                  key={note.id}
+                  className="flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-colors hover:bg-[rgba(15,154,177,0.04)]"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 shrink-0 accent-cyan-600"
+                    checked={selectedIds.has(note.id)}
+                    onChange={(e) => {
+                      const next = new Set(selectedIds);
+                      if (e.target.checked) next.add(note.id); else next.delete(note.id);
+                      onChange(next);
+                    }}
+                  />
+                  <span className="text-xs leading-tight truncate" style={{ color: 'var(--text-primary)' }}>
+                    {note.title || '（無題）'}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // 生成アセット表示
 // ============================================================
 function AssetCard({
@@ -951,6 +1048,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [completionRawSnippet, setCompletionRawSnippet] = useState('');
   const [completionAdditionalInstruction, setCompletionAdditionalInstruction] = useState('');
   const [completionSelectedNoteIds, setCompletionSelectedNoteIds] = useState<Set<string>>(new Set());
+  const [generateSelectedNoteIds, setGenerateSelectedNoteIds] = useState<Set<string>>(new Set());
   const [selectedContentKeys, setSelectedContentKeys] = useState<AssetType[]>([]);
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
@@ -1284,7 +1382,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       const res = await fetch(withBasePath(`/api/projects/${id}/generate`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset_types: selectedContentKeys, additional_instruction: additionalGenerationInstruction }),
+        body: JSON.stringify({ asset_types: selectedContentKeys, additional_instruction: additionalGenerationInstruction, note_ids: Array.from(generateSelectedNoteIds) }),
       });
       const payload = await res.json();
       if (!res.ok) {
@@ -2403,15 +2501,24 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               ) : `選択中の ${selectedContentKeys.length} 件を生成`}
           </button>
 
-          <div>
-            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
-            <textarea
-              className="field-input text-xs"
-              rows={4}
-              value={additionalGenerationInstruction}
-              onChange={(e) => setAdditionalGenerationInstruction(e.target.value)}
-              placeholder="今回だけ反映したい条件や補足があれば入力"
-            />
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
+              <textarea
+                className="field-input text-xs"
+                rows={4}
+                value={additionalGenerationInstruction}
+                onChange={(e) => setAdditionalGenerationInstruction(e.target.value)}
+                placeholder="今回だけ反映したい条件や補足があれば入力"
+              />
+            </div>
+            {canViewNotes && notes.length > 0 && (
+              <NotePickerButton
+                notes={notes}
+                selectedIds={generateSelectedNoteIds}
+                onChange={setGenerateSelectedNoteIds}
+              />
+            )}
           </div>
 
           {canGenerateContent && <div className="border-t pt-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
@@ -2430,28 +2537,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             </div>
 
             {canViewNotes && notes.length > 0 && (
-              <div>
-                <p className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>参照するノート（任意）</p>
-                <div className="space-y-1 max-h-36 overflow-y-auto">
-                  {notes.map((note) => (
-                    <label key={note.id} className="flex items-start gap-2 cursor-pointer text-xs py-1">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 shrink-0"
-                        checked={completionSelectedNoteIds.has(note.id)}
-                        onChange={(e) => {
-                          setCompletionSelectedNoteIds((prev) => {
-                            const next = new Set(prev);
-                            if (e.target.checked) next.add(note.id); else next.delete(note.id);
-                            return next;
-                          });
-                        }}
-                      />
-                      <span className="leading-tight" style={{ color: 'var(--text-primary)' }}>{note.title || '無題'}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <NotePickerButton
+                notes={notes}
+                selectedIds={completionSelectedNoteIds}
+                onChange={setCompletionSelectedNoteIds}
+              />
             )}
 
             <button onClick={complete} disabled={completing} className="btn-secondary w-full justify-center text-sm">

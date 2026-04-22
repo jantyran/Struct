@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: Params) {
 
   try {
     const db = getDb();
-    const body = await request.json() as { asset_types: AssetType[]; additional_instruction?: string };
+    const body = await request.json() as { asset_types: AssetType[]; additional_instruction?: string; note_ids?: string[] };
 
     if (!body.asset_types?.length) {
       return NextResponse.json({ error: 'asset_types が必要です' }, { status: 400 });
@@ -42,8 +42,12 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
     }
 
+    const noteIds: string[] = body.note_ids ?? [];
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
-    const notes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];
+    const allNotes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];
+    const notes = noteIds.length > 0
+      ? allNotes.filter((n: any) => noteIds.includes(n.id))
+      : allNotes;
     const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as any[];
 
     const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
