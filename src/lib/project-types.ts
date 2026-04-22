@@ -97,6 +97,29 @@ export const BUILTIN_FIELD_TEMPLATES: ProjectFieldTemplate[] = [
     is_builtin: true,
     section: '基本情報',
   },
+  {
+    id: '_builtin_related_links',
+    key: 'related_links',
+    label: '関連リンク',
+    type: 'list',
+    options: JSON.stringify({
+      children: [
+        {
+          id: '_builtin_related_links_item',
+          key: 'related_link',
+          label: 'リンク',
+          type: 'url',
+          options: '{}',
+          layout: 'full',
+          is_builtin: true,
+          section: '基本情報',
+        },
+      ],
+    }),
+    layout: 'full',
+    is_builtin: true,
+    section: '基本情報',
+  },
 ];
 
 const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'field_templates' | 'sections'>[] = [
