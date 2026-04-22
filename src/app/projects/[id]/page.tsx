@@ -273,6 +273,17 @@ function ChildFieldValueInput({
   const groupListValue = parseGroupListValue(field.value);
   const [viewingRecord, setViewingRecord] = useState<GlobalAssetObject['records'][number] | null>(null);
 
+  if (field.type === 'url') {
+    return (
+      <div className={field.layout === 'full' ? 'md:col-span-2' : ''}>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>{field.label}</span>
+          <UrlFieldInput value={field.value} onChange={(v) => onChange({ ...field, value: v })} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={field.layout === 'full' ? 'md:col-span-2' : ''}>
       {viewingRecord && referenceObject && (
@@ -396,11 +407,6 @@ function ChildFieldValueInput({
               type="number"
               value={field.value}
               onChange={(e) => onChange({ ...field, value: e.target.value })}
-            />
-          ) : field.type === 'url' ? (
-            <UrlFieldInput
-              value={field.value}
-              onChange={(v) => onChange({ ...field, value: v })}
             />
           ) : (
             <input
@@ -530,9 +536,15 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
             groupListValue.map((item, itemIndex) => {
               const summary = childTemplates
                 .slice(0, 2)
-                .map((childTemplate) => (item[childTemplate.id] ?? item[childTemplate.key])?.value)
-                .filter((value): value is string => Boolean(value))
-                .join(' / ');
+                .map((childTemplate) => {
+                  const raw = (item[childTemplate.id] ?? item[childTemplate.key])?.value;
+                  if (!raw) return null;
+                  const { label, url } = parseUrlFieldValue(raw);
+                  if (url) return label || url;
+                  return raw;
+                })
+                .filter((v): v is string => Boolean(v))
+                .join(' · ');
               return (
                 <details key={`${field.id}-${itemIndex}`} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
                   <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-3">
