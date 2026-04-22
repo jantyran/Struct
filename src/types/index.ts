@@ -397,5 +397,5 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   reference: '参照',
   reference_multi: '複数参照',
   group: 'グループ',
-  group_list: '繰り返しグループ',
+  group_list: '繰り返し',
 };
