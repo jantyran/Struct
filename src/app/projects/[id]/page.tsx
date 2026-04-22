@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
@@ -1038,6 +1038,29 @@ function SectionInfoWidget({
   members,
   onNotesTabClick,
   onTasksTabClick,
+  currentContentTemplates,
+  canViewContent,
+  canGenerateContent,
+  generating,
+  selectedContentKeys,
+  setSelectedContentKeys,
+  generate,
+  additionalGenerationInstruction,
+  setAdditionalGenerationInstruction,
+  canViewNotes,
+  generateSelectedNoteIds,
+  setGenerateSelectedNoteIds,
+  completionAdditionalInstruction,
+  setCompletionAdditionalInstruction,
+  completionSelectedNoteIds,
+  setCompletionSelectedNoteIds,
+  complete,
+  completing,
+  completionMessage,
+  completionRawSnippet,
+  aiError,
+  inheritedCount,
+  router,
 }: {
   kind: string;
   layout: 'half' | 'full';
@@ -1051,6 +1074,29 @@ function SectionInfoWidget({
   members?: import('@/types').ProjectUser[];
   onNotesTabClick?: () => void;
   onTasksTabClick?: () => void;
+  currentContentTemplates?: ProjectContentTemplate[];
+  canViewContent?: boolean;
+  canGenerateContent?: boolean;
+  generating?: boolean;
+  selectedContentKeys?: AssetType[];
+  setSelectedContentKeys?: (next: AssetType[] | ((current: AssetType[]) => AssetType[])) => void;
+  generate?: () => void;
+  additionalGenerationInstruction?: string;
+  setAdditionalGenerationInstruction?: (next: string | ((current: string) => string)) => void;
+  canViewNotes?: boolean;
+  generateSelectedNoteIds?: Set<string>;
+  setGenerateSelectedNoteIds?: (next: Set<string>) => void;
+  completionAdditionalInstruction?: string;
+  setCompletionAdditionalInstruction?: (next: string | ((current: string) => string)) => void;
+  completionSelectedNoteIds?: Set<string>;
+  setCompletionSelectedNoteIds?: (next: Set<string>) => void;
+  complete?: () => void;
+  completing?: boolean;
+  completionMessage?: string;
+  completionRawSnippet?: string;
+  aiError?: string;
+  inheritedCount?: number;
+  router?: ReturnType<typeof useRouter>;
 }) {
   const colClass = layout === 'full' ? 'col-span-2' : '';
 
@@ -1222,6 +1268,216 @@ function SectionInfoWidget({
     );
   }
 
+  if (kind === 'ai_tools') {
+    const contentTemplates = currentContentTemplates ?? [];
+    const selectedKeys = selectedContentKeys ?? [];
+    return (
+      <div className={`${colClass} rounded-2xl border p-4 space-y-4`} style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
+        <div>
+          <p className="section-title">生成・補完</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>生成・補完・参照スコープをまとめて扱います。</p>
+        </div>
+
+        {canViewContent && (
+          <div>
+            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>生成するコンテンツ</p>
+            <div className="space-y-1.5">
+              {contentTemplates.map((template) => (
+                <label key={template.id} className="flex items-center gap-2.5 cursor-pointer group rounded-xl px-3 py-2 transition-colors bg-white/60 border" style={{ borderColor: 'var(--border)' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedKeys.includes(template.key)}
+                    onChange={e => setSelectedContentKeys?.(prev => e.target.checked ? [...prev, template.key] : prev.filter(t => t !== template.key))}
+                    className="accent-cyan-600"
+                  />
+                  <span className="text-sm transition-colors" style={{ color: selectedKeys.includes(template.key) ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{template.name}</span>
+                </label>
+              ))}
+              {contentTemplates.length === 0 && (
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  このプロジェクト種別には生成コンテンツ定義がありません。設定から追加してください。
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={generate}
+          disabled={generating || selectedKeys.length === 0 || !canGenerateContent}
+          className="btn-primary w-full justify-center py-2.5"
+        >
+          {generating ? (
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 border-2 border-cyan-100 border-t-transparent rounded-full animate-spin" />
+              生成中...
+            </span>
+          ) : `選択中の ${selectedKeys.length} 件を生成`}
+        </button>
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
+            <textarea
+              className="field-input text-xs"
+              rows={4}
+              value={additionalGenerationInstruction ?? ''}
+              onChange={(e) => setAdditionalGenerationInstruction?.(e.target.value)}
+              placeholder="今回だけ反映したい条件や補足があれば入力"
+            />
+          </div>
+          {canViewNotes && notes && notes.length > 0 && generateSelectedNoteIds && setGenerateSelectedNoteIds && (
+            <NotePickerButton
+              notes={notes}
+              selectedIds={generateSelectedNoteIds}
+              onChange={setGenerateSelectedNoteIds}
+            />
+          )}
+        </div>
+
+        {canGenerateContent && (
+          <div className="border-t pt-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>項目自動補完</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力項目の値をAIが推測します</p>
+
+            <div>
+              <p className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
+              <textarea
+                className="field-input text-xs"
+                rows={3}
+                value={completionAdditionalInstruction ?? ''}
+                onChange={(e) => setCompletionAdditionalInstruction?.(e.target.value)}
+                placeholder="補完時に考慮してほしい条件や背景を入力"
+              />
+            </div>
+
+            {canViewNotes && notes && notes.length > 0 && completionSelectedNoteIds && setCompletionSelectedNoteIds && (
+              <NotePickerButton
+                notes={notes}
+                selectedIds={completionSelectedNoteIds}
+                onChange={setCompletionSelectedNoteIds}
+              />
+            )}
+
+            <button onClick={complete} disabled={completing} className="btn-secondary w-full justify-center text-sm">
+              {completing ? (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--text-muted)', borderTopColor: 'transparent' }} />
+                  分析中...
+                </span>
+              ) : 'AI補完を実行'}
+            </button>
+            {completionMessage && (
+              <div className="p-3 rounded-xl border text-xs space-y-2" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
+                <p>{completionMessage}</p>
+                {completionRawSnippet && (
+                  <details>
+                    <summary className="cursor-pointer" style={{ color: '#9a3030' }}>AIの生の応答を見る</summary>
+                    <pre className="mt-2 whitespace-pre-wrap break-all text-[0.625rem] leading-relaxed" style={{ color: '#7a2020' }}>{completionRawSnippet}</pre>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {aiError && (
+          <div className="p-3 rounded-xl border" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
+            <p className="text-xs font-semibold">AI実行エラー</p>
+            <p className="text-xs mt-1">{aiError}</p>
+            <button onClick={() => router?.push(withBasePath('/settings/ai'))} className="text-xs mt-2 transition-colors" style={{ color: 'var(--accent)' }}>
+              AI設定を開く →
+            </button>
+          </div>
+        )}
+
+        <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs mb-2 section-title">AIへの参照スコープ</p>
+          <ul className="text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
+            <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> マスターデータ</li>
+            <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> プロジェクトコア情報</li>
+            <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.length > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
+              {project.custom_fields.length > 0 ? '✓' : '−'}
+            </span> 項目 ({project.custom_fields.length}件)</li>
+            <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.some(f => f.crawled_content) ? 'var(--success)' : 'var(--text-muted)' }}>
+              {project.custom_fields.some(f => f.crawled_content) ? '✓' : '−'}
+            </span> クロール済みURL</li>
+          </ul>
+        </div>
+
+        {(inheritedCount ?? 0) > 0 && (
+          <div className="p-3 rounded-xl border" style={{ backgroundColor: 'rgba(255, 243, 224, 0.8)', borderColor: 'rgba(215,138,29,0.25)' }}>
+            <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>⚠ 継承項目あり</p>
+            <p className="text-xs mt-1" style={{ color: '#9a6213' }}>{inheritedCount}件の項目が前回施策から継承されています。生成前に確認を推奨します。</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function DecorationPlacement({ item, layout = 'full' }: { item: SidebarTabDefinition['items'][number]; layout?: 'half' | 'full' }) {
+  const colClass = layout === 'full' ? 'col-span-2' : '';
+  const kind = item.kind ?? 'field';
+
+  if (kind === 'divider') {
+    return (
+      <div className={`${colClass} py-1`}>
+        <div className="h-px w-full" style={{ backgroundColor: 'var(--border)' }} />
+      </div>
+    );
+  }
+
+  if (kind === 'spacer') {
+    return <div className={`${colClass} h-4`} aria-hidden="true" />;
+  }
+
+  if (kind === 'subheading') {
+    return (
+      <div className={`${colClass} pt-1`}>
+        <p className="text-sm font-semibold tracking-[0.08em]" style={{ color: 'var(--text-secondary)' }}>
+          {item.config?.title?.trim() || '小見出し'}
+        </p>
+      </div>
+    );
+  }
+
+  if (kind === 'label_badge') {
+    return (
+      <div className={`${colClass} pt-1`}>
+        <span
+          className="inline-flex items-center rounded-full px-2.5 py-1 text-[0.6875rem] font-semibold"
+          style={{ backgroundColor: 'rgba(16,185,129,0.1)', color: '#0f8a63', border: '1px solid rgba(16,185,129,0.16)' }}
+        >
+          {item.config?.title?.trim() || 'ラベル'}
+        </span>
+      </div>
+    );
+  }
+
+  if (kind === 'text_block') {
+    return (
+      <div className={`${colClass} rounded-xl px-3 py-2`} style={{ backgroundColor: 'rgba(255,255,255,0.48)', color: 'var(--text-secondary)' }}>
+        <p className="text-xs whitespace-pre-wrap leading-relaxed">
+          {item.config?.body?.trim() || '補足テキスト'}
+        </p>
+      </div>
+    );
+  }
+
+  if (kind === 'callout') {
+    return (
+      <div className={`${colClass} rounded-xl px-3 py-2.5`} style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.16)' }}>
+        <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>{item.config?.title?.trim() || '案内'}</p>
+        <p className="text-xs mt-1 whitespace-pre-wrap leading-relaxed" style={{ color: '#8a6215' }}>
+          {item.config?.body?.trim() || '補足や注意を書けます。'}
+        </p>
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -1265,6 +1521,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [splitView, setSplitView] = useState(false);
   const [secondaryTab, setSecondaryTab] = useState<ProjectDetailTabKey>('notes');
   const [splitRatio, setSplitRatio] = useState(0.5);
+  const [activeSidebarTabId, setActiveSidebarTabId] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const paneTabHeaderRefs = useRef<{ primary: HTMLDivElement | null; secondary: HTMLDivElement | null }>({ primary: null, secondary: null });
+  const paneTabListRefs = useRef<{ primary: HTMLDivElement | null; secondary: HTMLDivElement | null }>({ primary: null, secondary: null });
+  const [compactPaneTabs, setCompactPaneTabs] = useState<{ primary: boolean; secondary: boolean }>({ primary: false, secondary: false });
   const [loadError, setLoadError] = useState<string>('');
   const [aiError, setAiError] = useState('');
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
@@ -1419,17 +1680,82 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     [projectTypes, project?.type]
   );
 
+  const currentSidebarTabs = useMemo(
+    () => currentProjectType?.sidebar_tabs ?? [],
+    [currentProjectType]
+  );
+
   const hasInlineNoteWidget = useMemo(
-    () => (currentProjectType?.sections ?? []).some((section) => section.items.some((item) => (item.kind ?? 'field') === 'note_list')),
+    () =>
+      (currentProjectType?.sections ?? []).some((section) => section.items.some((item) => (item.kind ?? 'field') === 'note_list')) ||
+      (currentProjectType?.sidebar_tabs ?? []).some((tab) => tab.items.some((item) => (item.kind ?? 'field') === 'note_list')),
     [currentProjectType]
   );
 
   const hasInlineTodoWidget = useMemo(
-    () => (currentProjectType?.sections ?? []).some((section) =>
-      section.items.some((item) => item.kind === 'todo_list' || item.kind === 'todo_summary')
-    ),
+    () =>
+      (currentProjectType?.sections ?? []).some((section) =>
+        section.items.some((item) => item.kind === 'todo_list' || item.kind === 'todo_summary')
+      ) ||
+      (currentProjectType?.sidebar_tabs ?? []).some((tab) =>
+        tab.items.some((item) => item.kind === 'todo_list' || item.kind === 'todo_summary')
+      ),
     [currentProjectType]
   );
+
+  useEffect(() => {
+    if (currentSidebarTabs.length === 0) {
+      setActiveSidebarTabId('');
+      return;
+    }
+    if (!currentSidebarTabs.some((tab) => tab.id === activeSidebarTabId)) {
+      setActiveSidebarTabId(currentSidebarTabs[0]?.id ?? '');
+    }
+  }, [activeSidebarTabId, currentSidebarTabs]);
+
+  useEffect(() => {
+    if (!splitView || typeof ResizeObserver === 'undefined') {
+      setCompactPaneTabs({ primary: false, secondary: false });
+      return;
+    }
+
+    const updateCompactState = () => {
+      setCompactPaneTabs((current) => {
+        let changed = false;
+        const next = { ...current };
+
+        (['primary', 'secondary'] as const).forEach((pane) => {
+          const listEl = paneTabListRefs.current[pane];
+          if (!listEl) {
+            if (next[pane] !== false) {
+              next[pane] = false;
+              changed = true;
+            }
+            return;
+          }
+          const compact = listEl.scrollWidth > listEl.clientWidth + 4;
+          if (next[pane] !== compact) {
+            next[pane] = compact;
+            changed = true;
+          }
+        });
+
+        return changed ? next : current;
+      });
+    };
+
+    const observer = new ResizeObserver(() => {
+      updateCompactState();
+    });
+
+    const primaryEl = paneTabHeaderRefs.current.primary;
+    const secondaryEl = paneTabHeaderRefs.current.secondary;
+    if (primaryEl) observer.observe(primaryEl);
+    if (secondaryEl) observer.observe(secondaryEl);
+    updateCompactState();
+
+    return () => observer.disconnect();
+  }, [splitView]);
 
   useEffect(() => {
     const currentType = projectTypes.find((definition) => definition.key === project?.type);
@@ -2200,7 +2526,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           {(() => {
             type RenderItem =
               | { type: 'field'; field: CustomField; layout: string; key: string }
-              | { type: 'widget'; kind: string; layout: string; key: string };
+              | { type: 'widget'; kind: string; layout: string; key: string; config?: { title?: string; body?: string } };
 
             const renderSection = (
               secId: string,
@@ -2225,6 +2551,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       <div className="px-5 pb-5 grid grid-cols-2 gap-4">
                         {renderItems.map(item => {
                           if (item.type === 'widget') {
+                            if (item.kind === 'divider' || item.kind === 'subheading' || item.kind === 'text_block') {
+                              return <DecorationPlacement key={item.key} item={{ id: item.key, field_id: '', kind: item.kind as any, layout: item.layout as any, config: item.config }} layout={item.layout as 'half' | 'full'} />;
+                            }
                             return (
                               <SectionInfoWidget
                                 key={item.key}
@@ -2240,6 +2569,29 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                 members={assignableUsers}
                                 onNotesTabClick={() => setPaneTab(pane, 'notes')}
                                 onTasksTabClick={() => setPaneTab(pane, 'tasks')}
+                                currentContentTemplates={currentContentTemplates}
+                                canViewContent={canViewContent}
+                                canGenerateContent={canGenerateContent}
+                                generating={generating}
+                                selectedContentKeys={selectedContentKeys}
+                                setSelectedContentKeys={setSelectedContentKeys}
+                                generate={generate}
+                                additionalGenerationInstruction={additionalGenerationInstruction}
+                                setAdditionalGenerationInstruction={setAdditionalGenerationInstruction}
+                                canViewNotes={canViewNotes}
+                                generateSelectedNoteIds={generateSelectedNoteIds}
+                                setGenerateSelectedNoteIds={setGenerateSelectedNoteIds}
+                                completionAdditionalInstruction={completionAdditionalInstruction}
+                                setCompletionAdditionalInstruction={setCompletionAdditionalInstruction}
+                                completionSelectedNoteIds={completionSelectedNoteIds}
+                                setCompletionSelectedNoteIds={setCompletionSelectedNoteIds}
+                                complete={complete}
+                                completing={completing}
+                                completionMessage={completionMessage}
+                                completionRawSnippet={completionRawSnippet}
+                                aiError={aiError}
+                                inheritedCount={inheritedCount}
+                                router={router}
                               />
                             );
                           }
@@ -2264,7 +2616,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   const items: RenderItem[] = secDef.items.flatMap((item): RenderItem[] => {
                     const kind = item.kind ?? 'field';
                     if (kind !== 'field') {
-                      return [{ type: 'widget', kind, layout: item.layout, key: item.id }];
+                      return [{ type: 'widget', kind, layout: item.layout, key: item.id, config: item.config }];
                     }
                     const field = fieldByTemplateId.get(item.field_id);
                     if (!field) return [];
@@ -2356,17 +2708,42 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   };
 
   const renderPaneTabs = (currentTab: ProjectDetailTabKey, pane: 'primary' | 'secondary') => (
-    <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex gap-2 flex-wrap">
-        {tabOptions.map((option) => (
-          <button
-            key={`${pane}-${option.k}`}
-            onClick={() => setPaneTab(pane, option.k)}
-            className={`tab-btn${currentTab === option.k ? ' active' : ''}`}
+    <div
+      ref={(node) => { paneTabHeaderRefs.current[pane] = node; }}
+      data-pane={pane}
+      className="flex items-center justify-between gap-3 border-b pb-3"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <div className="min-w-0 flex-1">
+        {splitView && compactPaneTabs[pane] ? (
+          <select
+            className="field-input text-sm max-w-[13rem]"
+            value={currentTab}
+            onChange={(event) => setPaneTab(pane, event.target.value as ProjectDetailTabKey)}
+            aria-label="表示タブを選択"
           >
-            {option.l}
-          </button>
-        ))}
+            {tabOptions.map((option) => (
+              <option key={`${pane}-${option.k}`} value={option.k}>
+                {option.l}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div
+            ref={(node) => { paneTabListRefs.current[pane] = node; }}
+            className="flex gap-2 flex-nowrap overflow-hidden"
+          >
+            {tabOptions.map((option) => (
+              <button
+                key={`${pane}-${option.k}`}
+                onClick={() => setPaneTab(pane, option.k)}
+                className={`tab-btn shrink-0${currentTab === option.k ? ' active' : ''}`}
+              >
+                {option.l}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {!splitView && tabOptions.length > 1 && (
@@ -2401,6 +2778,158 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       </div>
     </div>
   );
+
+  const renderSidebarItem = (item: SidebarTabDefinition['items'][number]) => {
+    const kind = item.kind ?? 'field';
+
+    if (kind !== 'field') {
+      if (kind === 'divider' || kind === 'subheading' || kind === 'text_block') {
+        return <DecorationPlacement key={item.id} item={item} layout="full" />;
+      }
+      return (
+        <SectionInfoWidget
+          key={item.id}
+          kind={kind}
+          layout="full"
+          project={project}
+          projectType={currentProjectType}
+          phases={currentPhases}
+          typeLabel={typeLabel}
+          notes={notes}
+          todos={todos}
+          todosLoading={todosLoading}
+          members={assignableUsers}
+          onNotesTabClick={() => setPrimaryTab('notes')}
+          onTasksTabClick={() => setPrimaryTab('tasks')}
+          currentContentTemplates={currentContentTemplates}
+          canViewContent={canViewContent}
+          canGenerateContent={canGenerateContent}
+          generating={generating}
+          selectedContentKeys={selectedContentKeys}
+          setSelectedContentKeys={setSelectedContentKeys}
+          generate={generate}
+          additionalGenerationInstruction={additionalGenerationInstruction}
+          setAdditionalGenerationInstruction={setAdditionalGenerationInstruction}
+          canViewNotes={canViewNotes}
+          generateSelectedNoteIds={generateSelectedNoteIds}
+          setGenerateSelectedNoteIds={setGenerateSelectedNoteIds}
+          completionAdditionalInstruction={completionAdditionalInstruction}
+          setCompletionAdditionalInstruction={setCompletionAdditionalInstruction}
+          completionSelectedNoteIds={completionSelectedNoteIds}
+          setCompletionSelectedNoteIds={setCompletionSelectedNoteIds}
+          complete={complete}
+          completing={completing}
+          completionMessage={completionMessage}
+          completionRawSnippet={completionRawSnippet}
+          aiError={aiError}
+          inheritedCount={inheritedCount}
+          router={router}
+        />
+      );
+    }
+
+    const field = fieldByTemplateId.get(item.field_id);
+    if (!field) return null;
+    const fieldIndex = fieldIndexById.get(field.id) ?? -1;
+    if (fieldIndex === -1) return null;
+
+    return (
+      <div key={item.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.72)' }}>
+        <CustomFieldRow
+          field={field}
+          globalAssetObjects={globalAssetObjects}
+          onChange={(nextField) => updateField(fieldIndex, nextField)}
+          onCrawl={() => crawlField(field.id)}
+          crawling={crawlingFieldId === field.id}
+          showFieldKeys={false}
+          showFieldTypes={false}
+          showFieldIds={false}
+          showFieldListBorders={devSettings.showFieldListBorders}
+        />
+      </div>
+    );
+  };
+
+  const renderSidebarContent = () => {
+    const activeTab = currentSidebarTabs.find((tab) => tab.id === activeSidebarTabId) ?? currentSidebarTabs[0];
+    if (!activeTab) return null;
+
+    if (!sidebarOpen) {
+      return (
+        <div className="w-10 shrink-0 border-l flex flex-col items-center justify-start pt-4" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="rounded-full border w-7 h-7 inline-flex items-center justify-center transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'rgba(255,255,255,0.82)', boxShadow: '0 8px 18px rgba(44,112,134,0.08)' }}
+            aria-label="サイドバーを開く"
+            title="サイドバーを開く"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-80 shrink-0 border-l flex flex-col min-h-0" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
+        <div className="shrink-0 px-4 pt-3 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-end gap-3">
+            <div className="flex gap-1 flex-1 min-w-0 items-end">
+              {currentSidebarTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveSidebarTabId(tab.id)}
+                  className="shrink-0 rounded-t-xl border border-b-0 px-3 py-2 text-xs font-medium transition-colors relative"
+                  style={{
+                    background: activeTab.id === tab.id
+                      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(241,250,252,0.96) 100%)'
+                      : 'rgba(255,255,255,0.58)',
+                    color: activeTab.id === tab.id ? 'var(--accent)' : 'var(--text-secondary)',
+                    borderColor: activeTab.id === tab.id ? 'rgba(15,154,177,0.22)' : 'rgba(216,231,239,0.95)',
+                    marginBottom: -1,
+                    boxShadow: activeTab.id === tab.id ? '0 -1px 0 rgba(15,154,177,0.04), 0 8px 16px rgba(44,112,134,0.06)' : 'none',
+                  }}
+                >
+                  {tab.name}
+                  {activeTab.id === tab.id && (
+                    <span
+                      className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full"
+                      style={{ backgroundColor: 'var(--accent)' }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="shrink-0 rounded-full border w-7 h-7 inline-flex items-center justify-center transition-colors mb-1"
+              style={{ borderColor: 'rgba(216,231,239,0.95)', color: 'var(--text-secondary)', backgroundColor: 'rgba(255,255,255,0.82)' }}
+              aria-label="サイドバーを閉じる"
+              title="サイドバーを閉じる"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+          {activeTab.items.length === 0 ? (
+            <div className="rounded-xl border border-dashed px-4 py-6 text-center text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              このタブにはまだ項目がありません。プロジェクト設定で追加してください。
+            </div>
+          ) : (
+            activeTab.items.map(renderSidebarItem)
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const startSplitResize = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -2661,143 +3190,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           )}
         </div>
 
-        {/* 右: AI生成パネル */}
-        <div className="w-80 shrink-0 border-l overflow-y-auto p-5 space-y-5" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
-          <h2 className="section-title">コンテンツ生成</h2>
-
-          {/* 生成コンテンツ選択 */}
-          {canViewContent && <div>
-            <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>生成するコンテンツ</p>
-            <div className="space-y-1.5">
-              {currentContentTemplates.map((template) => (
-                <label key={template.id} className="flex items-center gap-2.5 cursor-pointer group rounded-xl px-3 py-2 transition-colors bg-white/60 border" style={{ borderColor: 'var(--border)' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedContentKeys.includes(template.key)}
-                    onChange={e => setSelectedContentKeys(prev => e.target.checked ? [...prev, template.key] : prev.filter(t => t !== template.key))}
-                    className="accent-cyan-600"
-                  />
-                  <span className="text-sm transition-colors" style={{ color: selectedContentKeys.includes(template.key) ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{template.name}</span>
-                </label>
-              ))}
-              {currentContentTemplates.length === 0 && (
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  このプロジェクト種別には生成コンテンツ定義がありません。設定から追加してください。
-                </div>
-              )}
-            </div>
-          </div>}
-
-          {/* 生成ボタン */}
-          <button
-            onClick={generate}
-            disabled={generating || selectedContentKeys.length === 0 || !canGenerateContent}
-            className="btn-primary w-full justify-center py-2.5"
-          >
-              {generating ? (
-                <span className="flex items-center gap-2">
-                  <span className="inline-block w-3 h-3 border-2 border-cyan-100 border-t-transparent rounded-full animate-spin" />
-                  生成中...
-                </span>
-              ) : `選択中の ${selectedContentKeys.length} 件を生成`}
-          </button>
-
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
-              <textarea
-                className="field-input text-xs"
-                rows={4}
-                value={additionalGenerationInstruction}
-                onChange={(e) => setAdditionalGenerationInstruction(e.target.value)}
-                placeholder="今回だけ反映したい条件や補足があれば入力"
-              />
-            </div>
-            {canViewNotes && notes.length > 0 && (
-              <NotePickerButton
-                notes={notes}
-                selectedIds={generateSelectedNoteIds}
-                onChange={setGenerateSelectedNoteIds}
-              />
-            )}
-          </div>
-
-          {canGenerateContent && <div className="border-t pt-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
-            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>項目自動補完</p>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>既存の情報を元に、未入力項目の値をAIが推測します</p>
-
-            <div>
-              <p className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>追加指示（任意）</p>
-              <textarea
-                className="field-input text-xs"
-                rows={3}
-                value={completionAdditionalInstruction}
-                onChange={(e) => setCompletionAdditionalInstruction(e.target.value)}
-                placeholder="補完時に考慮してほしい条件や背景を入力"
-              />
-            </div>
-
-            {canViewNotes && notes.length > 0 && (
-              <NotePickerButton
-                notes={notes}
-                selectedIds={completionSelectedNoteIds}
-                onChange={setCompletionSelectedNoteIds}
-              />
-            )}
-
-            <button onClick={complete} disabled={completing} className="btn-secondary w-full justify-center text-sm">
-              {completing ? (
-                <span className="flex items-center gap-2">
-                  <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--text-muted)', borderTopColor: 'transparent' }} />
-                  分析中...
-                </span>
-              ) : 'AI補完を実行'}
-            </button>
-            {completionMessage && (
-              <div className="p-3 rounded-xl border text-xs space-y-2" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
-                <p>{completionMessage}</p>
-                {completionRawSnippet && (
-                  <details>
-                    <summary className="cursor-pointer" style={{ color: '#9a3030' }}>AIの生の応答を見る</summary>
-                    <pre className="mt-2 whitespace-pre-wrap break-all text-[0.625rem] leading-relaxed" style={{ color: '#7a2020' }}>{completionRawSnippet}</pre>
-                  </details>
-                )}
-              </div>
-            )}
-          </div>}
-
-          {aiError && (
-            <div className="p-3 rounded-xl border" style={{ borderColor: 'rgba(222,91,91,0.24)', backgroundColor: 'rgba(255,243,243,0.9)', color: '#b34a4a' }}>
-              <p className="text-xs font-semibold">AI実行エラー</p>
-              <p className="text-xs mt-1">{aiError}</p>
-              <button onClick={() => router.push(withBasePath('/settings/ai'))} className="text-xs mt-2 transition-colors" style={{ color: 'var(--accent)' }}>
-                AI設定を開く →
-              </button>
-            </div>
-          )}
-
-          {/* 参照情報サマリー */}
-          <div className="border-t pt-4" style={{ borderColor: 'var(--border)' }}>
-            <p className="text-xs mb-2 section-title">AIへの参照スコープ</p>
-            <ul className="text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
-              <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> マスターデータ</li>
-              <li className="flex items-center gap-1.5"><span style={{ color: 'var(--success)' }}>✓</span> プロジェクトコア情報</li>
-              <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.length > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
-                {project.custom_fields.length > 0 ? '✓' : '−'}
-              </span> 項目 ({project.custom_fields.length}件)</li>
-              <li className="flex items-center gap-1.5"><span style={{ color: project.custom_fields.some(f => f.crawled_content) ? 'var(--success)' : 'var(--text-muted)' }}>
-                {project.custom_fields.some(f => f.crawled_content) ? '✓' : '−'}
-              </span> クロール済みURL</li>
-            </ul>
-          </div>
-
-          {inheritedCount > 0 && (
-            <div className="p-3 rounded-xl border" style={{ backgroundColor: 'rgba(255, 243, 224, 0.8)', borderColor: 'rgba(215,138,29,0.25)' }}>
-              <p className="text-xs font-semibold" style={{ color: '#b66a10' }}>⚠ 継承項目あり</p>
-              <p className="text-xs mt-1" style={{ color: '#9a6213' }}>{inheritedCount}件の項目が前回施策から継承されています。生成前に確認を推奨します。</p>
-            </div>
-          )}
-        </div>
+        {currentSidebarTabs.length > 0 && renderSidebarContent()}
       </div>
     </div>
   );

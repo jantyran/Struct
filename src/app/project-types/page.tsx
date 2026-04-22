@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { FieldLayout, GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement, SectionItemKind } from '@/types';
-import { FIELD_TYPE_LABELS, SECTION_INFO_WIDGETS, WIDGET_FIELD_ID_PREFIX } from '@/types';
+import type { FieldLayout, GlobalAssetObject, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement, SectionItemKind, SidebarTabDefinition } from '@/types';
+import { FIELD_TYPE_LABELS, REPEATABLE_SECTION_ITEM_KINDS, SECTION_DECORATION_PARTS, SECTION_INFO_WIDGETS, WIDGET_FIELD_ID_PREFIX } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
@@ -56,7 +56,7 @@ function createChildTemplate(index: number): ProjectFieldTemplate {
 
 type PlacementDragState = {
   definitionId: string;
-  source: 'palette' | 'section';
+  source: 'palette' | 'section' | 'sidebar';
   fieldId: string;
   placementId?: string;
   sourceSectionId: string | null;
@@ -66,17 +66,31 @@ type PlacementDragState = {
 type DefinitionPanelKey = 'basic' | 'phases' | 'sections' | 'fields' | 'ai_reference' | 'content';
 
 function createSectionItem(fieldId: string, layout: FieldLayout = 'half', kind: SectionItemKind = 'field'): SectionFieldPlacement {
+  const config = kind === 'subheading'
+    ? { title: '小見出し' }
+    : kind === 'text_block'
+      ? { body: '補足テキストを入力' }
+      : kind === 'callout'
+        ? { title: '案内', body: '補足や注意を書けます。' }
+        : kind === 'label_badge'
+          ? { title: 'ラベル' }
+      : undefined;
   return {
     id: uuidv4(),
     field_id: fieldId,
     layout,
     kind,
+    ...(config ? { config } : {}),
   };
 }
 
 /** 情報ウィジェット用の仮想 field_id を返す */
 function widgetFieldId(kind: SectionItemKind): string {
   return `${WIDGET_FIELD_ID_PREFIX}${kind}`;
+}
+
+function isDecorationKind(kind: SectionItemKind): boolean {
+  return REPEATABLE_SECTION_ITEM_KINDS.includes(kind);
 }
 
 function ProjectAIReferenceChecklist({
@@ -159,11 +173,11 @@ function addItemToSection(
 ) {
   return sections.map((section) => {
     if (section.id !== targetSectionId) return section;
-    // 同一セクション内での重複チェック（情報ウィジェットはセクション内1つまで、フィールドはグローバルで1つ）
-    if (section.items.some((item) => item.field_id === fieldId)) return section;
+    // 同一セクション内での重複チェック（パーツは複数可）
+    if (!isDecorationKind(kind) && section.items.some((item) => item.field_id === fieldId)) return section;
     const nextItems = [...section.items];
     const insertAt = typeof targetIndex === 'number' ? Math.max(0, Math.min(targetIndex, nextItems.length)) : nextItems.length;
-    nextItems.splice(insertAt, 0, createSectionItem(fieldId, fallbackLayout, kind));
+    nextItems.splice(insertAt, 0, createSectionItem(fieldId, isDecorationKind(kind) ? 'full' : fallbackLayout, kind));
     return { ...section, items: nextItems };
   });
 }
@@ -232,6 +246,147 @@ function updateSectionItemLayout(sections: SectionDefinition[], sectionId: strin
       items: section.items.map((item) => item.field_id === fieldId ? { ...item, layout } : item),
     };
   });
+}
+
+function addItemToSidebarTab(
+  tabs: SidebarTabDefinition[],
+  fieldId: string,
+  targetTabId: string,
+  targetIndex?: number,
+  kind: SectionItemKind = 'field'
+) {
+  return tabs.map((tab) => {
+    if (tab.id !== targetTabId) return tab;
+    if (!isDecorationKind(kind) && tab.items.some((item) => item.field_id === fieldId)) return tab;
+    const nextItems = [...tab.items];
+    const insertAt = typeof targetIndex === 'number' ? Math.max(0, Math.min(targetIndex, nextItems.length)) : nextItems.length;
+    nextItems.splice(insertAt, 0, createSectionItem(fieldId, 'full', kind));
+    return { ...tab, items: nextItems };
+  });
+}
+
+function movePlacementBetweenSidebarTabs(
+  tabs: SidebarTabDefinition[],
+  placementId: string,
+  targetTabId: string | null,
+  targetIndex?: number
+) {
+  let movedItem: SectionFieldPlacement | null = null;
+  let sourceTabId: string | null = null;
+  let sourceItemIndex = -1;
+
+  tabs.forEach((tab) => {
+    const idx = tab.items.findIndex((item) => item.id === placementId);
+    if (idx !== -1) {
+      sourceTabId = tab.id;
+      sourceItemIndex = idx;
+    }
+  });
+
+  const cleanedTabs = tabs.map((tab) => ({
+    ...tab,
+    items: tab.items.filter((item) => {
+      if (item.id !== placementId) return true;
+      movedItem = item;
+      return false;
+    }),
+  }));
+
+  if (!targetTabId || !movedItem) return cleanedTabs;
+
+  return cleanedTabs.map((tab) => {
+    if (tab.id !== targetTabId) return tab;
+    const nextItems = [...tab.items];
+    let insertAt = typeof targetIndex === 'number' ? targetIndex : nextItems.length;
+    if (sourceTabId === targetTabId && sourceItemIndex !== -1 && sourceItemIndex < insertAt) {
+      insertAt -= 1;
+    }
+    insertAt = Math.max(0, Math.min(insertAt, nextItems.length));
+    nextItems.splice(insertAt, 0, movedItem as SectionFieldPlacement);
+    return { ...tab, items: nextItems };
+  });
+}
+
+function movePlacementToSection(
+  sections: SectionDefinition[],
+  tabs: SidebarTabDefinition[],
+  placementId: string,
+  targetSectionId: string,
+  targetIndex?: number
+) {
+  let movedItem: SectionFieldPlacement | null = null;
+
+  const nextSections = sections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => {
+      if (item.id !== placementId) return true;
+      movedItem = item;
+      return false;
+    }),
+  }));
+
+  const nextTabs = tabs.map((tab) => ({
+    ...tab,
+    items: tab.items.filter((item) => {
+      if (item.id !== placementId) return true;
+      movedItem = item;
+      return false;
+    }),
+  }));
+
+  if (!movedItem) return { sections, tabs };
+
+  return {
+    sections: nextSections.map((section) => {
+      if (section.id !== targetSectionId) return section;
+      const nextItems = [...section.items];
+      const insertAt = typeof targetIndex === 'number' ? Math.max(0, Math.min(targetIndex, nextItems.length)) : nextItems.length;
+      nextItems.splice(insertAt, 0, movedItem as SectionFieldPlacement);
+      return { ...section, items: nextItems };
+    }),
+    tabs: nextTabs,
+  };
+}
+
+function movePlacementToSidebarTab(
+  sections: SectionDefinition[],
+  tabs: SidebarTabDefinition[],
+  placementId: string,
+  targetTabId: string,
+  targetIndex?: number
+) {
+  let movedItem: SectionFieldPlacement | null = null;
+
+  const nextSections = sections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => {
+      if (item.id !== placementId) return true;
+      movedItem = item;
+      return false;
+    }),
+  }));
+
+  const nextTabs = tabs.map((tab) => ({
+    ...tab,
+    items: tab.items.filter((item) => {
+      if (item.id !== placementId) return true;
+      movedItem = item;
+      return false;
+    }),
+  }));
+
+  if (!movedItem) return { sections, tabs };
+
+  return {
+    sections: nextSections,
+    tabs: nextTabs.map((tab) => {
+      if (tab.id !== targetTabId) return tab;
+      const nextItems = [...tab.items];
+      const insertAt = typeof targetIndex === 'number' ? Math.max(0, Math.min(targetIndex, nextItems.length)) : nextItems.length;
+      nextItems.splice(insertAt, 0, movedItem as SectionFieldPlacement);
+      return { ...tab, items: nextItems };
+    }),
+  };
 }
 
 function ChildFieldTemplateRow({
@@ -672,8 +827,6 @@ function PlacementChip({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => { e.stopPropagation(); onDropBefore(); }}
       className={`rounded-xl border transition-all ${compact ? 'px-2.5 py-2' : 'p-3'} ${layout === 'full' ? 'col-span-2' : 'col-span-1'} ${dragging ? 'opacity-60 scale-[0.99]' : ''}`}
       style={{
         borderColor: attached ? `${color}66` : 'rgba(148,163,184,0.45)',
@@ -703,18 +856,20 @@ function PlacementChip({
             </p>
           )}
         </div>
-        {!compact && onLayoutChange && (
+        {!compact && (onLayoutChange || onRemove) && (
           <div className="shrink-0 flex items-start gap-2">
-            <div className="w-24">
-              <select
-                className="field-input text-xs w-full"
-                value={layout}
-                onChange={(e) => onLayoutChange(e.target.value as FieldLayout)}
-              >
-                <option value="half">2列</option>
-                <option value="full">1列</option>
-              </select>
-            </div>
+            {onLayoutChange && (
+              <div className="w-24">
+                <select
+                  className="field-input text-xs w-full"
+                  value={layout}
+                  onChange={(e) => onLayoutChange(e.target.value as FieldLayout)}
+                >
+                  <option value="half">2列</option>
+                  <option value="full">1列</option>
+                </select>
+              </div>
+            )}
             {onRemove && (
               <button
                 type="button"
@@ -741,6 +896,7 @@ const INFO_WIDGET_STYLE: Record<string, { icon: string; color: string }> = {
   todo_list: { icon: '✓', color: '#3b82f6' },
   todo_summary: { icon: '◉', color: '#10b981' },
   member_list: { icon: '👥', color: '#0ea5e9' },
+  ai_tools: { icon: '✦', color: '#0f9ab1' },
 };
 
 function InfoWidgetChip({
@@ -776,8 +932,6 @@ function InfoWidgetChip({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => { e.stopPropagation(); onDropBefore(); }}
       className={`rounded-xl border transition-all ${compact ? 'px-2.5 py-2' : 'p-3'} ${layout === 'full' ? 'col-span-2' : 'col-span-1'} ${dragging ? 'opacity-60 scale-[0.99]' : ''}`}
       style={{
         borderColor: `${color}55`,
@@ -806,18 +960,20 @@ function InfoWidgetChip({
             <p className="text-[0.625rem] mt-1" style={{ color: 'var(--text-muted)' }}>{description}</p>
           )}
         </div>
-        {!compact && onLayoutChange && (
+        {!compact && (onLayoutChange || onRemove) && (
           <div className="shrink-0 flex items-start gap-2">
-            <div className="w-24">
-              <select
-                className="field-input text-xs w-full"
-                value={layout}
-                onChange={(e) => onLayoutChange(e.target.value as FieldLayout)}
-              >
-                <option value="half">2列</option>
-                <option value="full">1列</option>
-              </select>
-            </div>
+            {onLayoutChange && (
+              <div className="w-24">
+                <select
+                  className="field-input text-xs w-full"
+                  value={layout}
+                  onChange={(e) => onLayoutChange(e.target.value as FieldLayout)}
+                >
+                  <option value="half">2列</option>
+                  <option value="full">1列</option>
+                </select>
+              </div>
+            )}
             {onRemove && (
               <button
                 type="button"
@@ -836,58 +992,206 @@ function InfoWidgetChip({
   );
 }
 
+const DECORATION_STYLE: Record<string, { icon: string; color: string }> = {
+  divider: { icon: '—', color: '#94a3b8' },
+  spacer: { icon: '↕', color: '#cbd5e1' },
+  subheading: { icon: 'T', color: '#7c3aed' },
+  text_block: { icon: '¶', color: '#0f9ab1' },
+  callout: { icon: '!', color: '#f59e0b' },
+  label_badge: { icon: '◈', color: '#10b981' },
+};
+
+function DecorationPartChip({
+  item,
+  label,
+  description,
+  color,
+  dragging,
+  compact = false,
+  onDragStart,
+  onDragEnd,
+  onDropBefore,
+  onRemove,
+  onChange,
+}: {
+  item: SectionFieldPlacement;
+  label: string;
+  description: string;
+  color: string;
+  dragging: boolean;
+  compact?: boolean;
+  onDragStart: () => void;
+  onDragEnd?: () => void;
+  onDropBefore: () => void;
+  onRemove?: () => void;
+  onChange?: (item: SectionFieldPlacement) => void;
+}) {
+  const style = DECORATION_STYLE[item.kind ?? 'divider'] ?? { icon: '•', color };
+
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`rounded-xl border transition-all ${compact ? 'px-2.5 py-1.5 inline-flex' : 'p-3'} ${dragging ? 'opacity-60 scale-[0.99]' : ''}`}
+      style={{ borderColor: `${style.color}44`, backgroundColor: `${style.color}10` }}
+    >
+      <div className={`flex ${compact ? 'items-center gap-1.5' : 'items-start justify-between gap-2'} w-full`}>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm cursor-grab select-none shrink-0" style={{ color: 'var(--text-muted)' }}>⋮⋮</span>
+            <span className="text-sm shrink-0 font-semibold" style={{ color: style.color }}>{style.icon}</span>
+            <p className="text-sm font-medium truncate min-w-0" style={{ color: 'var(--text-primary)' }}>{label}</p>
+            {!compact && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-semibold shrink-0" style={{ backgroundColor: `${style.color}18`, color: style.color, border: `1px solid ${style.color}44` }}>
+                パーツ
+              </span>
+            )}
+          </div>
+          {!compact && (
+            <div className="space-y-2 mt-2">
+              {item.kind === 'subheading' && (
+                <input
+                  className="field-input text-xs"
+                  value={item.config?.title ?? ''}
+                  onChange={(e) => onChange?.({ ...item, config: { ...item.config, title: e.target.value } })}
+                  placeholder="小見出し"
+                />
+              )}
+              {item.kind === 'label_badge' && (
+                <input
+                  className="field-input text-xs"
+                  value={item.config?.title ?? ''}
+                  onChange={(e) => onChange?.({ ...item, config: { ...item.config, title: e.target.value } })}
+                  placeholder="ラベル"
+                />
+              )}
+              {item.kind === 'text_block' && (
+                <textarea
+                  className="field-input text-xs"
+                  rows={3}
+                  value={item.config?.body ?? ''}
+                  onChange={(e) => onChange?.({ ...item, config: { ...item.config, body: e.target.value } })}
+                  placeholder="補足テキスト"
+                />
+              )}
+              {item.kind === 'callout' && (
+                <>
+                  <input
+                    className="field-input text-xs"
+                    value={item.config?.title ?? ''}
+                    onChange={(e) => onChange?.({ ...item, config: { ...item.config, title: e.target.value } })}
+                    placeholder="案内タイトル"
+                  />
+                  <textarea
+                    className="field-input text-xs"
+                    rows={3}
+                    value={item.config?.body ?? ''}
+                    onChange={(e) => onChange?.({ ...item, config: { ...item.config, body: e.target.value } })}
+                    placeholder="案内テキスト"
+                  />
+                </>
+              )}
+              {item.kind === 'spacer' && (
+                <p className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{description}</p>
+              )}
+              {item.kind === 'divider' && (
+                <p className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{description}</p>
+              )}
+            </div>
+          )}
+        </div>
+        {!compact && onRemove && (
+          <button type="button" onClick={onRemove} className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors" style={{ color: 'var(--danger)', backgroundColor: 'transparent', border: 'none' }} title="この配置を外す">
+            ×
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DropIndicator({ active }: { active: boolean }) {
+  return (
+    <div
+      className={`pointer-events-none absolute left-2 right-2 z-10 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`}
+      style={{ height: 0 }}
+    >
+      <div className="relative h-0">
+        <div
+          className="absolute left-0 right-0 -top-px rounded-full"
+          style={{ height: 3, backgroundColor: 'var(--accent)' }}
+        />
+        <div
+          className="absolute -left-1 -top-[5px] rounded-full"
+          style={{ width: 10, height: 10, backgroundColor: 'var(--accent)' }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function SectionPlacementPanel({
   section,
   fields,
   draggingPlacement,
-  draggingSection,
+  sectionIndex,
+  totalSections,
   onDropToSection,
   onDropBeforeItem,
   onRemoveItem,
   onDragStart,
   onDragEnd,
   onLayoutChange,
-  onSectionDragStart,
-  onSectionDragEnd,
-  onSectionDrop,
+  onItemChange,
+  onMoveSection,
   onSectionChange,
   onSectionRemove,
 }: {
   section: SectionDefinition;
   fields: ProjectFieldTemplate[];
   draggingPlacement: PlacementDragState | null;
-  draggingSection: boolean;
+  sectionIndex: number;
+  totalSections: number;
   onDropToSection: () => void;
   onDropBeforeItem: (index: number) => void;
   onRemoveItem: (placementId: string) => void;
   onDragStart: (fieldId: string, sourceIndex: number, placementId: string) => void;
   onDragEnd: () => void;
   onLayoutChange: (fieldId: string, layout: FieldLayout) => void;
-  onSectionDragStart: () => void;
-  onSectionDragEnd: () => void;
-  onSectionDrop: () => void;
+  onItemChange: (placementId: string, nextItem: SectionFieldPlacement) => void;
+  onMoveSection: (nextIndex: number) => void;
   onSectionChange: (section: SectionDefinition) => void;
   onSectionRemove: () => void;
 }) {
   const fieldMap = new Map(fields.map((field) => [field.id, field]));
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  function handleItemDragOver(event: React.DragEvent<HTMLDivElement>, itemIndex: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const insertIndex = event.clientY < rect.top + rect.height / 2 ? itemIndex : itemIndex + 1;
+    setHoverIndex(insertIndex);
+  }
+
+  function handleItemDrop(event: React.DragEvent<HTMLDivElement>, itemIndex: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const insertIndex = event.clientY < rect.top + rect.height / 2 ? itemIndex : itemIndex + 1;
+    onDropBeforeItem(insertIndex);
+    setHoverIndex(null);
+  }
 
   return (
     <div
-      draggable
-      onDragStart={onSectionDragStart}
-      onDragEnd={onSectionDragEnd}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        onSectionDrop();
-      }}
-      className={`rounded-xl border p-4 space-y-3 min-h-32 ${draggingSection ? 'opacity-60' : ''}`}
+      className="rounded-xl border p-4 space-y-3 min-h-32 transition-all"
       style={{ borderColor: `${section.color}55`, backgroundColor: `${section.color}10` }}
     >
       <div className="flex items-start justify-between gap-3 pb-3 border-b" style={{ borderColor: `${section.color}33` }}>
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-center cursor-grab select-none shrink-0" style={{ color: 'var(--text-muted)' }}>⋮⋮</span>
+          <div className="flex items-center gap-2 min-w-0">
             <span className="inline-block rounded-full shrink-0" style={{ width: 10, height: 10, backgroundColor: section.color }} />
             <input
               className="field-input text-sm py-1.5"
@@ -910,7 +1214,7 @@ function SectionPlacementPanel({
               <span>{(section.defaultOpen ?? true) ? '▼' : '▶'}</span>
               <span>初期{(section.defaultOpen ?? true) ? '展開' : '折りたたみ'}</span>
             </button>
-            <div className="flex flex-wrap justify-end gap-1.5">
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
               {SECTION_COLOR_PRESETS.map((preset) => (
                 <button
                   key={preset}
@@ -935,20 +1239,45 @@ function SectionPlacementPanel({
                 <span className="text-[0.5625rem]" style={{ color: 'var(--text-muted)' }}>+</span>
                 <input type="color" className="sr-only" value={section.color} onChange={(e) => onSectionChange({ ...section, color: e.target.value })} />
               </label>
+              <div className="ml-1 w-14">
+                <select
+                  className="w-full rounded-md border px-2 py-1 text-[0.6875rem] leading-none"
+                  style={{
+                    borderColor: 'rgba(148,163,184,0.22)',
+                    backgroundColor: 'rgba(255,255,255,0.55)',
+                    color: 'var(--text-muted)',
+                  }}
+                  value={sectionIndex}
+                  onChange={(e) => onMoveSection(Number(e.target.value))}
+                  title="セクション順"
+                >
+                  {Array.from({ length: totalSections }, (_, idx) => (
+                    <option key={idx} value={idx}>
+                      {idx + 1}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
-        <button type="button" onClick={onSectionRemove} className="btn-danger shrink-0">削除</button>
+        <div className="shrink-0 flex items-center">
+          <button type="button" onClick={onSectionRemove} className="btn-danger shrink-0">削除</button>
+        </div>
       </div>
 
       {section.items.length === 0 ? (
         <div
           className="rounded-lg border border-dashed px-3 py-6 text-center text-xs"
           style={{ borderColor: `${section.color}66`, color: 'var(--text-muted)' }}
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setHoverIndex(0);
+          }}
           onDrop={(e) => {
             e.preventDefault();
             onDropToSection();
+            setHoverIndex(null);
           }}
         >
           項目をここへドロップ
@@ -956,54 +1285,298 @@ function SectionPlacementPanel({
       ) : (
         <div
           className="grid grid-cols-1 md:grid-cols-2 gap-2"
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setHoverIndex(section.items.length);
+          }}
           onDrop={(e) => {
             e.preventDefault();
             onDropToSection();
+            setHoverIndex(null);
           }}
         >
           {section.items.map((item, itemIndex) => {
             const itemKind = item.kind ?? 'field';
+            const wrapperClass = isDecorationKind(itemKind) || item.layout === 'full' ? 'col-span-1 md:col-span-2' : 'col-span-1';
 
             if (itemKind !== 'field') {
+              if (isDecorationKind(itemKind)) {
+                const part = SECTION_DECORATION_PARTS.find((entry) => entry.kind === itemKind);
+                if (!part) return null;
+                return (
+                  <div
+                    key={item.id}
+                    className={`relative ${wrapperClass}`}
+                    onDragOver={(e) => handleItemDragOver(e, itemIndex)}
+                    onDrop={(e) => handleItemDrop(e, itemIndex)}
+                  >
+                    <div className="absolute inset-x-0 top-0">
+                      <DropIndicator active={hoverIndex === itemIndex} />
+                    </div>
+                  <DecorationPartChip
+                      item={item}
+                      label={part.label}
+                      description={part.description}
+                      color={section.color}
+                      dragging={draggingPlacement?.source === 'section' && draggingPlacement.placementId === item.id}
+                      onDragStart={() => onDragStart(item.field_id, itemIndex, item.id)}
+                      onDragEnd={onDragEnd}
+                      onDropBefore={() => onDropBeforeItem(itemIndex)}
+                      onRemove={() => onRemoveItem(item.id)}
+                      onChange={(nextItem) => onItemChange(item.id, nextItem)}
+                    />
+                  </div>
+                );
+              }
               const widgetDef = SECTION_INFO_WIDGETS.find((w) => w.kind === itemKind);
               if (!widgetDef) return null;
               return (
-                <InfoWidgetChip
+                <div
                   key={item.id}
-                  kind={itemKind}
-                  label={widgetDef.label}
-                  description={widgetDef.description}
-                  layout={item.layout}
-                  color={section.color}
-                  dragging={draggingPlacement?.source === 'section' && draggingPlacement.placementId === item.id}
-                  onDragStart={() => onDragStart(item.field_id, itemIndex, item.id)}
-                  onDragEnd={onDragEnd}
-                  onDropBefore={() => onDropBeforeItem(itemIndex)}
-                  onLayoutChange={(layout) => onLayoutChange(item.field_id, layout)}
-                  onRemove={() => onRemoveItem(item.id)}
-                />
+                  className={`relative ${wrapperClass}`}
+                  onDragOver={(e) => handleItemDragOver(e, itemIndex)}
+                  onDrop={(e) => handleItemDrop(e, itemIndex)}
+                >
+                  <div className="absolute inset-x-0 top-0">
+                    <DropIndicator active={hoverIndex === itemIndex} />
+                  </div>
+                  <InfoWidgetChip
+                    kind={itemKind}
+                    label={widgetDef.label}
+                    description={widgetDef.description}
+                    layout={item.layout}
+                    color={section.color}
+                    dragging={draggingPlacement?.source === 'section' && draggingPlacement.placementId === item.id}
+                    onDragStart={() => onDragStart(item.field_id, itemIndex, item.id)}
+                    onDragEnd={onDragEnd}
+                    onDropBefore={() => onDropBeforeItem(itemIndex)}
+                    onLayoutChange={(layout) => onLayoutChange(item.field_id, layout)}
+                    onRemove={() => onRemoveItem(item.id)}
+                  />
+                </div>
               );
             }
 
             const field = fieldMap.get(item.field_id);
             if (!field) return null;
             return (
-              <PlacementChip
+              <div
                 key={item.id}
-                field={field}
-                layout={item.layout}
-                color={section.color}
-                attached
-                dragging={draggingPlacement?.source === 'section' && draggingPlacement.placementId === item.id}
-                onDragStart={() => onDragStart(field.id, itemIndex, item.id)}
-                onDragEnd={onDragEnd}
-                onDropBefore={() => onDropBeforeItem(itemIndex)}
-                onLayoutChange={(layout) => onLayoutChange(field.id, layout)}
-                onRemove={() => onRemoveItem(item.id)}
-              />
+                className={`relative ${wrapperClass}`}
+                onDragOver={(e) => handleItemDragOver(e, itemIndex)}
+                onDrop={(e) => handleItemDrop(e, itemIndex)}
+              >
+                <div className="absolute inset-x-0 top-0">
+                  <DropIndicator active={hoverIndex === itemIndex} />
+                </div>
+                <PlacementChip
+                  field={field}
+                  layout={item.layout}
+                  color={section.color}
+                  attached
+                  dragging={draggingPlacement?.source === 'section' && draggingPlacement.placementId === item.id}
+                  onDragStart={() => onDragStart(field.id, itemIndex, item.id)}
+                  onDragEnd={onDragEnd}
+                  onDropBefore={() => onDropBeforeItem(itemIndex)}
+                  onLayoutChange={(layout) => onLayoutChange(field.id, layout)}
+                  onRemove={() => onRemoveItem(item.id)}
+                />
+              </div>
             );
           })}
+          <div className="relative col-span-1 md:col-span-2 h-0">
+            <DropIndicator active={hoverIndex === section.items.length} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SidebarTabPlacementPanel({
+  tab,
+  fields,
+  draggingPlacement,
+  onDropToTab,
+  onDropBeforeItem,
+  onRemoveItem,
+  onDragStart,
+  onDragEnd,
+  onItemChange,
+  onTabChange,
+  onTabRemove,
+}: {
+  tab: SidebarTabDefinition;
+  fields: ProjectFieldTemplate[];
+  draggingPlacement: PlacementDragState | null;
+  onDropToTab: () => void;
+  onDropBeforeItem: (index: number) => void;
+  onRemoveItem: (placementId: string) => void;
+  onDragStart: (fieldId: string, sourceIndex: number, placementId: string) => void;
+  onDragEnd: () => void;
+  onItemChange: (placementId: string, nextItem: SectionFieldPlacement) => void;
+  onTabChange: (tab: SidebarTabDefinition) => void;
+  onTabRemove: () => void;
+}) {
+  const fieldMap = new Map(fields.map((field) => [field.id, field]));
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  function handleItemDragOver(event: React.DragEvent<HTMLDivElement>, itemIndex: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const insertIndex = event.clientY < rect.top + rect.height / 2 ? itemIndex : itemIndex + 1;
+    setHoverIndex(insertIndex);
+  }
+
+  function handleItemDrop(event: React.DragEvent<HTMLDivElement>, itemIndex: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const insertIndex = event.clientY < rect.top + rect.height / 2 ? itemIndex : itemIndex + 1;
+    onDropBeforeItem(insertIndex);
+    setHoverIndex(null);
+  }
+
+  return (
+    <div
+      className="rounded-xl border p-4 space-y-3 min-h-28"
+      style={{ borderColor: 'rgba(15,154,177,0.2)', backgroundColor: 'rgba(255,255,255,0.72)' }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropToTab();
+        setHoverIndex(null);
+      }}
+    >
+      <div className="flex items-start justify-between gap-3 pb-3 border-b" style={{ borderColor: 'rgba(15,154,177,0.12)' }}>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-muted)' }}>サイドバータブ</p>
+          <input
+            className="field-input text-sm py-1.5"
+            value={tab.name}
+            onChange={(e) => onTabChange({ ...tab, name: e.target.value })}
+            placeholder="タブ名"
+          />
+        </div>
+        <button type="button" onClick={onTabRemove} className="btn-danger shrink-0">削除</button>
+      </div>
+
+      {tab.items.length === 0 ? (
+        <div
+          className="rounded-lg border border-dashed px-3 py-5 text-center text-xs"
+          style={{ borderColor: 'rgba(15,154,177,0.18)', color: 'var(--text-muted)' }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setHoverIndex(0);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDropToTab();
+            setHoverIndex(null);
+          }}
+        >
+          項目・情報をここへドロップ
+        </div>
+      ) : (
+        <div
+          className="space-y-2"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setHoverIndex(tab.items.length);
+          }}
+        >
+          {tab.items.map((item, itemIndex) => {
+            const itemKind = item.kind ?? 'field';
+
+            if (itemKind !== 'field') {
+              if (isDecorationKind(itemKind)) {
+                const part = SECTION_DECORATION_PARTS.find((entry) => entry.kind === itemKind);
+                if (!part) return null;
+                return (
+                  <div
+                    key={item.id}
+                    className="relative"
+                    onDragOver={(e) => handleItemDragOver(e, itemIndex)}
+                    onDrop={(e) => handleItemDrop(e, itemIndex)}
+                  >
+                    <div className="absolute inset-x-0 top-0">
+                      <DropIndicator active={hoverIndex === itemIndex} />
+                    </div>
+                    <DecorationPartChip
+                      item={item}
+                      label={part.label}
+                      description={part.description}
+                      color="#0f9ab1"
+                      dragging={draggingPlacement?.source === 'sidebar' && draggingPlacement.placementId === item.id}
+                      onDragStart={() => onDragStart(item.field_id, itemIndex, item.id)}
+                      onDragEnd={onDragEnd}
+                      onDropBefore={() => onDropBeforeItem(itemIndex)}
+                      onRemove={() => onRemoveItem(item.id)}
+                      onChange={(nextItem) => onItemChange(item.id, nextItem)}
+                    />
+                  </div>
+                );
+              }
+              const widgetDef = SECTION_INFO_WIDGETS.find((widget) => widget.kind === itemKind);
+              if (!widgetDef) return null;
+              return (
+                <div
+                  key={item.id}
+                  className="relative"
+                  onDragOver={(e) => handleItemDragOver(e, itemIndex)}
+                  onDrop={(e) => handleItemDrop(e, itemIndex)}
+                >
+                  <div className="absolute inset-x-0 top-0">
+                    <DropIndicator active={hoverIndex === itemIndex} />
+                  </div>
+                  <InfoWidgetChip
+                    kind={itemKind}
+                    label={widgetDef.label}
+                    description={widgetDef.description}
+                    layout="full"
+                    color={(INFO_WIDGET_STYLE[itemKind] ?? { color: '#0f9ab1' }).color}
+                    dragging={draggingPlacement?.source === 'sidebar' && draggingPlacement.placementId === item.id}
+                    onDragStart={() => onDragStart(item.field_id, itemIndex, item.id)}
+                    onDragEnd={onDragEnd}
+                    onDropBefore={() => onDropBeforeItem(itemIndex)}
+                    onRemove={() => onRemoveItem(item.id)}
+                  />
+                </div>
+              );
+            }
+
+            const field = fieldMap.get(item.field_id);
+            if (!field) return null;
+
+            return (
+              <div
+                key={item.id}
+                className="relative"
+                onDragOver={(e) => handleItemDragOver(e, itemIndex)}
+                onDrop={(e) => handleItemDrop(e, itemIndex)}
+              >
+                <div className="absolute inset-x-0 top-0">
+                  <DropIndicator active={hoverIndex === itemIndex} />
+                </div>
+                <PlacementChip
+                  field={field}
+                  layout="full"
+                  color="#0f9ab1"
+                  attached
+                  dragging={draggingPlacement?.source === 'sidebar' && draggingPlacement.placementId === item.id}
+                  onDragStart={() => onDragStart(item.field_id, itemIndex, item.id)}
+                  onDragEnd={onDragEnd}
+                  onDropBefore={() => onDropBeforeItem(itemIndex)}
+                  onRemove={() => onRemoveItem(item.id)}
+                />
+              </div>
+            );
+          })}
+          <div className="relative h-0">
+            <DropIndicator active={hoverIndex === tab.items.length} />
+          </div>
         </div>
       )}
     </div>
@@ -1071,8 +1644,8 @@ export default function ProjectTypesPage() {
   const [closedCustomFieldDefinitionIds, setClosedCustomFieldDefinitionIds] = useState<string[]>([]);
   const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
   const [draggingPhase, setDraggingPhase] = useState<{ definitionId: string; index: number } | null>(null);
-  const [draggingSection, setDraggingSection] = useState<{ definitionId: string; index: number } | null>(null);
   const [draggingPlacement, setDraggingPlacement] = useState<PlacementDragState | null>(null);
+  const dragPointerYRef = useRef<number | null>(null);
   const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
 
   useEffect(() => {
@@ -1116,6 +1689,64 @@ export default function ProjectTypesPage() {
       setOpenDefinitionIds((current) => current.length > 0 ? current : []);
     })();
   }, [authLoading, user, router]);
+
+  useEffect(() => {
+    if (!draggingPlacement && !draggingPhase) {
+      dragPointerYRef.current = null;
+      return;
+    }
+
+    const scrollRoot = document.querySelector('main');
+    if (!(scrollRoot instanceof HTMLElement)) return;
+
+    const threshold = 96;
+    const maxStep = 28;
+    let frameId = 0;
+
+    const handleDragOver = (event: DragEvent) => {
+      dragPointerYRef.current = event.clientY;
+    };
+
+    const clearPointer = () => {
+      dragPointerYRef.current = null;
+    };
+
+    const tick = () => {
+      const pointerY = dragPointerYRef.current;
+
+      if (pointerY !== null) {
+        const rect = scrollRoot.getBoundingClientRect();
+        let delta = 0;
+
+        if (pointerY > rect.bottom - threshold) {
+          const distance = pointerY - (rect.bottom - threshold);
+          delta = Math.min(maxStep, Math.max(8, Math.ceil(distance / 4)));
+        } else if (pointerY < rect.top + threshold) {
+          const distance = rect.top + threshold - pointerY;
+          delta = -Math.min(maxStep, Math.max(8, Math.ceil(distance / 4)));
+        }
+
+        if (delta !== 0) {
+          scrollRoot.scrollTop += delta;
+        }
+      }
+
+      frameId = window.requestAnimationFrame(tick);
+    };
+
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', clearPointer);
+    window.addEventListener('dragend', clearPointer);
+    frameId = window.requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', clearPointer);
+      window.removeEventListener('dragend', clearPointer);
+      window.cancelAnimationFrame(frameId);
+      dragPointerYRef.current = null;
+    };
+  }, [draggingPlacement, draggingPhase]);
 
   async function saveDefinitions(nextDefinitions = definitions) {
     setSaving(true);
@@ -1237,7 +1868,8 @@ export default function ProjectTypesPage() {
   function updateFieldTemplatesAndSections(
     definition: ProjectTypeDefinition,
     nextFieldTemplates: ProjectFieldTemplate[],
-    nextSections?: SectionDefinition[]
+    nextSections?: SectionDefinition[],
+    nextSidebarTabs?: SidebarTabDefinition[]
   ) {
     const validFieldIds = new Set(nextFieldTemplates.map((field) => field.id));
     const sanitizedSections = (nextSections ?? definition.sections).map((section) => ({
@@ -1245,11 +1877,16 @@ export default function ProjectTypesPage() {
       // 情報ウィジェット（kind !== 'field'）はフィールドIDチェックを除外して保持
       items: section.items.filter((item) => (item.kind ?? 'field') !== 'field' || validFieldIds.has(item.field_id)),
     }));
+    const sanitizedSidebarTabs = (nextSidebarTabs ?? definition.sidebar_tabs).map((tab) => ({
+      ...tab,
+      items: tab.items.filter((item) => (item.kind ?? 'field') !== 'field' || validFieldIds.has(item.field_id)),
+    }));
 
     return {
       ...definition,
       field_templates: nextFieldTemplates,
       sections: sanitizedSections,
+      sidebar_tabs: sanitizedSidebarTabs,
     };
   }
 
@@ -1462,15 +2099,31 @@ export default function ProjectTypesPage() {
                   }
                 >
                   {(() => {
-                    const placedFieldIds = extractPlacedFieldIds(definition.sections ?? []);
+                    const sectionFieldIds = extractPlacedFieldIds(definition.sections ?? []);
+                    const sidebarFieldIds = new Set(
+                      (definition.sidebar_tabs ?? []).flatMap((tab) =>
+                        tab.items.filter((item) => (item.kind ?? 'field') === 'field').map((item) => item.field_id)
+                      )
+                    );
+                    const placedFieldIds = new Set([...Array.from(sectionFieldIds), ...Array.from(sidebarFieldIds)]);
                     const unassignedFields = definition.field_templates.filter((field) => !placedFieldIds.has(field.id));
                     const assignedFields = definition.field_templates.filter((field) => placedFieldIds.has(field.id));
+                    const sidebarTabs = definition.sidebar_tabs ?? [];
 
                     // 情報パレット: 配置済みウィジェット種別を収集
                     const placedWidgetKinds = new Set(
-                      (definition.sections ?? []).flatMap((s) =>
-                        s.items.filter((item) => (item.kind ?? 'field') !== 'field').map((item) => item.kind as string)
-                      )
+                      [
+                        ...(definition.sections ?? []).flatMap((s) =>
+                          s.items
+                            .filter((item) => (item.kind ?? 'field') !== 'field' && !isDecorationKind(item.kind ?? 'field'))
+                            .map((item) => item.kind as string)
+                        ),
+                        ...sidebarTabs.flatMap((tab) =>
+                          tab.items
+                            .filter((item) => (item.kind ?? 'field') !== 'field' && !isDecorationKind(item.kind ?? 'field'))
+                            .map((item) => item.kind as string)
+                        ),
+                      ]
                     );
                     const unplacedWidgets = SECTION_INFO_WIDGETS.filter((w) => !placedWidgetKinds.has(w.kind));
                     const placedWidgets = SECTION_INFO_WIDGETS.filter((w) => placedWidgetKinds.has(w.kind));
@@ -1479,10 +2132,194 @@ export default function ProjectTypesPage() {
                       <>
                         {openSectionGuideIds.includes(definition.id) && (
                           <div className="rounded-xl border px-4 py-3 text-xs" style={{ borderColor: 'rgba(15,154,177,0.18)', backgroundColor: 'rgba(15,154,177,0.06)', color: 'var(--text-secondary)' }}>
-                            右の項目パレットから左のセクションへドラッグすると追加されます。左の配置済み項目を別セクションへドラッグすると移動します。
+                            上の項目パレット / 情報パレット / パーツパレットから、左のセクションまたは右のサイドバータブへドラッグして配置します。セクション内・サイドバー内ではドラッグで並び替えできます。
                           </div>
                         )}
-                        {(definition.sections ?? []).length > 0 && (
+                        <div className="grid items-start gap-3 xl:grid-cols-3">
+                          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(148,163,184,0.24)', backgroundColor: 'rgba(248,251,253,0.82)' }}>
+                            <div className="px-3 py-2.5 border-b" style={{ borderColor: 'rgba(148,163,184,0.18)' }}>
+                              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>項目パレット</p>
+                            </div>
+                            <div className="px-3 py-2.5 space-y-2.5">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置項目</p>
+                                <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{unassignedFields.length} 件</span>
+                              </div>
+                              {unassignedFields.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
+                                  未配置なし
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {unassignedFields.map((field) => (
+                                    <PlacementChip
+                                      key={field.id}
+                                      field={field}
+                                      layout={field.layout || 'half'}
+                                      color="#94a3b8"
+                                      attached={false}
+                                      compact
+                                      dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === field.id}
+                                      onDragStart={() => setDraggingPlacement({
+                                        definitionId: definition.id,
+                                        source: 'palette',
+                                        fieldId: field.id,
+                                        sourceSectionId: null,
+                                        sourceIndex: -1,
+                                      })}
+                                      onDragEnd={() => setDraggingPlacement(null)}
+                                      onDropBefore={() => {}}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="border-t px-3 py-2.5 space-y-2.5" style={{ borderColor: 'rgba(148,163,184,0.18)' }}>
+                              <button type="button" onClick={() => toggleAssignedFieldPalette(definition.id)} className="w-full flex items-center justify-between gap-3 text-left">
+                                <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み項目</p>
+                                <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{openAssignedFieldPaletteIds.includes(definition.id) ? '▲' : '▼'}</span>
+                              </button>
+                              {openAssignedFieldPaletteIds.includes(definition.id) && (
+                                assignedFields.length === 0 ? (
+                                  <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
+                                    配置済みなし
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {assignedFields.map((field) => (
+                                      <PlacementChip
+                                        key={`${field.id}-assigned`}
+                                        field={field}
+                                        layout={field.layout || 'half'}
+                                        color="#0f9ab1"
+                                        attached={false}
+                                        compact
+                                        dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === field.id}
+                                        onDragStart={() => setDraggingPlacement({
+                                          definitionId: definition.id,
+                                          source: 'palette',
+                                          fieldId: field.id,
+                                          sourceSectionId: null,
+                                          sourceIndex: -1,
+                                        })}
+                                        onDragEnd={() => setDraggingPlacement(null)}
+                                        onDropBefore={() => {}}
+                                      />
+                                    ))}
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(148,163,184,0.24)', backgroundColor: 'rgba(248,251,253,0.82)' }}>
+                            <div className="px-3 py-2.5 border-b" style={{ borderColor: 'rgba(148,163,184,0.18)' }}>
+                              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>情報パレット</p>
+                            </div>
+                            <div className="px-3 py-2.5 space-y-2.5">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置</p>
+                                <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{unplacedWidgets.length} 件</span>
+                              </div>
+                              {unplacedWidgets.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
+                                  未配置なし
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {unplacedWidgets.map((widget) => (
+                                    <InfoWidgetChip
+                                      key={widget.kind}
+                                      kind={widget.kind}
+                                      label={widget.label}
+                                      description={widget.description}
+                                      layout="half"
+                                      color={(INFO_WIDGET_STYLE[widget.kind] ?? { color: '#64748b' }).color}
+                                      compact
+                                      dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === widgetFieldId(widget.kind)}
+                                      onDragStart={() => setDraggingPlacement({
+                                        definitionId: definition.id,
+                                        source: 'palette',
+                                        fieldId: widgetFieldId(widget.kind),
+                                        sourceSectionId: null,
+                                        sourceIndex: -1,
+                                      })}
+                                      onDragEnd={() => setDraggingPlacement(null)}
+                                      onDropBefore={() => {}}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="border-t px-3 py-2.5 space-y-2.5" style={{ borderColor: 'rgba(148,163,184,0.18)' }}>
+                              <button type="button" onClick={() => toggleAssignedWidgetPalette(definition.id)} className="w-full flex items-center justify-between gap-3 text-left">
+                                <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み</p>
+                                <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{openAssignedWidgetPaletteIds.includes(definition.id) ? '▲' : '▼'}</span>
+                              </button>
+                              {openAssignedWidgetPaletteIds.includes(definition.id) && (
+                                placedWidgets.length === 0 ? (
+                                  <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
+                                    配置済みなし
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {placedWidgets.map((widget) => (
+                                      <InfoWidgetChip
+                                        key={`${widget.kind}-placed`}
+                                        kind={widget.kind}
+                                        label={widget.label}
+                                        description={widget.description}
+                                        layout="half"
+                                        color={(INFO_WIDGET_STYLE[widget.kind] ?? { color: '#64748b' }).color}
+                                        compact
+                                        dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === widgetFieldId(widget.kind)}
+                                        onDragStart={() => setDraggingPlacement({
+                                          definitionId: definition.id,
+                                          source: 'palette',
+                                          fieldId: widgetFieldId(widget.kind),
+                                          sourceSectionId: null,
+                                          sourceIndex: -1,
+                                        })}
+                                        onDragEnd={() => setDraggingPlacement(null)}
+                                        onDropBefore={() => {}}
+                                      />
+                                    ))}
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(148,163,184,0.24)', backgroundColor: 'rgba(248,251,253,0.82)' }}>
+                            <div className="px-3 py-2.5 border-b" style={{ borderColor: 'rgba(148,163,184,0.18)' }}>
+                              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>パーツパレット</p>
+                            </div>
+                            <div className="px-3 py-2.5 flex flex-wrap gap-2">
+                              {SECTION_DECORATION_PARTS.map((part) => (
+                                <DecorationPartChip
+                                  key={part.kind}
+                                  item={{ id: `palette-${part.kind}`, field_id: widgetFieldId(part.kind), kind: part.kind, layout: 'full' }}
+                                  label={part.label}
+                                  description={part.description}
+                                  color="#64748b"
+                                  compact
+                                  dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === widgetFieldId(part.kind)}
+                                  onDragStart={() => setDraggingPlacement({
+                                    definitionId: definition.id,
+                                    source: 'palette',
+                                    fieldId: widgetFieldId(part.kind),
+                                    sourceSectionId: null,
+                                    sourceIndex: -1,
+                                  })}
+                                  onDragEnd={() => setDraggingPlacement(null)}
+                                  onDropBefore={() => {}}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {((definition.sections ?? []).length > 0 || sidebarTabs.length > 0) && (
                           <div className="flex flex-wrap gap-2">
                             {(definition.sections ?? []).map((sec) => (
                               <div key={sec.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium"
@@ -1491,283 +2328,253 @@ export default function ProjectTypesPage() {
                                 {sec.name}
                               </div>
                             ))}
+                            {sidebarTabs.map((tab) => (
+                              <div
+                                key={tab.id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium"
+                                style={{ backgroundColor: 'rgba(15,154,177,0.08)', border: '1px solid rgba(15,154,177,0.2)', color: 'var(--accent)' }}
+                              >
+                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[0.625rem]" style={{ backgroundColor: 'rgba(15,154,177,0.12)' }}>▤</span>
+                                {tab.name}
+                              </div>
+                            ))}
                           </div>
                         )}
-                        {(definition.sections ?? []).length === 0 ? (
-                          <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                            セクションがありません。追加すると配置UIを構成できます。
-                          </div>
-                        ) : (
-                          <>
-                            <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-                              <div className="space-y-3">
-                                {(definition.sections ?? []).map((sec, secIndex) => (
-                                  <div key={`${sec.id}-placement`} id={`project-type-section-${sec.id}`}>
-                                    <SectionPlacementPanel
-                                      section={sec}
-                                      fields={definition.field_templates}
-                                      draggingPlacement={draggingPlacement}
-                                      draggingSection={draggingSection?.definitionId === definition.id && draggingSection.index === secIndex}
-                                      onDropToSection={() => {
-                                        if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
-                                        if (draggingPlacement.source === 'palette') {
-                                          const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
-                                          const widgetKind = isWidget
-                                            ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
-                                            : 'field';
-                                          const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
-                                          updateDefinition(index, {
-                                            ...definition,
-                                            sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, undefined, draggedField?.layout || 'half', widgetKind),
-                                          });
-                                        } else {
-                                          updateDefinition(index, {
-                                            ...definition,
-                                            sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, undefined),
-                                          });
-                                        }
-                                        setDraggingPlacement(null);
-                                      }}
-                                      onDropBeforeItem={(itemIndex) => {
-                                        if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
-                                        if (draggingPlacement.source === 'palette') {
-                                          const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
-                                          const widgetKind = isWidget
-                                            ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
-                                            : 'field';
-                                          const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
-                                          updateDefinition(index, {
-                                            ...definition,
-                                            sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, itemIndex, draggedField?.layout || 'half', widgetKind),
-                                          });
-                                        } else {
-                                          updateDefinition(index, {
-                                            ...definition,
-                                            sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, itemIndex),
-                                          });
-                                        }
-                                        setDraggingPlacement(null);
-                                      }}
-                                      onRemoveItem={(placementId) => {
+
+                        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                          <div className="space-y-3">
+                            {(definition.sections ?? []).length === 0 ? (
+                              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                                セクションがありません。追加すると配置UIを構成できます。
+                              </div>
+                            ) : (
+                              (definition.sections ?? []).map((sec, secIndex) => (
+                                <div key={`${sec.id}-placement`} id={`project-type-section-${sec.id}`}>
+                                  <SectionPlacementPanel
+                                    section={sec}
+                                    fields={definition.field_templates}
+                                    draggingPlacement={draggingPlacement}
+                                    sectionIndex={secIndex}
+                                    totalSections={(definition.sections ?? []).length}
+                                    onDropToSection={() => {
+                                      if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
+                                      if (draggingPlacement.source === 'palette') {
+                                        const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                        const widgetKind = isWidget
+                                          ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                          : 'field';
+                                        const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
                                         updateDefinition(index, {
                                           ...definition,
-                                          sections: movePlacementBetweenSections(definition.sections, placementId, null),
+                                          sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, undefined, draggedField?.layout || 'half', widgetKind),
                                         });
-                                        setDraggingPlacement(null);
-                                      }}
-                                      onDragStart={(fieldId, sourceIndex, placementId) => setDraggingPlacement({
-                                        definitionId: definition.id,
-                                        source: 'section',
-                                        fieldId,
-                                        placementId,
-                                        sourceSectionId: sec.id,
-                                        sourceIndex,
-                                      })}
-                                      onDragEnd={() => setDraggingPlacement(null)}
-                                      onLayoutChange={(fieldId, layout) => updateDefinition(index, {
+                                      } else if (draggingPlacement.source === 'section') {
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, undefined),
+                                        });
+                                      } else if (draggingPlacement.source === 'sidebar') {
+                                        const next = movePlacementToSection(definition.sections, sidebarTabs, draggingPlacement.placementId!, sec.id);
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: next.sections,
+                                          sidebar_tabs: next.tabs,
+                                        });
+                                      }
+                                      setDraggingPlacement(null);
+                                    }}
+                                    onDropBeforeItem={(itemIndex) => {
+                                      if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
+                                      if (draggingPlacement.source === 'palette') {
+                                        const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                        const widgetKind = isWidget
+                                          ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                          : 'field';
+                                        const draggedField = definition.field_templates.find((field) => field.id === draggingPlacement.fieldId);
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: addItemToSection(definition.sections, draggingPlacement.fieldId, sec.id, itemIndex, draggedField?.layout || 'half', widgetKind),
+                                        });
+                                      } else if (draggingPlacement.source === 'section') {
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: movePlacementBetweenSections(definition.sections, draggingPlacement.placementId!, sec.id, itemIndex),
+                                        });
+                                      } else if (draggingPlacement.source === 'sidebar') {
+                                        const next = movePlacementToSection(definition.sections, sidebarTabs, draggingPlacement.placementId!, sec.id, itemIndex);
+                                        updateDefinition(index, {
+                                          ...definition,
+                                          sections: next.sections,
+                                          sidebar_tabs: next.tabs,
+                                        });
+                                      }
+                                      setDraggingPlacement(null);
+                                    }}
+                                    onRemoveItem={(placementId) => {
+                                      updateDefinition(index, {
                                         ...definition,
-                                        sections: updateSectionItemLayout(definition.sections, sec.id, fieldId, layout),
-                                      })}
-                                      onSectionDragStart={() => setDraggingSection({ definitionId: definition.id, index: secIndex })}
-                                      onSectionDragEnd={() => setDraggingSection(null)}
-                                      onSectionDrop={() => {
-                                        if (!draggingSection || draggingSection.definitionId !== definition.id || draggingSection.index === secIndex) return;
-                                        updateDefinition(index, { ...definition, sections: reorderList(definition.sections ?? [], draggingSection.index, secIndex) });
-                                        setDraggingSection(null);
-                                      }}
-                                      onSectionChange={(nextSec) => {
-                                        const sections = [...(definition.sections ?? [])];
-                                        sections[secIndex] = nextSec;
-                                        updateDefinition(index, { ...definition, sections });
-                                      }}
-                                      onSectionRemove={() => updateDefinition(index, { ...definition, sections: (definition.sections ?? []).filter((_, i) => i !== secIndex) })}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div className="lg:border-l lg:pl-4 space-y-4" style={{ borderColor: 'var(--border)' }}>
-                                <div
-                                  className="rounded-xl border overflow-hidden"
-                                  style={{ borderColor: 'rgba(148,163,184,0.3)', backgroundColor: 'rgba(248,251,253,0.85)' }}
-                                >
-                                  <div className="px-4 py-3 border-b" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
-                                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>項目パレット</p>
-                                  </div>
-
-                                  <div className="px-4 py-3 space-y-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置項目</p>
-                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{unassignedFields.length} 件</span>
-                                    </div>
-                                    {unassignedFields.length === 0 ? (
-                                      <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
-                                        未配置なし
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        {unassignedFields.map((field) => (
-                                          <PlacementChip
-                                            key={field.id}
-                                            field={field}
-                                            layout={field.layout || 'half'}
-                                            color="#94a3b8"
-                                          attached={false}
-                                          compact
-                                          dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === field.id}
-                                          onDragStart={() => setDraggingPlacement({
-                                            definitionId: definition.id,
-                                              source: 'palette',
-                                              fieldId: field.id,
-                                            sourceSectionId: null,
-                                            sourceIndex: -1,
-                                          })}
-                                          onDragEnd={() => setDraggingPlacement(null)}
-                                          onDropBefore={() => {}}
-                                        />
-                                      ))}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div className="border-t px-4 py-3 space-y-3" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleAssignedFieldPalette(definition.id)}
-                                      className="w-full flex items-center justify-between gap-3 text-left"
-                                    >
-                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み項目</p>
-                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
-                                        {openAssignedFieldPaletteIds.includes(definition.id) ? '▲' : '▼'}
-                                      </span>
-                                    </button>
-                                    {openAssignedFieldPaletteIds.includes(definition.id) && (
-                                      assignedFields.length === 0 ? (
-                                        <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
-                                          配置済みなし
-                                        </div>
-                                      ) : (
-                                        <div className="space-y-2">
-                                          {assignedFields.map((field) => (
-                                            <PlacementChip
-                                              key={`${field.id}-assigned`}
-                                              field={field}
-                                              layout={field.layout || 'half'}
-                                              color="#0f9ab1"
-                                              attached={false}
-                                              compact
-                                              dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === field.id}
-                                              onDragStart={() => setDraggingPlacement({
-                                                definitionId: definition.id,
-                                                source: 'palette',
-                                                fieldId: field.id,
-                                                sourceSectionId: null,
-                                                sourceIndex: -1,
-                                              })}
-                                              onDragEnd={() => setDraggingPlacement(null)}
-                                              onDropBefore={() => {}}
-                                            />
-                                          ))}
-                                        </div>
-                                      )
-                                    )}
-                                  </div>
-
+                                        sections: movePlacementBetweenSections(definition.sections, placementId, null),
+                                      });
+                                      setDraggingPlacement(null);
+                                    }}
+                                    onDragStart={(fieldId, sourceIndex, placementId) => setDraggingPlacement({
+                                      definitionId: definition.id,
+                                      source: 'section',
+                                      fieldId,
+                                      placementId,
+                                      sourceSectionId: sec.id,
+                                      sourceIndex,
+                                    })}
+                                    onDragEnd={() => setDraggingPlacement(null)}
+                                    onLayoutChange={(fieldId, layout) => updateDefinition(index, {
+                                      ...definition,
+                                      sections: updateSectionItemLayout(definition.sections, sec.id, fieldId, layout),
+                                    })}
+                                    onItemChange={(placementId, nextItem) => updateDefinition(index, {
+                                      ...definition,
+                                      sections: definition.sections.map((section) => section.id !== sec.id ? section : {
+                                        ...section,
+                                        items: section.items.map((item) => item.id === placementId ? nextItem : item),
+                                      }),
+                                    })}
+                                    onMoveSection={(nextIndex) => updateDefinition(index, {
+                                      ...definition,
+                                      sections: reorderList(definition.sections ?? [], secIndex, nextIndex),
+                                    })}
+                                    onSectionChange={(nextSec) => {
+                                      const sections = [...(definition.sections ?? [])];
+                                      sections[secIndex] = nextSec;
+                                      updateDefinition(index, { ...definition, sections });
+                                    }}
+                                    onSectionRemove={() => updateDefinition(index, { ...definition, sections: (definition.sections ?? []).filter((_, i) => i !== secIndex) })}
+                                  />
                                 </div>
+                              ))
+                            )}
+                          </div>
 
-                                {/* 情報パレット独立ボックス */}
-                                <div
-                                  className="rounded-xl border overflow-hidden"
-                                  style={{ borderColor: 'rgba(148,163,184,0.3)', backgroundColor: 'rgba(248,251,253,0.85)' }}
-                                >
-                                  <div className="px-4 py-3 border-b" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
-                                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>情報パレット</p>
-                                  </div>
-
-                                  <div className="px-4 py-3 space-y-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置</p>
-                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{unplacedWidgets.length} 件</span>
-                                    </div>
-                                    {unplacedWidgets.length === 0 ? (
-                                      <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
-                                        未配置なし
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-2">
-                                        {unplacedWidgets.map((widget) => (
-                                          <InfoWidgetChip
-                                            key={widget.kind}
-                                            kind={widget.kind}
-                                            label={widget.label}
-                                            description={widget.description}
-                                            layout="half"
-                                            color={(INFO_WIDGET_STYLE[widget.kind] ?? { color: '#64748b' }).color}
-                                            compact
-                                            dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === widgetFieldId(widget.kind)}
-                                            onDragStart={() => setDraggingPlacement({
-                                              definitionId: definition.id,
-                                              source: 'palette',
-                                              fieldId: widgetFieldId(widget.kind),
-                                              sourceSectionId: null,
-                                              sourceIndex: -1,
-                                            })}
-                                            onDragEnd={() => setDraggingPlacement(null)}
-                                            onDropBefore={() => {}}
-                                          />
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div className="border-t px-4 py-3 space-y-3" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleAssignedWidgetPalette(definition.id)}
-                                      className="w-full flex items-center justify-between gap-3 text-left"
-                                    >
-                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み</p>
-                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
-                                        {openAssignedWidgetPaletteIds.includes(definition.id) ? '▲' : '▼'}
-                                      </span>
-                                    </button>
-                                    {openAssignedWidgetPaletteIds.includes(definition.id) && (
-                                      placedWidgets.length === 0 ? (
-                                        <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
-                                          配置済みなし
-                                        </div>
-                                      ) : (
-                                        <div className="space-y-2">
-                                          {placedWidgets.map((widget) => (
-                                            <InfoWidgetChip
-                                              key={`${widget.kind}-placed`}
-                                              kind={widget.kind}
-                                              label={widget.label}
-                                              description={widget.description}
-                                              layout="half"
-                                              color={(INFO_WIDGET_STYLE[widget.kind] ?? { color: '#64748b' }).color}
-                                              compact
-                                              dragging={draggingPlacement?.source === 'palette' && draggingPlacement.fieldId === widgetFieldId(widget.kind)}
-                                              onDragStart={() => setDraggingPlacement({
-                                                definitionId: definition.id,
-                                                source: 'palette',
-                                                fieldId: widgetFieldId(widget.kind),
-                                                sourceSectionId: null,
-                                                sourceIndex: -1,
-                                              })}
-                                              onDragEnd={() => setDraggingPlacement(null)}
-                                              onDropBefore={() => {}}
-                                            />
-                                          ))}
-                                        </div>
-                                      )
-                                    )}
-                                  </div>
-                                </div>
+                          <div className="lg:border-l lg:pl-4 space-y-4" style={{ borderColor: 'var(--border)' }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>サイドバー定義</h3>
+                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                                  最大3タブ
+                                </p>
                               </div>
+                              <button
+                                type="button"
+                                className="btn-secondary text-xs py-1 px-3 shrink-0"
+                                disabled={sidebarTabs.length >= 3}
+                                onClick={() => {
+                                  if (sidebarTabs.length >= 3) return;
+                                  const nextTabId = uuidv4();
+                                  updateDefinition(index, {
+                                    ...definition,
+                                    sidebar_tabs: [...sidebarTabs, { id: nextTabId, name: `サイドバー ${sidebarTabs.length + 1}`, items: [] }],
+                                  });
+                                }}
+                              >
+                                + タブ追加
+                              </button>
                             </div>
-                          </>
-                        )}
+
+                            {sidebarTabs.length === 0 ? (
+                              <div className="rounded-xl border border-dashed px-4 py-6 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
+                                サイドバータブがありません。追加すると右サイドバーに表示されます。
+                              </div>
+                            ) : (
+                              sidebarTabs.map((tab, tabIndex) => (
+                                <SidebarTabPlacementPanel
+                                  key={tab.id}
+                                  tab={tab}
+                                  fields={definition.field_templates}
+                                  draggingPlacement={draggingPlacement}
+                                  onDropToTab={() => {
+                                    if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
+                                    if (draggingPlacement.source === 'palette') {
+                                      const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                      const widgetKind = isWidget
+                                        ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                        : 'field';
+                                      updateDefinition(index, {
+                                        ...definition,
+                                        sidebar_tabs: addItemToSidebarTab(sidebarTabs, draggingPlacement.fieldId, tab.id, undefined, widgetKind),
+                                      });
+                                    } else if (draggingPlacement.source === 'sidebar') {
+                                      updateDefinition(index, {
+                                        ...definition,
+                                        sidebar_tabs: movePlacementBetweenSidebarTabs(sidebarTabs, draggingPlacement.placementId!, tab.id, undefined),
+                                      });
+                                    } else if (draggingPlacement.source === 'section') {
+                                      const next = movePlacementToSidebarTab(definition.sections, sidebarTabs, draggingPlacement.placementId!, tab.id);
+                                      updateDefinition(index, {
+                                        ...definition,
+                                        sections: next.sections,
+                                        sidebar_tabs: next.tabs,
+                                      });
+                                    }
+                                    setDraggingPlacement(null);
+                                  }}
+                                  onDropBeforeItem={(itemIndex) => {
+                                    if (!draggingPlacement || draggingPlacement.definitionId !== definition.id) return;
+                                    if (draggingPlacement.source === 'palette') {
+                                      const isWidget = draggingPlacement.fieldId.startsWith(WIDGET_FIELD_ID_PREFIX);
+                                      const widgetKind = isWidget
+                                        ? (draggingPlacement.fieldId.slice(WIDGET_FIELD_ID_PREFIX.length) as SectionItemKind)
+                                        : 'field';
+                                      updateDefinition(index, {
+                                        ...definition,
+                                        sidebar_tabs: addItemToSidebarTab(sidebarTabs, draggingPlacement.fieldId, tab.id, itemIndex, widgetKind),
+                                      });
+                                    } else if (draggingPlacement.source === 'sidebar') {
+                                      updateDefinition(index, {
+                                        ...definition,
+                                        sidebar_tabs: movePlacementBetweenSidebarTabs(sidebarTabs, draggingPlacement.placementId!, tab.id, itemIndex),
+                                      });
+                                    } else if (draggingPlacement.source === 'section') {
+                                      const next = movePlacementToSidebarTab(definition.sections, sidebarTabs, draggingPlacement.placementId!, tab.id, itemIndex);
+                                      updateDefinition(index, {
+                                        ...definition,
+                                        sections: next.sections,
+                                        sidebar_tabs: next.tabs,
+                                      });
+                                    }
+                                    setDraggingPlacement(null);
+                                  }}
+                                  onRemoveItem={(placementId) => {
+                                    updateDefinition(index, {
+                                      ...definition,
+                                      sidebar_tabs: movePlacementBetweenSidebarTabs(sidebarTabs, placementId, null),
+                                    });
+                                    setDraggingPlacement(null);
+                                  }}
+                                  onDragStart={(fieldId, sourceIndex, placementId) => setDraggingPlacement({
+                                    definitionId: definition.id,
+                                    source: 'sidebar',
+                                    fieldId,
+                                    placementId,
+                                    sourceSectionId: tab.id,
+                                    sourceIndex,
+                                  })}
+                                  onDragEnd={() => setDraggingPlacement(null)}
+                                  onItemChange={(placementId, nextItem) => updateDefinition(index, {
+                                    ...definition,
+                                    sidebar_tabs: sidebarTabs.map((currentTab) => currentTab.id !== tab.id ? currentTab : {
+                                      ...currentTab,
+                                      items: currentTab.items.map((item) => item.id === placementId ? nextItem : item),
+                                    }),
+                                  })}
+                                  onTabChange={(nextTab) => {
+                                    const nextTabs = [...sidebarTabs];
+                                    nextTabs[tabIndex] = nextTab;
+                                    updateDefinition(index, { ...definition, sidebar_tabs: nextTabs });
+                                  }}
+                                  onTabRemove={() => updateDefinition(index, { ...definition, sidebar_tabs: sidebarTabs.filter((_, currentIndex) => currentIndex !== tabIndex) })}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </div>
                       </>
                     );
                   })()}

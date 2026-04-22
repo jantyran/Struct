@@ -49,8 +49,8 @@ export interface ProjectPhase {
   name: string;
 }
 
-/** セクションに配置できるアイテムの種別 */
-export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list' | 'todo_list' | 'todo_summary' | 'member_list';
+/** セクションやサイドバーに配置できるアイテムの種別 */
+export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list' | 'todo_list' | 'todo_summary' | 'member_list' | 'ai_tools' | 'divider' | 'subheading' | 'text_block' | 'callout' | 'label_badge' | 'spacer';
 
 /** 情報ウィジェットの仮想 field_id プレフィックス */
 export const WIDGET_FIELD_ID_PREFIX = '__widget:';
@@ -63,7 +63,19 @@ export const SECTION_INFO_WIDGETS: { kind: SectionItemKind; label: string; descr
   { kind: 'todo_list', label: 'タスク一覧', description: '未完了タスクを最大5件表示' },
   { kind: 'todo_summary', label: 'タスクサマリー', description: 'タスクの進捗を件数・割合で表示' },
   { kind: 'member_list', label: 'メンバー一覧', description: 'プロジェクトの担当メンバーを表示' },
+  { kind: 'ai_tools', label: '生成・補完パネル', description: '生成・補完・参照スコープなどAI操作をまとめて表示' },
 ];
+
+export const SECTION_DECORATION_PARTS: { kind: SectionItemKind; label: string; description: string }[] = [
+  { kind: 'divider', label: '区切り線', description: 'コンテンツのまとまりを細い線で区切る' },
+  { kind: 'spacer', label: '余白', description: '要素間に呼吸感を作る空きスペース' },
+  { kind: 'subheading', label: '小見出し', description: 'セクション内の見出しテキストを追加' },
+  { kind: 'text_block', label: 'テキスト', description: '補足説明やメモ用の短い本文を追加' },
+  { kind: 'callout', label: '案内ボックス', description: '注意書きや補足を目立つボックスで表示' },
+  { kind: 'label_badge', label: 'ラベル', description: '短い補助ラベルやタグを表示' },
+];
+
+export const REPEATABLE_SECTION_ITEM_KINDS: SectionItemKind[] = ['divider', 'spacer', 'subheading', 'text_block', 'callout', 'label_badge'];
 
 export interface ProjectNote {
   id: string;
@@ -83,6 +95,10 @@ export interface SectionFieldPlacement {
   layout: FieldLayout;
   /** 省略時は 'field' 扱い */
   kind?: SectionItemKind;
+  config?: {
+    title?: string;
+    body?: string;
+  };
 }
 
 export interface SectionDefinition {
@@ -94,6 +110,12 @@ export interface SectionDefinition {
   items: SectionFieldPlacement[];
   /** デフォルトで開いた状態にするか（省略時は true = 開く） */
   defaultOpen?: boolean;
+}
+
+export interface SidebarTabDefinition {
+  id: string;
+  name: string;
+  items: SectionFieldPlacement[];
 }
 
 export interface ProjectFieldTemplate {
@@ -131,6 +153,8 @@ export interface ProjectTypeDefinition {
   phases: ProjectPhase[];
   /** セクション定義（表示順・カラー） */
   sections: SectionDefinition[];
+  /** 右サイドバーのタブ定義 */
+  sidebar_tabs: SidebarTabDefinition[];
   /** 組み込み + カスタムフィールドテンプレートを統合管理 */
   field_templates: ProjectFieldTemplate[];
   content_template_ids: string[];

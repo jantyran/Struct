@@ -1,5 +1,5 @@
-import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement } from '@/types';
-import { WIDGET_FIELD_ID_PREFIX } from '@/types';
+import type { ProjectFieldTemplate, ProjectPhase, ProjectTypeDefinition, SectionDefinition, SectionFieldPlacement, SidebarTabDefinition } from '@/types';
+import { REPEATABLE_SECTION_ITEM_KINDS, WIDGET_FIELD_ID_PREFIX } from '@/types';
 import { normalizeAIReferenceSettings } from '@/lib/ai/reference-sources';
 
 /** デフォルトセクション定義 */
@@ -7,6 +7,35 @@ export const DEFAULT_SECTIONS: SectionDefinition[] = [
   { id: 'section-basic', name: '基本情報', color: '#0f9ab1', items: [] },
   { id: 'section-detail', name: '詳細', color: '#6366f1', items: [] },
 ];
+
+export const DEFAULT_SIDEBAR_TABS: SidebarTabDefinition[] = [
+  {
+    id: 'sidebar-tab-ai',
+    name: 'サポート',
+    items: [
+      { id: 'sidebar-tab-ai-item-1', field_id: '_builtin_related_links', layout: 'full', kind: 'field' },
+      { id: 'sidebar-tab-ai-item-2', field_id: `${WIDGET_FIELD_ID_PREFIX}divider`, layout: 'full', kind: 'divider' },
+      { id: 'sidebar-tab-ai-item-3', field_id: `${WIDGET_FIELD_ID_PREFIX}subheading`, layout: 'full', kind: 'subheading', config: { title: 'AI生成' } },
+      { id: 'sidebar-tab-ai-item-4', field_id: `${WIDGET_FIELD_ID_PREFIX}ai_tools`, layout: 'full', kind: 'ai_tools' },
+    ],
+  },
+  {
+    id: 'sidebar-tab-summary',
+    name: 'サマリー',
+    items: [
+      { id: 'sidebar-tab-summary-item-1', field_id: `${WIDGET_FIELD_ID_PREFIX}phase`, layout: 'full', kind: 'phase' },
+      { id: 'sidebar-tab-summary-item-2', field_id: `${WIDGET_FIELD_ID_PREFIX}todo_summary`, layout: 'full', kind: 'todo_summary' },
+      { id: 'sidebar-tab-summary-item-3', field_id: `${WIDGET_FIELD_ID_PREFIX}note_list`, layout: 'full', kind: 'note_list' },
+    ],
+  },
+];
+
+const LEGACY_DEFAULT_SIDEBAR_TAB_IDS = new Set(['sidebar-tab-ai', 'sidebar-tab-summary', 'sidebar-tab-details']);
+
+function shouldUpgradeSidebarTabs(storedTabs: Partial<SidebarTabDefinition>[]): boolean {
+  if (storedTabs.length === 0) return false;
+  return storedTabs.every((tab) => LEGACY_DEFAULT_SIDEBAR_TAB_IDS.has(String(tab.id ?? '')));
+}
 
 const SECTION_COLOR_PRESETS = [
   '#0f9ab1',
@@ -122,7 +151,7 @@ export const BUILTIN_FIELD_TEMPLATES: ProjectFieldTemplate[] = [
   },
 ];
 
-const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'field_templates' | 'sections'>[] = [
+const DEFAULT_PROJECT_TYPES: Omit<ProjectTypeDefinition, 'field_templates' | 'sections' | 'sidebar_tabs'>[] = [
   {
     id: 'project-type-event',
     key: 'event',
@@ -318,6 +347,7 @@ function normalizeSectionFieldPlacement(item: Partial<SectionFieldPlacement>, in
     field_id: typeof item.field_id === 'string' ? item.field_id : '',
     layout: normalizeLayout(item.layout),
     kind,
+    ...(item.config ? { config: { title: typeof item.config.title === 'string' ? item.config.title : '', body: typeof item.config.body === 'string' ? item.config.body : '' } } : {}),
   };
 }
 
@@ -328,6 +358,14 @@ function normalizeSection(section: Partial<SectionDefinition>, index: number): S
     color: typeof section.color === 'string' && section.color ? section.color : DEFAULT_SECTIONS[index % DEFAULT_SECTIONS.length]?.color ?? '#0f9ab1',
     items: safeArray<Partial<SectionFieldPlacement>>((section as SectionDefinition).items).map(normalizeSectionFieldPlacement),
     ...(section.defaultOpen !== undefined ? { defaultOpen: section.defaultOpen } : {}),
+  };
+}
+
+function normalizeSidebarTab(tab: Partial<SidebarTabDefinition>, index: number): SidebarTabDefinition {
+  return {
+    id: tab.id || `sidebar-tab-${index + 1}`,
+    name: tab.name?.trim() || `サイドバー ${index + 1}`,
+    items: safeArray<Partial<SectionFieldPlacement>>(tab.items).map(normalizeSectionFieldPlacement),
   };
 }
 
@@ -399,6 +437,7 @@ function sanitizeSectionItems(sections: SectionDefinition[], fields: ProjectFiel
         const kind = item.kind ?? 'field';
 
         if (kind !== 'field') {
+          if (REPEATABLE_SECTION_ITEM_KINDS.includes(kind)) return true;
           // 情報ウィジェット: 同一セクション内での重複のみ弾く
           const key = `${WIDGET_FIELD_ID_PREFIX}${kind}`;
           if (seenWidgetsInSection.has(key)) return false;
@@ -407,6 +446,34 @@ function sanitizeSectionItems(sections: SectionDefinition[], fields: ProjectFiel
         }
 
         // 通常フィールド: 全セクションで重複排除
+        if (!item.field_id || !knownFieldIds.has(item.field_id) || seenFieldIds.has(item.field_id)) return false;
+        seenFieldIds.add(item.field_id);
+        return true;
+      }),
+    };
+  });
+}
+
+function sanitizeSidebarTabs(tabs: SidebarTabDefinition[], fields: ProjectFieldTemplate[]): SidebarTabDefinition[] {
+  const knownFieldIds = new Set(fields.map((field) => field.id));
+
+  return tabs.map((tab) => {
+    const seenFieldIds = new Set<string>();
+    const seenWidgets = new Set<string>();
+
+    return {
+      ...tab,
+      items: tab.items.filter((item) => {
+        const kind = item.kind ?? 'field';
+
+        if (kind !== 'field') {
+          if (REPEATABLE_SECTION_ITEM_KINDS.includes(kind)) return true;
+          const key = `${WIDGET_FIELD_ID_PREFIX}${kind}`;
+          if (seenWidgets.has(key)) return false;
+          seenWidgets.add(key);
+          return true;
+        }
+
         if (!item.field_id || !knownFieldIds.has(item.field_id) || seenFieldIds.has(item.field_id)) return false;
         seenFieldIds.add(item.field_id);
         return true;
@@ -436,7 +503,7 @@ function mergeBuiltinTemplates(storedTemplates: Partial<ProjectFieldTemplate>[])
 }
 
 function normalizeTypeDefinition(
-  definition: Partial<ProjectTypeDefinition> & { field_templates?: Partial<ProjectFieldTemplate>[]; sections?: Partial<SectionDefinition>[] },
+  definition: Partial<ProjectTypeDefinition> & { field_templates?: Partial<ProjectFieldTemplate>[]; sections?: Partial<SectionDefinition>[]; sidebar_tabs?: Partial<SidebarTabDefinition>[] },
   index: number
 ): ProjectTypeDefinition {
   const legacyContentTemplates = safeArray<{ id?: string }>((definition as any).content_templates);
@@ -477,6 +544,14 @@ function normalizeTypeDefinition(
   const sectionsWithItems = hasExplicitSectionItems
     ? sanitizeSectionItems(normalizedSections, normalizedFieldTemplates)
     : buildSectionItemsFromLegacyFields(normalizedFieldTemplates, normalizedSections);
+  const storedSidebarTabs = safeArray<Partial<SidebarTabDefinition>>(definition.sidebar_tabs);
+  const sidebarSourceTabs = storedSidebarTabs.length === 0 || shouldUpgradeSidebarTabs(storedSidebarTabs)
+    ? DEFAULT_SIDEBAR_TABS
+    : storedSidebarTabs;
+  const normalizedSidebarTabs = sidebarSourceTabs
+    .slice(0, 3)
+    .map(normalizeSidebarTab);
+  const sidebarTabs = sanitizeSidebarTabs(normalizedSidebarTabs, normalizedFieldTemplates);
 
   return {
     id: definition.id || `project-type-${index + 1}`,
@@ -486,6 +561,7 @@ function normalizeTypeDefinition(
     is_default: definition.is_default === true,
     phases: safeArray<Partial<ProjectPhase>>(definition.phases).map(normalizePhase),
     sections: sectionsWithItems,
+    sidebar_tabs: sidebarTabs,
     field_templates: normalizedFieldTemplates,
     content_template_ids: contentTemplateIds.length > 0
       ? contentTemplateIds
@@ -528,6 +604,7 @@ export function createProjectTypeDefinition(seed: Partial<ProjectTypeDefinition>
       is_default: seed.is_default,
       phases: seed.phases || [{ id: 'phase-planning', key: 'planning', name: '企画' }],
       sections: seed.sections || [],
+      sidebar_tabs: seed.sidebar_tabs || [],
       field_templates: seed.field_templates || [],
       content_template_ids: seed.content_template_ids || [],
       ai_reference: seed.ai_reference,
