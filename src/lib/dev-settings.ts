@@ -5,12 +5,14 @@ export type DevSettings = {
   showFieldKeys: boolean;
   showFieldTypes: boolean;
   showFieldIds: boolean;
+  showFieldListBorders: boolean;
 };
 
 export const DEV_SETTINGS_DEFAULTS: DevSettings = {
   showFieldKeys: false,
   showFieldTypes: true,
   showFieldIds: false,
+  showFieldListBorders: true,
 };
 
 const DEV_STORAGE_KEY = 'struct_dev_settings';

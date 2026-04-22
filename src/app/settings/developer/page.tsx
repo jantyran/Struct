@@ -217,6 +217,12 @@ export default function DeveloperSettingsPage() {
             checked={settings.showFieldIds}
             onChange={(v) => update({ showFieldIds: v })}
           />
+          <ToggleRow
+            label="繰り返し・グループの枠を表示"
+            description="繰り返し・繰り返しグループ・グループフィールドの内側にカード枠を表示します。オフにするとフラットな見た目になります。"
+            checked={settings.showFieldListBorders}
+            onChange={(v) => update({ showFieldListBorders: v })}
+          />
         </div>
       </section>
 

@@ -30,6 +30,16 @@ function PencilIcon({ size = 12 }: { size?: number }) {
   );
 }
 
+function OpenLinkIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9.5 2.5h4v4" />
+      <path d="M13.5 2.5 7.5 8.5" />
+      <path d="M6.5 3.5h-2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-2" />
+    </svg>
+  );
+}
+
 function parseUrlFieldValue(raw: string): { label: string; url: string } {
   if (!raw) return { label: '', url: '' };
   try {
@@ -217,7 +227,16 @@ function UrlFieldInput({
             autoFocus={!draftLabel}
           />
           {draftUrl && (
-            <a href={draftUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs px-3 shrink-0 flex items-center">↗</a>
+            <a
+              href={draftUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary text-xs px-2.5 shrink-0 flex items-center justify-center"
+              title="リンクを開く"
+              aria-label="リンクを開く"
+            >
+              <OpenLinkIcon size={11} />
+            </a>
           )}
           {onCrawl && (
             <button type="button" onClick={onCrawl} disabled={crawling || !draftUrl} className="btn-secondary text-xs px-3 shrink-0">
@@ -248,6 +267,19 @@ function UrlFieldInput({
         </a>
       ) : (
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>（未入力）</span>
+      )}
+      {hasUrl && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 flex items-center px-1 py-0.5 rounded transition-colors hover:opacity-70"
+          style={{ color: 'var(--accent)' }}
+          title="リンクを開く"
+          aria-label="リンクを開く"
+        >
+          <OpenLinkIcon size={11} />
+        </a>
       )}
       <button
         type="button"
@@ -433,7 +465,7 @@ function ChildFieldValueInput({
 // ============================================================
 // プロジェクトフィールド入力
 // ============================================================
-function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling, showFieldKeys, showFieldTypes, showFieldIds }: {
+function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling, showFieldKeys, showFieldTypes, showFieldIds, showFieldListBorders }: {
   field: CustomField;
   globalAssetObjects: GlobalAssetObject[];
   onChange: (f: CustomField) => void;
@@ -442,6 +474,7 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   showFieldKeys: boolean;
   showFieldTypes: boolean;
   showFieldIds: boolean;
+  showFieldListBorders: boolean;
 }) {
   const isInherited = field.inherited === 1;
   const options = parseFieldOptions(field.options);
@@ -453,6 +486,28 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   const groupValue = parseGroupValue(field.value);
   const groupListValue = parseGroupListValue(field.value);
   const [viewingRecord, setViewingRecord] = useState<GlobalAssetObject['records'][number] | null>(null);
+
+  function addRepeatingItem() {
+    if (field.type === 'list') {
+      const t = childTemplates[0];
+      const emptyItem = t ? { [t.id]: { value: '', options: t.options } } : {};
+      onChange({ ...field, value: JSON.stringify([...groupListValue, emptyItem]) });
+    } else if (field.type === 'group_list') {
+      const emptyItem = childTemplates.reduce<Record<string, GroupChildState>>((acc, t) => {
+        acc[t.id] = { value: '', options: t.options };
+        return acc;
+      }, {});
+      onChange({ ...field, value: JSON.stringify([...groupListValue, emptyItem]) });
+    }
+  }
+
+  const cardStyle = showFieldListBorders
+    ? { borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }
+    : { borderColor: 'transparent', backgroundColor: 'transparent' };
+  const listDividerColor = showFieldListBorders ? 'var(--border)' : 'transparent';
+  const detailCardBodyStyle = showFieldListBorders
+    ? { borderColor: listDividerColor, backgroundColor: 'rgba(248,252,255,0.6)' }
+    : { borderColor: listDividerColor, backgroundColor: 'transparent' };
 
   return (
     <div className={`field-section-card ${isInherited ? 'inherited-field' : ''}`}>
@@ -482,16 +537,21 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
             )}
           </div>
         </div>
-        {(showFieldKeys || showFieldIds) && (
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
-            {showFieldKeys && <span>キー: {field.key}</span>}
-            {showFieldIds && <span>ID: {field.id}</span>}
-          </div>
-        )}
+        <div className="flex items-center gap-3 shrink-0">
+          {(showFieldKeys || showFieldIds) && (
+            <div className="flex flex-wrap justify-end gap-x-3 gap-y-0.5 text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
+              {showFieldKeys && <span>キー: {field.key}</span>}
+              {showFieldIds && <span>ID: {field.id}</span>}
+            </div>
+          )}
+          {(field.type === 'list' || field.type === 'group_list') && (
+            <button type="button" className="btn-secondary text-xs py-0.5 px-2.5" onClick={addRepeatingItem}>+ 追加</button>
+          )}
+        </div>
       </div>
 
       {field.type === 'group' && (
-        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+        <div className="rounded-xl border p-3 space-y-3" style={cardStyle}>
           {childTemplates.length === 0 ? (
             <div className="text-xs" style={{ color: 'var(--text-muted)' }}>このグループには子項目がありません。設定画面で追加してください。</div>
           ) : (
@@ -520,118 +580,108 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
 
       {field.type === 'list' && (() => {
         const singleTemplate = childTemplates[0];
-        function addListItem() {
-          const emptyItem = singleTemplate ? { [singleTemplate.id]: { value: '', options: singleTemplate.options } } : {};
-          onChange({ ...field, value: JSON.stringify([...groupListValue, emptyItem]) });
-        }
         function deleteListItem(idx: number) {
           onChange({ ...field, value: JSON.stringify(groupListValue.filter((_, i) => i !== idx)) });
         }
-        return (
-          <div className="space-y-1.5">
-            <div className="flex justify-end">
-              <button type="button" className="btn-secondary text-xs py-1 px-3" onClick={addListItem}>+ 追加</button>
-            </div>
-            {groupListValue.length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目はありません。</p>
-            ) : (
-              <div className="space-y-1">
-                {groupListValue.map((item, itemIndex) => {
-                  if (!singleTemplate) return null;
-                  const childField = buildChildField(singleTemplate, item[singleTemplate.id] ?? item[singleTemplate.key], field.inherited);
-                  function updateListValue(v: string) {
-                    const nextItems = [...groupListValue];
-                    nextItems[itemIndex] = { ...nextItems[itemIndex], [singleTemplate.id]: { value: v, options: singleTemplate.options } };
-                    onChange({ ...field, value: JSON.stringify(nextItems) });
-                  }
-                  return (
-                    <div key={`${field.id}-${itemIndex}`} className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        {singleTemplate.type === 'url' ? (
-                          <UrlFieldInput value={childField.value} onChange={updateListValue} />
-                        ) : singleTemplate.type === 'select' ? (
-                          <select className="field-input text-xs w-full" value={childField.value} onChange={(e) => updateListValue(e.target.value)}>
-                            <option value="">（選択）</option>
-                            {(parseFieldOptions(singleTemplate.options).choices ?? []).map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            className="field-input text-xs w-full"
-                            type={singleTemplate.type === 'date' ? 'date' : singleTemplate.type === 'number' ? 'number' : 'text'}
-                            value={childField.value}
-                            onChange={(e) => updateListValue(e.target.value)}
-                            placeholder={singleTemplate.label || '値を入力'}
-                          />
-                        )}
-                      </div>
-                      <button type="button" className="shrink-0 text-[0.625rem] px-1 py-0.5 rounded transition-colors hover:opacity-70" style={{ color: 'var(--text-muted)' }} onClick={() => deleteListItem(itemIndex)}>✕</button>
+        return groupListValue.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目はありません。</p>
+        ) : (
+          <div className={showFieldListBorders ? 'rounded-xl border p-1.5' : ''} style={showFieldListBorders ? cardStyle : undefined}>
+            <div className="space-y-1.5">
+              {groupListValue.map((item, itemIndex) => {
+                if (!singleTemplate) return null;
+                const childField = buildChildField(singleTemplate, item[singleTemplate.id] ?? item[singleTemplate.key], field.inherited);
+                function updateListValue(v: string) {
+                  const nextItems = [...groupListValue];
+                  nextItems[itemIndex] = { ...nextItems[itemIndex], [singleTemplate.id]: { value: v, options: singleTemplate.options } };
+                  onChange({ ...field, value: JSON.stringify(nextItems) });
+                }
+                return (
+                  <div
+                    key={`${field.id}-${itemIndex}`}
+                    className="flex items-center gap-1.5 rounded-lg px-0.5 py-0.5"
+                    style={{ backgroundColor: showFieldListBorders ? 'rgba(255,255,255,0.38)' : 'transparent' }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      {singleTemplate.type === 'url' ? (
+                        <UrlFieldInput value={childField.value} onChange={updateListValue} />
+                      ) : singleTemplate.type === 'select' ? (
+                        <select className="field-input text-xs w-full" value={childField.value} onChange={(e) => updateListValue(e.target.value)}>
+                          <option value="">（選択）</option>
+                          {(parseFieldOptions(singleTemplate.options).choices ?? []).map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="field-input text-xs w-full"
+                          type={singleTemplate.type === 'date' ? 'date' : singleTemplate.type === 'number' ? 'number' : 'text'}
+                          value={childField.value}
+                          onChange={(e) => updateListValue(e.target.value)}
+                          placeholder={singleTemplate.label || '値を入力'}
+                        />
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-md px-1 py-0.5 text-[0.625rem] leading-none transition-colors hover:opacity-80"
+                      style={{ color: 'var(--text-muted)', backgroundColor: 'rgba(111,135,148,0.06)' }}
+                      onClick={() => deleteListItem(itemIndex)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       })()}
 
       {field.type === 'group_list' && (() => {
-        function addGroupItem() {
-          const emptyItem = childTemplates.reduce<Record<string, GroupChildState>>((acc, t) => {
-            acc[t.id] = { value: '', options: t.options };
-            return acc;
-          }, {});
-          onChange({ ...field, value: JSON.stringify([...groupListValue, emptyItem]) });
-        }
         function deleteGroupItem(idx: number) {
           onChange({ ...field, value: JSON.stringify(groupListValue.filter((_, i) => i !== idx)) });
         }
-        return (
-          <div className="space-y-2">
-            <div className="flex justify-end">
-              <button type="button" className="btn-secondary text-xs py-1 px-3" onClick={addGroupItem}>+ 追加</button>
-            </div>
-            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
-              {groupListValue.length === 0 ? (
-                <p className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目はありません。+ 追加で作成してください。</p>
-              ) : groupListValue.map((item, itemIndex) => {
-                const summaryParts = childTemplates
-                  .slice(0, 3)
-                  .map((t) => {
-                    const raw = (item[t.id] ?? item[t.key])?.value;
-                    if (!raw) return null;
-                    if (t.type === 'url') { const { label } = parseUrlFieldValue(raw); return label || null; }
-                    return raw;
-                  })
-                  .filter((v): v is string => Boolean(v));
-                return (
-                  <details key={`${field.id}-${itemIndex}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
-                    <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center gap-3 hover:bg-[rgba(15,154,177,0.03)]">
-                      <span className="flex-1 text-xs truncate min-w-0" style={{ color: summaryParts.length > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                        {summaryParts.length > 0 ? summaryParts.join(' · ') : '（未入力）'}
-                      </span>
-                      <button type="button" className="shrink-0 text-[0.625rem] px-1.5 py-0.5 rounded transition-colors hover:opacity-70" style={{ color: 'var(--text-muted)' }}
-                        onClick={(e) => { e.preventDefault(); deleteGroupItem(itemIndex); }}>✕</button>
-                      <span className="shrink-0 text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>▾</span>
-                    </summary>
-                    <div className="border-t px-4 py-3 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(248,252,255,0.6)' }}>
-                      {childTemplates.map((childTemplate) => {
-                        const childField = buildChildField(childTemplate, item[childTemplate.id] ?? item[childTemplate.key], field.inherited);
-                        return (
-                          <ChildFieldValueInput key={childTemplate.id} field={childField} globalAssetObjects={globalAssetObjects}
-                            onChange={(nextChild) => {
-                              const nextItems = [...groupListValue];
-                              nextItems[itemIndex] = { ...nextItems[itemIndex], [childTemplate.id]: { value: nextChild.value, options: nextChild.options } };
-                              onChange({ ...field, value: JSON.stringify(nextItems) });
-                            }} />
-                        );
-                      })}
-                    </div>
-                  </details>
-                );
-              })}
-            </div>
+        return groupListValue.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目はありません。</p>
+        ) : (
+          <div className="rounded-xl border overflow-hidden" style={cardStyle}>
+            {groupListValue.map((item, itemIndex) => {
+              const summaryParts = childTemplates
+                .slice(0, 3)
+                .map((t) => {
+                  const raw = (item[t.id] ?? item[t.key])?.value;
+                  if (!raw) return null;
+                  if (t.type === 'url') { const { label } = parseUrlFieldValue(raw); return label || null; }
+                  return raw;
+                })
+                .filter((v): v is string => Boolean(v));
+              return (
+                <details key={`${field.id}-${itemIndex}`} className="border-b last:border-b-0" style={{ borderColor: listDividerColor }}>
+                  <summary className="cursor-pointer list-none px-3 py-2 flex items-center gap-2.5 hover:bg-[rgba(15,154,177,0.03)]">
+                    <span className="flex-1 text-xs truncate min-w-0" style={{ color: summaryParts.length > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                      {summaryParts.length > 0 ? summaryParts.join(' · ') : '（未入力）'}
+                    </span>
+                    <button type="button" className="shrink-0 text-[0.625rem] px-1.5 py-0.5 rounded transition-colors hover:opacity-70" style={{ color: 'var(--text-muted)' }}
+                      onClick={(e) => { e.preventDefault(); deleteGroupItem(itemIndex); }}>✕</button>
+                    <span className="shrink-0 text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>▾</span>
+                  </summary>
+                  <div className="border-t px-3 py-2.5 grid grid-cols-1 md:grid-cols-2 gap-3" style={detailCardBodyStyle}>
+                    {childTemplates.map((childTemplate) => {
+                      const childField = buildChildField(childTemplate, item[childTemplate.id] ?? item[childTemplate.key], field.inherited);
+                      return (
+                        <ChildFieldValueInput key={childTemplate.id} field={childField} globalAssetObjects={globalAssetObjects}
+                          onChange={(nextChild) => {
+                            const nextItems = [...groupListValue];
+                            nextItems[itemIndex] = { ...nextItems[itemIndex], [childTemplate.id]: { value: nextChild.value, options: nextChild.options } };
+                            onChange({ ...field, value: JSON.stringify(nextItems) });
+                          }} />
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })}
           </div>
         );
       })()}
@@ -2197,7 +2247,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                           const globalIdx = fieldIndexById.get(f.id) ?? -1;
                           return (
                             <div key={item.key} className={item.layout === 'full' ? 'col-span-2' : ''}>
-                              <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} showFieldKeys={devSettings.showFieldKeys} showFieldTypes={devSettings.showFieldTypes} showFieldIds={devSettings.showFieldIds} />
+                              <CustomFieldRow field={f} globalAssetObjects={globalAssetObjects} onChange={nf => updateField(globalIdx, nf)} onCrawl={() => crawlField(f.id)} crawling={crawlingFieldId === f.id} showFieldKeys={devSettings.showFieldKeys} showFieldTypes={devSettings.showFieldTypes} showFieldIds={devSettings.showFieldIds} showFieldListBorders={devSettings.showFieldListBorders} />
                             </div>
                           );
                         })}
