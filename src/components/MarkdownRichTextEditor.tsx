@@ -5,8 +5,12 @@ import { useRegisterShortcutScope, useShortcutSettings } from '@/components/Shor
 import { formatShortcutCombo } from '@/lib/shortcut-settings';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
+import { commonmark } from '@milkdown/kit/preset/commonmark';
+import { Editor, rootCtx, defaultValueCtx } from '@milkdown/kit/core';
+import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 
-type EditorMode = 'markdown' | 'richtext' | 'preview';
+type EditorMode = 'markdown' | 'richtext' | 'live';
 
 function escapeHtml(value: string) {
   return value
@@ -183,6 +187,52 @@ function editorHtmlToMarkdown(html: string) {
   return collapseMarkdownWhitespace(blocks.join('\n\n'));
 }
 
+function MilkdownInner({
+  initialBody,
+  onBodyChange,
+  minHeight,
+}: {
+  initialBody: string;
+  onBodyChange: (v: string) => void;
+  minHeight: number;
+}) {
+  const onChangeRef = useRef(onBodyChange);
+  onChangeRef.current = onBodyChange;
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEditor((root) =>
+    Editor.make()
+      .config((ctx) => {
+        ctx.set(rootCtx, root);
+        ctx.set(defaultValueCtx, initialBody);
+        ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
+          onChangeRef.current(markdown);
+        });
+      })
+      .use(commonmark)
+      .use(listener),
+    []
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const pm = wrapperRef.current?.querySelector('.ProseMirror');
+      if (pm) pm.classList.add('md-body');
+    }, 80);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="milkdown-live-wrapper p-4"
+      style={{ minHeight, backgroundColor: 'white', color: 'var(--text-primary)' }}
+    >
+      <Milkdown />
+    </div>
+  );
+}
+
 function MarkdownViewer({ content, className }: { content: string; className?: string }) {
   return (
     <div className={`md-body ${className ?? ''}`}>
@@ -282,7 +332,7 @@ export function MarkdownRichTextEditor({
   const previewHint = useMemo(() => {
     if (mode === 'markdown') return 'Markdown記法で直接編集します。';
     if (mode === 'richtext') return '装飾を使って編集し、保存時はMarkdownに変換します。';
-    return '保存される内容のプレビューです。';
+    return 'Markdownを入力すると即座に整形されます。';
   }, [mode]);
 
   const syncFromEditor = useCallback(() => {
@@ -336,7 +386,7 @@ export function MarkdownRichTextEditor({
               {([
                 { key: 'richtext', label: 'リッチテキスト' },
                 { key: 'markdown', label: 'Markdown' },
-                { key: 'preview', label: 'プレビュー' },
+                { key: 'live', label: 'ライブ' },
               ] as const).map((tab) => (
                 <button
                   key={tab.key}
@@ -365,7 +415,18 @@ export function MarkdownRichTextEditor({
             )}
           </div>
 
-          {mode === 'markdown' ? (
+          {mode === 'live' ? (
+            <MilkdownProvider>
+              <MilkdownInner
+                initialBody={body}
+                onBodyChange={(v) => {
+                  lastBodyRef.current = v;
+                  onBodyChange(v);
+                }}
+                minHeight={minHeight}
+              />
+            </MilkdownProvider>
+          ) : mode === 'markdown' ? (
             <textarea
               className="w-full p-4 text-sm resize-none focus:outline-none"
               style={{ minHeight, color: 'var(--text-primary)', backgroundColor: 'white', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: 1.7 }}
@@ -377,7 +438,7 @@ export function MarkdownRichTextEditor({
                 setRichTextHtml(markdownToRichTextHtml(e.target.value));
               }}
             />
-          ) : mode === 'richtext' ? (
+          ) : (
             <div
               ref={editorRef}
               contentEditable
@@ -387,14 +448,6 @@ export function MarkdownRichTextEditor({
               onInput={syncFromEditor}
               onBlur={syncFromEditor}
             />
-          ) : (
-            <div className="p-4 bg-white" style={{ minHeight }}>
-              {body.trim() ? (
-                <MarkdownViewer content={body} />
-              ) : (
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>プレビューする内容がありません</p>
-              )}
-            </div>
           )}
         </div>
       </div>

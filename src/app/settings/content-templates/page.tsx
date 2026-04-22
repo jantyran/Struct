@@ -174,7 +174,7 @@ export default function ContentTemplatesPage() {
       if (!res.ok) return;
       const nextTemplates = Array.isArray(payload.content_templates) ? payload.content_templates : [];
       setTemplates(nextTemplates);
-      setOpenTemplateIds((current) => current.length > 0 ? current : nextTemplates.slice(0, 1).map((template: ProjectContentTemplate) => template.id));
+      setOpenTemplateIds((current) => current.length > 0 ? current : []);
     })();
   }, [authLoading, router, user]);
 

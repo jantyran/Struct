@@ -6,87 +6,106 @@ import { useRouter } from 'next/navigation';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 
-const settingSections = [
+type SettingItem = {
+  href: string;
+  title: string;
+  description: string;
+  permission?: string;
+};
+
+type SettingGroup = {
+  label: string;
+  items: SettingItem[];
+};
+
+const settingGroups: SettingGroup[] = [
   {
-    href: '/settings/user',
-    title: 'ユーザー設定',
-    description: '文字サイズや既定タブ、タスクの既定表示・既定フィルターなど、あなた個人の使い勝手を調整します。',
-    meta: '文字サイズ / 既定タブ / タスク表示 / タスクフィルター / アニメーション抑制',
+    label: 'アカウント',
+    items: [
+      {
+        href: '/settings/user',
+        title: 'ユーザー設定',
+        description: '文字サイズ・既定タブ・タスク表示など個人の使い勝手を調整します。',
+      },
+      {
+        href: '/settings/password',
+        title: 'パスワード変更',
+        description: 'ログイン用パスワードを更新します。',
+      },
+    ],
   },
   {
-    href: '/settings/organization',
-    title: '組織設定全体',
-    description: 'この組織で使っている設定を横断して一覧で確認します。',
-    meta: 'Org情報 / AI / Assets / 種別 / 生成 / ユーザー / ロール',
-    permission: 'manage_organization_settings',
+    label: '組織',
+    items: [
+      {
+        href: '/settings/organization/basic',
+        title: '基本設定',
+        description: '組織名・住所・言語・タイムゾーンを管理します。',
+        permission: 'manage_organization_settings',
+      },
+      {
+        href: '/settings/shortcuts',
+        title: 'ショートカット設定',
+        description: 'アプリ全体で使うキーボードショートカットを管理します。',
+        permission: 'manage_organization_settings',
+      },
+      {
+        href: '/settings/ai',
+        title: 'AI設定',
+        description: 'AIプロバイダ・モデル・APIキーを管理します。',
+        permission: 'manage_ai_settings',
+      },
+    ],
   },
   {
-    href: '/settings/organization/basic',
-    title: '組織基本設定',
-    description: '組織名、住所、既定言語、ロケール、タイムゾーンを管理します。',
-    meta: 'Company Information / 組織名 / 住所 / Locale / Time Zone',
-    permission: 'manage_organization_settings',
+    label: 'プロジェクト管理',
+    items: [
+      {
+        href: '/project-types',
+        title: 'プロジェクト設定',
+        description: '種別・フェーズ・項目テンプレート・使用コンテンツを管理します。',
+        permission: 'manage_project_settings',
+      },
+      {
+        href: '/settings/content-templates',
+        title: '生成コンテンツ設定',
+        description: '生成対象のコンテンツ定義と生成指示を管理します。',
+        permission: 'manage_project_settings',
+      },
+    ],
   },
   {
-    href: '/settings/shortcuts',
-    title: 'ショートカット設定',
-    description: '保存や新規追加など、アプリ全体で使うキーボードショートカットを管理します。',
-    meta: 'Ctrl/Cmd + S / Ctrl/Cmd + N / ショートカット一覧',
-    permission: 'manage_organization_settings',
+    label: 'ユーザー・権限',
+    items: [
+      {
+        href: '/settings/users',
+        title: 'ユーザー管理',
+        description: 'プロフィール・メンバー情報を管理します。',
+        permission: 'manage_users',
+      },
+      {
+        href: '/settings/roles',
+        title: 'ロール・権限設定',
+        description: 'ロールを定義し、表示・編集・管理権限を設定します。',
+        permission: 'manage_system_roles',
+      },
+      {
+        href: '/settings/project-roles',
+        title: 'プロジェクトロール設定',
+        description: 'プロジェクトメンバーのロールと権限を設定します。',
+        permission: 'manage_project_roles',
+      },
+    ],
   },
   {
-    href: '/settings/ai',
-    title: 'AI設定',
-    description: '使用するAIプロバイダ、モデル、APIキーを管理します。',
-    meta: 'Anthropic / OpenAI / モデル切替',
-    permission: 'manage_ai_settings',
-  },
-  {
-    href: '/settings/content-templates',
-    title: '生成コンテンツ設定',
-    description: '生成対象のコンテンツ定義と生成指示を管理します。',
-    meta: '生成物ライブラリ / 指示設計 / 再利用',
-    permission: 'manage_project_settings',
-  },
-  {
-    href: '/project-types',
-    title: 'プロジェクト設定',
-    description: 'プロジェクト種別、フェーズ、初期項目テンプレート、使用する生成コンテンツの選択を管理します。',
-    meta: '種別設計 / パス設計 / 項目設計 / コンテンツ選択',
-    permission: 'manage_project_settings',
-  },
-  {
-    href: '/settings/users',
-    title: 'ユーザー管理',
-    description: '表示名・アバターと、担当者として使うユーザー情報を管理します。',
-    meta: 'プロフィール / メンバー基盤 / Todo担当者準備',
-    permission: 'manage_users',
-  },
-  {
-    href: '/settings/roles',
-    title: 'ロール・権限設定',
-    description: 'ロールを定義し、表示・編集・管理権限を設定します。',
-    meta: 'ロール定義 / 表示権限 / 編集権限 / 管理権限',
-    permission: 'manage_system_roles',
-  },
-  {
-    href: '/settings/project-roles',
-    title: 'プロジェクトロール設定',
-    description: 'プロジェクトメンバーに付与するロールと、プロジェクト内権限を設定します。',
-    meta: 'メンバー権限 / 項目表示 / 編集 / ノート / 生成',
-    permission: 'manage_project_roles',
-  },
-  {
-    href: '/settings/password',
-    title: 'パスワード変更',
-    description: '現在のパスワードを確認したうえで、ログイン用パスワードを更新します。',
-    meta: 'セキュリティ / パスワード再設定',
-  },
-  {
-    href: '/settings/developer',
-    title: '開発設定',
-    description: 'フィールドキー・タイプ・IDなど、デバッグや構造確認用のUI表示オプションをカスタマイズします。設定はブラウザに保存されます。',
-    meta: '項目キー / フィールドタイプ / フィールドID / 表示カスタマイズ',
+    label: '開発',
+    items: [
+      {
+        href: '/settings/developer',
+        title: '開発設定',
+        description: 'フィールドキー・IDなどデバッグ用のUI表示オプション（ブラウザ保存）。',
+      },
+    ],
   },
 ];
 
@@ -96,23 +115,26 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
-      router.push(withBasePath('/login'));
-    }
+    if (!user) router.push(withBasePath('/login'));
   }, [authLoading, router, user]);
 
   if (authLoading || !user) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          読み込み中...
-        </div>
+      <div className="p-6 max-w-3xl mx-auto">
+        <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div>
       </div>
     );
   }
 
+  const visibleGroups = settingGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.permission || user.system_permissions?.[item.permission]),
+    }))
+    .filter((group) => group.items.length > 0);
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-3xl mx-auto space-y-8">
       <div>
         <h1 className="text-xl font-bold">設定</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
@@ -120,30 +142,28 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {settingSections
-          .filter((section) => !section.permission || user.system_permissions?.[section.permission])
-          .map((section) => (
-          <Link
-            key={section.href}
-            href={withBasePath(section.href)}
-            className="card p-5 block hover:border-gray-600 transition-colors"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-base font-semibold">{section.title}</h2>
-                <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
-                  {section.description}
-                </p>
-                <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
-                  {section.meta}
-                </p>
-              </div>
-              <span className="text-sm text-violet-300">→</span>
-            </div>
-          </Link>
-        ))}
-      </div>
+      {visibleGroups.map((group) => (
+        <section key={group.label} className="space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider px-1" style={{ color: 'var(--text-muted)' }}>
+            {group.label}
+          </h2>
+          <div className="card overflow-hidden divide-y" style={{ borderColor: 'var(--border)' }}>
+            {group.items.map((item) => (
+              <Link
+                key={item.href}
+                href={withBasePath(item.href)}
+                className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-[rgba(15,154,177,0.04)] transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{item.title}</p>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{item.description}</p>
+                </div>
+                <span className="text-sm shrink-0" style={{ color: 'var(--text-muted)' }}>›</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
+    "@milkdown/kit": "^7.20.0",
+    "@milkdown/react": "^7.20.0",
     "@types/lodash-es": "^4.17.12",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",

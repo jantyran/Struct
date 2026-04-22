@@ -1063,7 +1063,7 @@ export default function ProjectTypesPage() {
       setDefinitions(Array.isArray(projectTypesPayload.project_types) ? projectTypesPayload.project_types : defaultProjectTypeDefinitions());
       setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects : []);
       setContentTemplates(Array.isArray(contentTemplatesPayload.content_templates) ? contentTemplatesPayload.content_templates : []);
-      setOpenDefinitionIds((current) => current.length > 0 ? current : [projectTypesPayload.project_types?.[0]?.id || 'project-type-event']);
+      setOpenDefinitionIds((current) => current.length > 0 ? current : []);
     })();
   }, [authLoading, user, router]);
 
