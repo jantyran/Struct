@@ -22,6 +22,22 @@ function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   };
 }
 
+function parseUrlFieldValue(raw: string): { label: string; url: string } {
+  if (!raw) return { label: '', url: '' };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && 'url' in parsed) {
+      return { label: String(parsed.label ?? ''), url: String(parsed.url ?? '') };
+    }
+  } catch { /* not JSON → treat as plain URL */ }
+  return { label: '', url: raw };
+}
+
+function serializeUrlFieldValue(label: string, url: string): string {
+  if (!label.trim()) return url;
+  return JSON.stringify({ label: label.trim(), url });
+}
+
 function parseFieldOptions(options: string) {
   try {
     const parsed = JSON.parse(options || '{}');
@@ -142,6 +158,98 @@ function RecordDetailModal({
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function UrlFieldInput({
+  value,
+  onChange,
+  onCrawl,
+  crawling,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onCrawl?: () => void;
+  crawling?: boolean;
+}) {
+  const parsed = parseUrlFieldValue(value);
+  const [editing, setEditing] = useState(false);
+  const [draftLabel, setDraftLabel] = useState(parsed.label);
+  const [draftUrl, setDraftUrl] = useState(parsed.url);
+
+  useEffect(() => {
+    const { label, url } = parseUrlFieldValue(value);
+    setDraftLabel(label);
+    setDraftUrl(url);
+  }, [value]);
+
+  function handleDone() {
+    onChange(serializeUrlFieldValue(draftLabel, draftUrl));
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-2">
+        <input
+          className="field-input text-xs w-full"
+          type="text"
+          value={draftLabel}
+          onChange={(e) => setDraftLabel(e.target.value)}
+          placeholder="リンク名（任意）"
+        />
+        <div className="flex gap-2">
+          <input
+            className="field-input text-xs flex-1"
+            type="url"
+            value={draftUrl}
+            onChange={(e) => setDraftUrl(e.target.value)}
+            placeholder="https://"
+            autoFocus={!draftLabel}
+          />
+          {draftUrl && (
+            <a href={draftUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs px-3 shrink-0 flex items-center">↗</a>
+          )}
+          {onCrawl && (
+            <button type="button" onClick={onCrawl} disabled={crawling || !draftUrl} className="btn-secondary text-xs px-3 shrink-0">
+              {crawling ? '取得中...' : 'クロール'}
+            </button>
+          )}
+        </div>
+        <button type="button" onClick={handleDone} className="btn-secondary text-xs px-3 py-1">完了</button>
+      </div>
+    );
+  }
+
+  const { label, url } = parsed;
+  const hasUrl = url.trim().length > 0;
+  const hasLabel = label.trim().length > 0;
+
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      {hasUrl ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs underline truncate"
+          style={{ color: 'var(--accent)' }}
+        >
+          {hasLabel ? label : url}
+        </a>
+      ) : (
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>（未入力）</span>
+      )}
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="shrink-0 text-xs px-1.5 py-0.5 rounded transition-colors"
+        style={{ color: 'var(--text-muted)' }}
+        title="編集"
+      >
+        ✏
+      </button>
     </div>
   );
 }
@@ -290,21 +398,10 @@ function ChildFieldValueInput({
               onChange={(e) => onChange({ ...field, value: e.target.value })}
             />
           ) : field.type === 'url' ? (
-            <div className="flex gap-2">
-              <input
-                className="field-input text-xs flex-1"
-                type="url"
-                value={field.value}
-                onChange={(e) => onChange({ ...field, value: e.target.value })}
-                placeholder="https://"
-              />
-              {field.value && (
-                <a href={field.value} target="_blank" rel="noopener noreferrer"
-                  className="btn-secondary text-xs px-2.5 shrink-0 flex items-center">
-                  ↗
-                </a>
-              )}
-            </div>
+            <UrlFieldInput
+              value={field.value}
+              onChange={(v) => onChange({ ...field, value: v })}
+            />
           ) : (
             <input
               className="field-input text-xs"
@@ -586,15 +683,12 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
               ))}
             </select>
           ) : field.type === 'url' ? (
-            <div className="flex gap-2">
-              <input className="field-input text-xs flex-1" type="url" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} placeholder="https://" />
-              {field.value && (
-                <a href={field.value} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs px-3 shrink-0 flex items-center">↗</a>
-              )}
-              <button onClick={onCrawl} disabled={crawling || !field.value} className="btn-secondary text-xs px-3 shrink-0">
-                {crawling ? '取得中...' : 'クロール'}
-              </button>
-            </div>
+            <UrlFieldInput
+              value={field.value}
+              onChange={(v) => onChange({ ...field, value: v })}
+              onCrawl={onCrawl}
+              crawling={crawling}
+            />
           ) : field.type === 'number' ? (
             <input className="field-input text-xs" type="number" value={field.value} onChange={e => onChange({ ...field, value: e.target.value })} />
           ) : (
@@ -659,7 +753,7 @@ function NotePickerButton({
       {open && (
         <div
           className="absolute z-50 left-0 mt-1 w-72 rounded-xl border shadow-lg overflow-hidden"
-          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
+          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-elevated)' }}
         >
           <div className="px-3 py-2 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
             <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>参照するノートを選択</span>

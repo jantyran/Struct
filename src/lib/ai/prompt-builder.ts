@@ -198,6 +198,19 @@ export function extractWarnings(content: string): string[] {
 
 export { SYSTEM_PROMPT };
 
+function formatUrlFieldValue(raw: string | undefined | null): string {
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && 'url' in parsed) {
+      const label = String(parsed.label ?? '').trim();
+      const url = String(parsed.url ?? '').trim();
+      return label ? `${label} (${url})` : url;
+    }
+  } catch { /* plain URL */ }
+  return raw;
+}
+
 function safeJson<T>(str: string | undefined | null, fallback: T): T {
   if (!str) return fallback;
   try { return JSON.parse(str) as T; } catch { return fallback; }
@@ -245,8 +258,12 @@ function formatCustomFieldValueWithOptions(
     if (referenceText) return referenceText;
   }
 
-  if (includeUrlCrawledContent && field.crawled_content) {
-    return `${field.value}\n  [URL取得内容]: ${field.crawled_content.substring(0, 800)}...`;
+  if (field.type === 'url') {
+    const urlDisplay = formatUrlFieldValue(field.value);
+    if (includeUrlCrawledContent && field.crawled_content) {
+      return `${urlDisplay}\n  [URL取得内容]: ${field.crawled_content.substring(0, 800)}...`;
+    }
+    return urlDisplay || '（未入力）';
   }
 
   return field.value || '（未入力）';

@@ -24,10 +24,17 @@ export async function POST(request: Request, { params }: Params) {
 
     if (!field) return NextResponse.json({ error: 'Field not found' }, { status: 404 });
     if (field.type !== 'url') return NextResponse.json({ error: 'URL型フィールドのみクローリング可能です' }, { status: 400 });
-    if (!field.value?.trim()) return NextResponse.json({ error: 'URLが入力されていません' }, { status: 400 });
+    const rawValue = field.value?.trim() ?? '';
+    let targetUrl = rawValue;
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (parsed && typeof parsed === 'object' && 'url' in parsed) targetUrl = String(parsed.url ?? '');
+    } catch { /* plain URL */ }
+
+    if (!targetUrl) return NextResponse.json({ error: 'URLが入力されていません' }, { status: 400 });
 
     try {
-      const content = await crawlUrl(field.value.trim());
+      const content = await crawlUrl(targetUrl);
       db.prepare('UPDATE custom_fields SET crawled_content = ? WHERE id = ?').run(content, field.id);
       return NextResponse.json({ success: true, content_length: content.length, preview: content.substring(0, 200) });
     } catch (err) {
