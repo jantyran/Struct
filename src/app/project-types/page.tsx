@@ -119,7 +119,7 @@ function ProjectAIReferenceChecklist({
         .filter(([, items]) => items.length > 0)
         .map(([label, items]) => (
           <div key={label} className="space-y-2">
-            <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</p>
+            <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</p>
             {items.map((option) => (
               <label key={option.key} className="flex items-start gap-3 text-sm cursor-pointer">
                 <input
@@ -386,7 +386,7 @@ function SectionRow({
           {/* カスタムカラーピッカー */}
           <label title="カスタムカラー" className="cursor-pointer rounded overflow-hidden flex items-center justify-center"
             style={{ width: 20, height: 20, border: '1.5px dashed var(--border)' }}>
-            <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>+</span>
+            <span className="text-[0.5625rem]" style={{ color: 'var(--text-muted)' }}>+</span>
             <input type="color" className="sr-only" value={section.color} onChange={(e) => onChange({ ...section, color: e.target.value })} />
           </label>
         </div>
@@ -458,7 +458,7 @@ function FieldTemplateRow({
           <label className="field-label">項目名</label>
           <div className="flex items-center gap-1.5">
             {field.is_builtin && (
-              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-semibold"
                 style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.2)' }}>
                 組込
               </span>
@@ -501,7 +501,7 @@ function FieldTemplateRow({
           </select>
         </div>
         {field.is_builtin
-          ? <div className="flex items-end pb-0.5"><span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>削除不可</span></div>
+          ? <div className="flex items-end pb-0.5"><span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>削除不可</span></div>
           : <button onClick={onRemove} className="btn-danger">削除</button>
         }
       </div>
@@ -636,19 +636,19 @@ function PlacementChip({
             <span className="text-sm cursor-grab select-none shrink-0" style={{ color: 'var(--text-muted)' }}>⋮⋮</span>
             <p className="text-sm font-medium truncate min-w-0" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
             {!compact && field.is_builtin && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0"
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-semibold shrink-0"
                 style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.2)' }}>
                 組込
               </span>
             )}
           </div>
           {!compact && supplementary && (
-            <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-[0.6875rem] mt-2" style={{ color: 'var(--text-muted)' }}>
               {supplementary}
             </p>
           )}
           {compact && supplementary && (
-            <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-[0.625rem] mt-1" style={{ color: 'var(--text-muted)' }}>
               {supplementary}
             </p>
           )}
@@ -742,7 +742,7 @@ function InfoWidgetChip({
             <p className="text-sm font-medium truncate min-w-0" style={{ color: 'var(--text-primary)' }}>{label}</p>
             {!compact && (
               <span
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0"
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[0.625rem] font-semibold shrink-0"
                 style={{ backgroundColor: `${style.color}18`, color: style.color, border: `1px solid ${style.color}44` }}
               >
                 情報
@@ -750,10 +750,10 @@ function InfoWidgetChip({
             )}
           </div>
           {!compact && description && (
-            <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>{description}</p>
+            <p className="text-[0.6875rem] mt-2" style={{ color: 'var(--text-muted)' }}>{description}</p>
           )}
           {compact && description && (
-            <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>{description}</p>
+            <p className="text-[0.625rem] mt-1" style={{ color: 'var(--text-muted)' }}>{description}</p>
           )}
         </div>
         {!compact && onLayoutChange && (
@@ -849,7 +849,7 @@ function SectionPlacementPanel({
             <button
               type="button"
               onClick={() => onSectionChange({ ...section, defaultOpen: !(section.defaultOpen ?? true) })}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors shrink-0"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[0.6875rem] font-medium transition-colors shrink-0"
               style={{
                 backgroundColor: (section.defaultOpen ?? true) ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.08)',
                 color: (section.defaultOpen ?? true) ? '#10b981' : '#94a3b8',
@@ -882,7 +882,7 @@ function SectionPlacementPanel({
                 className="cursor-pointer rounded overflow-hidden flex items-center justify-center shrink-0"
                 style={{ width: 18, height: 18, border: '1.5px dashed var(--border)' }}
               >
-                <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>+</span>
+                <span className="text-[0.5625rem]" style={{ color: 'var(--text-muted)' }}>+</span>
                 <input type="color" className="sr-only" value={section.color} onChange={(e) => onSectionChange({ ...section, color: e.target.value })} />
               </label>
             </div>
@@ -1264,7 +1264,7 @@ export default function ProjectTypesPage() {
               将来的にロール管理を入れる際も、この画面単位で「管理者のみ編集可」に切り替えやすい構成にしています。
             </p>
           </div>
-          <span className="text-[11px] px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(99,102,241,0.14)', color: 'rgb(196,181,253)' }}>
+          <span className="text-[0.6875rem] px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(99,102,241,0.14)', color: 'rgb(196,181,253)' }}>
             settings-ready
           </span>
         </div>
@@ -1282,7 +1282,7 @@ export default function ProjectTypesPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold">{definition.name}</span>
                   {definition.is_default && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(56,189,248,0.14)', color: 'rgb(125,211,252)' }}>
+                    <span className="text-[0.6875rem] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(56,189,248,0.14)', color: 'rgb(125,211,252)' }}>
                       default
                     </span>
                   )}
@@ -1547,8 +1547,8 @@ export default function ProjectTypesPage() {
 
                                   <div className="px-4 py-3 space-y-3">
                                     <div className="flex items-center justify-between gap-3">
-                                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置項目</p>
-                                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{unassignedFields.length} 件</span>
+                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置項目</p>
+                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{unassignedFields.length} 件</span>
                                     </div>
                                     {unassignedFields.length === 0 ? (
                                       <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
@@ -1586,8 +1586,8 @@ export default function ProjectTypesPage() {
                                       onClick={() => toggleAssignedFieldPalette(definition.id)}
                                       className="w-full flex items-center justify-between gap-3 text-left"
                                     >
-                                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み項目</p>
-                                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み項目</p>
+                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
                                         {openAssignedFieldPaletteIds.includes(definition.id) ? '▲' : '▼'}
                                       </span>
                                     </button>
@@ -1636,8 +1636,8 @@ export default function ProjectTypesPage() {
 
                                   <div className="px-4 py-3 space-y-3">
                                     <div className="flex items-center justify-between gap-3">
-                                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置</p>
-                                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{unplacedWidgets.length} 件</span>
+                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>未配置</p>
+                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{unplacedWidgets.length} 件</span>
                                     </div>
                                     {unplacedWidgets.length === 0 ? (
                                       <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs" style={{ borderColor: 'rgba(148,163,184,0.28)', color: 'var(--text-muted)' }}>
@@ -1676,8 +1676,8 @@ export default function ProjectTypesPage() {
                                       onClick={() => toggleAssignedWidgetPalette(definition.id)}
                                       className="w-full flex items-center justify-between gap-3 text-left"
                                     >
-                                      <p className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み</p>
-                                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                                      <p className="text-[0.6875rem] font-semibold" style={{ color: 'var(--text-secondary)' }}>配置済み</p>
+                                      <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
                                         {openAssignedWidgetPaletteIds.includes(definition.id) ? '▲' : '▼'}
                                       </span>
                                     </button>

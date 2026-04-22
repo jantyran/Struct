@@ -73,7 +73,7 @@ function TodoRow({ todo }: { todo: MyTodo }) {
       style={{ borderColor: 'var(--border)' }}
     >
       {/* ステータス */}
-      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_COLORS[todo.status]}`}>
+      <span className={`text-[0.6875rem] px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_COLORS[todo.status]}`}>
         {TODO_STATUS_LABELS[todo.status]}
       </span>
 

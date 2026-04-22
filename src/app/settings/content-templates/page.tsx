@@ -55,7 +55,7 @@ function ContentTemplateRow({
           <div className="flex items-center gap-2">
             <span className="text-sm cursor-grab select-none" style={{ color: 'var(--text-muted)' }}>⋮⋮</span>
             <span className="text-sm font-semibold">{template.name || '未命名の生成コンテンツ'}</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(99,102,241,0.14)', color: 'rgb(196,181,253)' }}>
+            <span className="text-[0.6875rem] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(99,102,241,0.14)', color: 'rgb(196,181,253)' }}>
               {template.channel === 'その他' ? (template.channel_other || 'その他') : template.channel || 'チャネル未設定'}
             </span>
           </div>

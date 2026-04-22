@@ -127,6 +127,34 @@ export async function GET() {
   const settingsRow = getOrganizationSettingsRow(db, user.organization_id);
   const projectTypeDefinitions = normalizeProjectTypeDefinitionsRow(settingsRow);
 
+  // 今後7日以内に期限の自分のタスク（今日より後）
+  const weekEnd = new Date();
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const weekEndStr = weekEnd.toISOString().slice(0, 10);
+
+  const thisWeekTodos: DashboardTodo[] = db.prepare(`
+    SELECT t.id, t.project_id, p.name AS project_name,
+           t.title, t.status, t.priority, t.due_date, t.assignee_id,
+           NULL AS assignee_name, NULL AS assignee_email
+    FROM todos t
+    JOIN projects p ON t.project_id = p.id
+    WHERE t.assignee_id = ?
+      AND t.status != 'done'
+      AND t.due_date > ?
+      AND t.due_date <= ?
+    ORDER BY t.due_date ASC
+    LIMIT 10
+  `).all(user.id, today, weekEndStr) as DashboardTodo[];
+
+  // 更新が14日以上止まっているアクティブプロジェクト
+  const staleThreshold = new Date();
+  staleThreshold.setDate(staleThreshold.getDate() - 14);
+  const staleThresholdStr = staleThreshold.toISOString().slice(0, 19).replace('T', ' ');
+
+  const staleProjects = projectsWithTodos.filter(
+    p => p.status === 'active' && p.updated_at && p.updated_at < staleThresholdStr
+  );
+
   const myUrgentCount = myOpenTodos.filter(t => t.due_date && t.due_date <= today).length;
 
   const stats = {
@@ -141,6 +169,8 @@ export async function GET() {
     projects: projectsWithTodos,
     my_open_todos: myOpenTodos,
     managed_urgent_todos: managedUrgentTodos,
+    this_week_todos: thisWeekTodos,
+    stale_projects: staleProjects,
     project_type_definitions: projectTypeDefinitions,
     stats,
   });

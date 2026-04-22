@@ -110,7 +110,7 @@ type SectionKey =
 function MetaItem({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="surface-read">
-      <p className="text-[11px] uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>{label}</p>
+      <p className="text-[0.6875rem] uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>{label}</p>
       <p className="text-sm font-medium mt-1 break-all">{value}</p>
     </div>
   );
@@ -146,7 +146,7 @@ function SectionBlock({
             <h2 className="section-title">{title}</h2>
             {typeof count === 'number' && (
               <span
-                className="text-[11px] px-2 py-1 rounded-full border"
+                className="text-[0.6875rem] px-2 py-1 rounded-full border"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
               >
                 {count}
@@ -380,7 +380,7 @@ export default function OrganizationOverviewPage() {
         </div>
         {(overview.organization.address_street || overview.organization.address_city || overview.organization.address_state || overview.organization.address_postal_code || overview.organization.address_country) && (
           <div className="mt-4 surface-read">
-            <p className="text-[11px] uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>住所</p>
+            <p className="text-[0.6875rem] uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>住所</p>
             <p className="text-sm mt-2">
               {[
                 overview.organization.address_postal_code,
@@ -427,7 +427,7 @@ export default function OrganizationOverviewPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium">{object.name}</p>
                   {object.is_default && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                    <span className="text-[0.6875rem] px-2 py-0.5 rounded-full border" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
                       組み込み
                     </span>
                   )}

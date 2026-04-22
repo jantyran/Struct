@@ -148,7 +148,7 @@ export default function DeveloperSettingsPage() {
                   selected={design.accentPreset === preset}
                   onClick={() => updateDesign({ accentPreset: preset })}
                 />
-                <span className="text-[10px]" style={{ color: design.accentPreset === preset ? 'var(--accent)' : 'var(--text-muted)' }}>
+                <span className="text-[0.625rem]" style={{ color: design.accentPreset === preset ? 'var(--accent)' : 'var(--text-muted)' }}>
                   {ACCENT_PRESETS[preset].label}
                 </span>
               </div>
@@ -173,7 +173,7 @@ export default function DeveloperSettingsPage() {
                 <p className="text-xs font-semibold" style={{ color: design.bgStyle === opt.value ? 'var(--accent)' : 'var(--text-primary)' }}>
                   {opt.label}
                 </p>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{opt.desc}</p>
+                <p className="text-[0.6875rem] mt-0.5" style={{ color: 'var(--text-muted)' }}>{opt.desc}</p>
               </button>
             ))}
           </div>

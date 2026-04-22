@@ -111,7 +111,7 @@ function RecordDetailModal({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>{object?.name}</p>
+            <p className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-muted)' }}>{object?.name}</p>
             <h2 className="text-lg font-bold mt-0.5">{record.name}</h2>
           </div>
           <button
@@ -126,7 +126,7 @@ function RecordDetailModal({
             if (!value) return null;
             return (
               <div key={f.key} className="py-3 first:pt-0">
-                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{f.label}</p>
+                <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{f.label}</p>
                 {f.type === 'url' ? (
                   <a href={value} target="_blank" rel="noopener noreferrer"
                     className="text-sm break-all underline" style={{ color: 'var(--accent)' }}>
@@ -173,11 +173,11 @@ function ChildFieldValueInput({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
-          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
             {FIELD_TYPE_LABELS[field.type] || field.type}
           </span>
           {(field.type === 'reference' || field.type === 'reference_multi') && (
-            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
               ・ {referenceObject?.name || '未設定'}
             </span>
           )}
@@ -360,19 +360,19 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{field.label}</p>
             {showFieldTypes && (
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
                 {FIELD_TYPE_LABELS[field.type] || field.type}
               </span>
             )}
             {showFieldTypes && (field.type === 'reference' || field.type === 'reference_multi') && (
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
                 ・ {referenceObject?.name || '未設定'}
               </span>
             )}
           </div>
         </div>
         {(showFieldKeys || showFieldIds) && (
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
             {showFieldKeys && <span>キー: {field.key}</span>}
             {showFieldIds && <span>ID: {field.id}</span>}
           </div>
@@ -833,13 +833,13 @@ function SectionInfoWidget({
               <li key={todo.id} className="flex items-center gap-2 text-xs">
                 <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_COLORS[todo.status] ?? '#94a3b8' }} />
                 <span className="flex-1 truncate" style={{ color: 'var(--text-primary)' }}>{todo.title}</span>
-                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[todo.status] ?? '#94a3b8'}18`, color: STATUS_COLORS[todo.status] ?? '#94a3b8' }}>
+                <span className="shrink-0 text-[0.625rem] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[todo.status] ?? '#94a3b8'}18`, color: STATUS_COLORS[todo.status] ?? '#94a3b8' }}>
                   {STATUS_LABELS[todo.status] ?? todo.status}
                 </span>
               </li>
             ))}
             {totalActive > 5 && (
-              <li className="text-[10px]" style={{ color: 'var(--text-muted)' }}>他 {totalActive - 5} 件...</li>
+              <li className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>他 {totalActive - 5} 件...</li>
             )}
           </ul>
         )}
@@ -876,7 +876,7 @@ function SectionInfoWidget({
                 {done > 0 && <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(done / total) * 100}%` }} />}
                 {inProgress > 0 && <div className="h-full bg-blue-400 transition-all" style={{ width: `${(inProgress / total) * 100}%` }} />}
               </div>
-              <div className="flex items-center justify-between text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              <div className="flex items-center justify-between text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
                 <span>完了率 <span className="font-semibold" style={{ color: '#10b981' }}>{pct}%</span></span>
                 <span>全 {total} 件</span>
               </div>
@@ -885,15 +885,15 @@ function SectionInfoWidget({
             <div className="grid grid-cols-3 gap-1.5 text-center">
               <div className="rounded-lg py-1.5 px-1" style={{ backgroundColor: 'rgba(16,185,129,0.08)' }}>
                 <p className="text-base font-bold leading-none" style={{ color: '#10b981' }}>{done}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>完了</p>
+                <p className="text-[0.625rem] mt-0.5" style={{ color: 'var(--text-muted)' }}>完了</p>
               </div>
               <div className="rounded-lg py-1.5 px-1" style={{ backgroundColor: 'rgba(59,130,246,0.08)' }}>
                 <p className="text-base font-bold leading-none" style={{ color: '#3b82f6' }}>{inProgress}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>進行中</p>
+                <p className="text-[0.625rem] mt-0.5" style={{ color: 'var(--text-muted)' }}>進行中</p>
               </div>
               <div className="rounded-lg py-1.5 px-1" style={{ backgroundColor: 'rgba(148,163,184,0.1)' }}>
                 <p className="text-base font-bold leading-none" style={{ color: '#64748b' }}>{notStarted}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>未着手</p>
+                <p className="text-[0.625rem] mt-0.5" style={{ color: 'var(--text-muted)' }}>未着手</p>
               </div>
             </div>
           </div>
@@ -2156,18 +2156,18 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           {/* バッジ群（種別・クローン・要確認） */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span
-              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold"
               style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.2)' }}
             >
               {typeLabel}
             </span>
             {project.cloned_from && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px]" style={{ backgroundColor: 'rgba(111,135,148,0.08)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem]" style={{ backgroundColor: 'rgba(111,135,148,0.08)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
                 クローン
               </span>
             )}
             {inheritedCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ backgroundColor: 'rgba(215,138,29,0.1)', color: '#b66a10', border: '1px solid rgba(215,138,29,0.22)' }}>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.6875rem] font-medium" style={{ backgroundColor: 'rgba(215,138,29,0.1)', color: '#b66a10', border: '1px solid rgba(215,138,29,0.22)' }}>
                 ⚠ {inheritedCount}件
               </span>
             )}
@@ -2300,7 +2300,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       )}
                     </span>
                     {/* 名前 */}
-                    <span className="relative z-10 text-[12px] font-semibold truncate" style={{ color: textColor }}>{phase.name}</span>
+                    <span className="relative z-10 text-xs font-semibold truncate" style={{ color: textColor }}>{phase.name}</span>
                   </button>
                 );
               })}
@@ -2468,7 +2468,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 {completionRawSnippet && (
                   <details>
                     <summary className="cursor-pointer" style={{ color: '#9a3030' }}>AIの生の応答を見る</summary>
-                    <pre className="mt-2 whitespace-pre-wrap break-all text-[10px] leading-relaxed" style={{ color: '#7a2020' }}>{completionRawSnippet}</pre>
+                    <pre className="mt-2 whitespace-pre-wrap break-all text-[0.625rem] leading-relaxed" style={{ color: '#7a2020' }}>{completionRawSnippet}</pre>
                   </details>
                 )}
               </div>

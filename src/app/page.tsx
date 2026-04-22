@@ -33,6 +33,8 @@ interface DashboardData {
   projects: ProjectWithTodos[];
   my_open_todos: DashboardTodo[];
   managed_urgent_todos: DashboardTodo[];
+  this_week_todos: DashboardTodo[];
+  stale_projects: ProjectWithTodos[];
   project_type_definitions: ProjectTypeDefinition[];
   stats: {
     total: number;
@@ -195,10 +197,10 @@ function PhaseProgressBar({ phaseKey, phases }: { phaseKey: string; phases: { ke
   return (
     <div className="mt-2">
       <div className="flex justify-between items-center mb-1">
-        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
           {idx >= 0 ? phases[idx].name : '—'}
         </span>
-        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
           {idx >= 0 ? `${idx + 1} / ${phases.length}` : `— / ${phases.length}`}
         </span>
       </div>
@@ -227,8 +229,8 @@ function ProjectCard({ project, typeLabel, phases, onClone }: {
     <Link href={withBasePath(`/projects/${project.id}`)} className="card card-link flex flex-col">
       <div className="p-5 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <span className={`text-[11px] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>{typeLabel}</span>
-          <span className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 font-medium ${statusColors[project.status] ?? statusColors.draft}`}>
+          <span className={`text-[0.6875rem] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>{typeLabel}</span>
+          <span className={`text-[0.6875rem] px-2 py-0.5 rounded-full shrink-0 font-medium ${statusColors[project.status] ?? statusColors.draft}`}>
             {statusLabels[project.status] ?? project.status}
           </span>
         </div>
@@ -246,11 +248,27 @@ function ProjectCard({ project, typeLabel, phases, onClone }: {
         </div>
         <PhaseProgressBar phaseKey={project.phase_key} phases={phases} />
       </div>
+      {project.todo_total > 0 && (
+        <div className="px-5 pb-3 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>タスク進捗</span>
+            <span className="text-[0.625rem] font-medium" style={{ color: 'var(--text-muted)' }}>
+              {project.todo_done} / {project.todo_total} 完了
+            </span>
+          </div>
+          <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border)' }}>
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${Math.round((project.todo_done / project.todo_total) * 100)}%`,
+                backgroundColor: project.todo_done === project.todo_total ? '#10b981' : 'var(--accent)',
+              }}
+            />
+          </div>
+        </div>
+      )}
       <div className="flex gap-2 px-4 pb-4 pt-2 border-t items-center" style={{ borderColor: 'var(--border)' }}>
         <span className="btn-primary text-xs flex-1 justify-center py-1.5">開く →</span>
-        {todoOpen > 0 && (
-          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium text-slate-600 bg-slate-100">残 {todoOpen}</span>
-        )}
         <button onClick={e => { e.preventDefault(); onClone(project); }} className="btn-secondary text-xs px-3 py-1.5">
           クローン
         </button>
@@ -275,19 +293,19 @@ function SidebarTodoRow({ todo, showAssignee }: { todo: DashboardTodo; showAssig
       style={{ borderColor: 'var(--border)' }}
     >
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{todo.project_name}</p>
+        <p className="text-[0.6875rem] truncate" style={{ color: 'var(--text-muted)' }}>{todo.project_name}</p>
         <p className="text-xs font-medium truncate leading-snug mt-0.5">{todo.title}</p>
         {showAssignee && assigneeLabel && (
-          <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{assigneeLabel}</p>
+          <p className="text-[0.6875rem] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{assigneeLabel}</p>
         )}
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0">
-        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+        <span className="text-[0.625rem] px-1.5 py-0.5 rounded font-medium"
           style={{ backgroundColor: `${TODO_PRIORITY_COLORS[todo.priority]}20`, color: TODO_PRIORITY_COLORS[todo.priority] }}>
           {TODO_PRIORITY_LABELS[todo.priority]}
         </span>
         {todo.due_date && (
-          <span className={`text-[10px] font-medium ${overdue ? 'text-red-500' : dueToday ? 'text-amber-500' : ''}`}
+          <span className={`text-[0.625rem] font-medium ${overdue ? 'text-red-500' : dueToday ? 'text-amber-500' : ''}`}
             style={!overdue && !dueToday ? { color: 'var(--text-muted)' } : undefined}>
             {overdue ? '期限切れ' : dueToday ? '本日' : todo.due_date.slice(5)}
           </span>
@@ -300,9 +318,11 @@ function SidebarTodoRow({ todo, showAssignee }: { todo: DashboardTodo; showAssig
 // ──────────────────────────────────────────
 // サイドバーパネル
 // ──────────────────────────────────────────
-function SidebarPanel({ myTodos, managedUrgentTodos, myOpenCount, myUrgentCount }: {
+function SidebarPanel({ myTodos, managedUrgentTodos, thisWeekTodos, staleProjects, myOpenCount, myUrgentCount }: {
   myTodos: DashboardTodo[];
   managedUrgentTodos: DashboardTodo[];
+  thisWeekTodos: DashboardTodo[];
+  staleProjects: ProjectWithTodos[];
   myOpenCount: number;
   myUrgentCount: number;
 }) {
@@ -313,10 +333,10 @@ function SidebarPanel({ myTodos, managedUrgentTodos, myOpenCount, myUrgentCount 
         <div className="px-3 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface-secondary)' }}>
           <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>自分のタスク</span>
           {myOpenCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-cyan-100 text-cyan-700">{myOpenCount}</span>
+            <span className="text-[0.625rem] px-1.5 py-0.5 rounded-full font-medium bg-cyan-100 text-cyan-700">{myOpenCount}</span>
           )}
           {myUrgentCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600 ml-auto">⚠ {myUrgentCount}</span>
+            <span className="text-[0.625rem] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600 ml-auto">⚠ {myUrgentCount}</span>
           )}
         </div>
 
@@ -339,19 +359,68 @@ function SidebarPanel({ myTodos, managedUrgentTodos, myOpenCount, myUrgentCount 
         </div>
       </div>
 
+      {/* 今週期限のタスク */}
+      {thisWeekTodos.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-3 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(245,158,11,0.04)' }}>
+            <span className="text-xs">📅</span>
+            <span className="text-xs font-semibold text-amber-700">今後7日以内の期限</span>
+            <span className="text-[0.625rem] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700 ml-auto">
+              {thisWeekTodos.length}
+            </span>
+          </div>
+          <div>
+            {thisWeekTodos.map(t => (
+              <SidebarTodoRow key={t.id} todo={t} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 管理プロジェクトの急ぎタスク */}
       {managedUrgentTodos.length > 0 && (
         <div className="card overflow-hidden">
           <div className="px-3 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(239,68,68,0.04)' }}>
             <span className="text-xs">⚠</span>
             <span className="text-xs font-semibold text-red-700">管理プロジェクトの急ぎタスク</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600 ml-auto">
+            <span className="text-[0.625rem] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-600 ml-auto">
               {managedUrgentTodos.length}
             </span>
           </div>
           <div>
             {managedUrgentTodos.map(t => (
               <SidebarTodoRow key={t.id} todo={t} showAssignee />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 更新が止まったプロジェクト */}
+      {staleProjects.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-3 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(100,116,139,0.04)' }}>
+            <span className="text-xs">💤</span>
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>14日以上更新なし</span>
+            <span className="text-[0.625rem] px-1.5 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500 ml-auto">
+              {staleProjects.length}
+            </span>
+          </div>
+          <div>
+            {staleProjects.map(p => (
+              <Link
+                key={p.id}
+                href={withBasePath(`/projects/${p.id}`)}
+                className="flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors border-b last:border-0"
+                style={{ borderColor: 'var(--border)' }}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{p.name}</p>
+                  <p className="text-[0.6875rem] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    最終更新: {p.updated_at ? p.updated_at.slice(0, 10) : '—'}
+                  </p>
+                </div>
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>›</span>
+              </Link>
             ))}
           </div>
         </div>
@@ -370,6 +439,7 @@ export default function Dashboard() {
   const [showNew, setShowNew] = useState(false);
   const [cloneSource, setCloneSource] = useState<Project | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(withBasePath('/api/dashboard'));
@@ -394,16 +464,22 @@ export default function Dashboard() {
     );
   }
 
-  const { projects, my_open_todos, managed_urgent_todos, project_type_definitions, stats } = data;
-  const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter || p.type === filter);
+  const { projects, my_open_todos, managed_urgent_todos, this_week_todos, stale_projects, project_type_definitions, stats } = data;
+  const filtered = filter === 'archived'
+    ? projects.filter(p => p.status === 'archived')
+    : filter === 'all'
+      ? projects.filter(p => p.status !== 'archived')
+      : projects.filter(p => p.status !== 'archived' && (p.status === filter || p.type === filter));
   const typeLabelMap = Object.fromEntries(project_type_definitions.map(d => [d.key, d.name]));
   const phaseMap = Object.fromEntries(project_type_definitions.map(d => [d.key, d.phases]));
 
+  const archivedCount = projects.filter(p => p.status === 'archived').length;
+  const selectedTypeDef = project_type_definitions.find(d => d.key === filter);
   const filterChips = [
     { v: 'all', l: 'すべて' },
     { v: 'active', l: 'アクティブ' },
     { v: 'draft', l: '下書き' },
-    ...project_type_definitions.map(d => ({ v: d.key, l: d.name })),
+    ...(archivedCount > 0 ? [{ v: 'archived', l: `アーカイブ (${archivedCount})` }] : []),
   ];
 
   const statCards = [
@@ -451,10 +527,48 @@ export default function Dashboard() {
           {/* フィルター */}
           <div className="flex flex-wrap gap-2 mb-4">
             {filterChips.map(f => (
-              <button key={f.v} onClick={() => setFilter(f.v)} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
+              <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
                 {f.l}
               </button>
             ))}
+
+            {/* タイプ別ドロップダウン */}
+            {project_type_definitions.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setTypeDropdownOpen(v => !v)}
+                  className={`tab-btn${selectedTypeDef ? ' active' : ''}`}
+                >
+                  {selectedTypeDef ? selectedTypeDef.name : 'PJカテゴリ'} ▾
+                </button>
+                {typeDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setTypeDropdownOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1 z-20 card py-1 min-w-[140px] shadow-lg">
+                      {selectedTypeDef && (
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
+                          style={{ color: 'var(--text-muted)' }}
+                          onClick={() => { setFilter('all'); setTypeDropdownOpen(false); }}
+                        >
+                          絞り込みを解除
+                        </button>
+                      )}
+                      {project_type_definitions.map(d => (
+                        <button
+                          key={d.key}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
+                          style={{ color: filter === d.key ? 'var(--accent)' : 'var(--text-primary)', fontWeight: filter === d.key ? 600 : undefined }}
+                          onClick={() => { setFilter(d.key); setTypeDropdownOpen(false); }}
+                        >
+                          {d.name}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {filtered.length === 0 ? (
@@ -482,6 +596,8 @@ export default function Dashboard() {
         <SidebarPanel
           myTodos={my_open_todos}
           managedUrgentTodos={managed_urgent_todos}
+          thisWeekTodos={this_week_todos}
+          staleProjects={stale_projects}
           myOpenCount={stats.my_todo_open}
           myUrgentCount={stats.my_todo_urgent}
         />

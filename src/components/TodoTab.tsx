@@ -57,7 +57,7 @@ function isDueSoon(dueDate: string, status: TodoStatus): boolean {
 // ──────────────────────────────────────────
 function PriorityBadge({ priority }: { priority: TodoPriority }) {
   return (
-    <span className="text-[11px] px-1.5 py-0.5 rounded font-medium"
+    <span className="text-[0.6875rem] px-1.5 py-0.5 rounded font-medium"
       style={{ backgroundColor: `${TODO_PRIORITY_COLORS[priority]}20`, color: TODO_PRIORITY_COLORS[priority] }}>
       {TODO_PRIORITY_LABELS[priority]}
     </span>
@@ -67,7 +67,7 @@ function PriorityBadge({ priority }: { priority: TodoPriority }) {
 function StatusBadge({ status, onClick }: { status: TodoStatus; onClick?: () => void }) {
   return (
     <span
-      className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_BG[status]} ${onClick ? 'cursor-pointer hover:opacity-80' : ''}`}
+      className={`text-[0.6875rem] px-2 py-0.5 rounded-full font-medium ${STATUS_BG[status]} ${onClick ? 'cursor-pointer hover:opacity-80' : ''}`}
       onClick={onClick}
       title={onClick ? 'クリックでステータス変更' : undefined}
     >
@@ -164,9 +164,9 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <StatusBadge status={status} onClick={canEdit ? cycleStatus : undefined} />
             <PriorityBadge priority={priority} />
-            {overdue && <span className="text-[11px] text-red-500 font-medium">⚠ 期限切れ</span>}
+            {overdue && <span className="text-[0.6875rem] text-red-500 font-medium">⚠ 期限切れ</span>}
             {subtaskCount > 0 && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+              <span className="text-[0.6875rem] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                 サブタスク {subtaskDone}/{subtaskCount}
               </span>
             )}
@@ -191,7 +191,7 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
           {/* メタ情報グリッド */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>ステータス</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>ステータス</p>
               {canEdit ? (
                 <select className="field-input text-sm" value={status} onChange={e => mark(setStatus)(e.target.value as TodoStatus)}>
                   {STATUS_ORDER.map(s => <option key={s} value={s}>{TODO_STATUS_LABELS[s]}</option>)}
@@ -199,7 +199,7 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
               ) : <StatusBadge status={status} />}
             </div>
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>優先度</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>優先度</p>
               {canEdit ? (
                 <select className="field-input text-sm" value={priority} onChange={e => mark(setPriority)(e.target.value as TodoPriority)}>
                   {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => <option key={p} value={p}>{TODO_PRIORITY_LABELS[p]}</option>)}
@@ -207,7 +207,7 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
               ) : <PriorityBadge priority={priority} />}
             </div>
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>担当者</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>担当者</p>
               {canEdit ? (
                 <select className="field-input text-sm" value={assigneeId} onChange={e => mark(setAssigneeId)(e.target.value)}>
                   <option value="">未割当</option>
@@ -217,7 +217,7 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
             </div>
             {phases.length > 0 && (
               <div>
-                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>フェーズ</p>
+                <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>フェーズ</p>
                 {canEdit ? (
                   <select className="field-input text-sm" value={phaseKey} onChange={e => mark(setPhaseKey)(e.target.value)}>
                     <option value="">未設定</option>
@@ -227,13 +227,13 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
               </div>
             )}
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>開始日</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>開始日</p>
               {canEdit ? (
                 <input type="date" className="field-input text-sm" value={startDate} onChange={e => mark(setStartDate)(e.target.value)} />
               ) : <p className="text-sm">{formatDate(startDate) || '—'}</p>}
             </div>
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>期日</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>期日</p>
               {canEdit ? (
                 <input type="date" className="field-input text-sm" value={dueDate} onChange={e => mark(setDueDate)(e.target.value)} />
               ) : <p className="text-sm" style={{ color: overdue ? '#ef4444' : undefined }}>{formatDate(dueDate) || '—'}</p>}
@@ -243,7 +243,7 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
           {/* サブタスク一覧（読み取り） */}
           {subtaskCount > 0 && (
             <div>
-              <p className="text-[11px] font-medium mb-2" style={{ color: 'var(--text-muted)' }}>サブタスク</p>
+              <p className="text-[0.6875rem] font-medium mb-2" style={{ color: 'var(--text-muted)' }}>サブタスク</p>
               <div className="space-y-1">
                 {todo.subtasks!.map(sub => (
                   <div key={sub.id} className="flex items-center gap-2 text-sm py-1">
@@ -355,19 +355,19 @@ function TodoCreateModal({ assignableUsers, phases, parentTodo, initialValues, o
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>ステータス</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>ステータス</p>
               <select className="field-input text-sm" value={status} onChange={e => setStatus(e.target.value as TodoStatus)}>
                 {STATUS_ORDER.map(s => <option key={s} value={s}>{TODO_STATUS_LABELS[s]}</option>)}
               </select>
             </div>
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>優先度</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>優先度</p>
               <select className="field-input text-sm" value={priority} onChange={e => setPriority(e.target.value as TodoPriority)}>
                 {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => <option key={p} value={p}>{TODO_PRIORITY_LABELS[p]}</option>)}
               </select>
             </div>
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>担当者</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>担当者</p>
               <select className="field-input text-sm" value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
                 <option value="">未割当</option>
                 {assignableUsers.map(u => <option key={u.id} value={u.id}>{u.name?.trim() || u.email}</option>)}
@@ -375,7 +375,7 @@ function TodoCreateModal({ assignableUsers, phases, parentTodo, initialValues, o
             </div>
             {phases.length > 0 && (
               <div>
-                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>フェーズ</p>
+                <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>フェーズ</p>
                 <select className="field-input text-sm" value={phaseKey} onChange={e => setPhaseKey(e.target.value)}>
                   <option value="">未設定</option>
                   {phases.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
@@ -383,11 +383,11 @@ function TodoCreateModal({ assignableUsers, phases, parentTodo, initialValues, o
               </div>
             )}
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>開始日</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>開始日</p>
               <input type="date" className="field-input text-sm" value={startDate} onChange={e => setStartDate(e.target.value)} />
             </div>
             <div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>期日</p>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>期日</p>
               <input type="date" className="field-input text-sm" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </div>
           </div>
@@ -455,24 +455,24 @@ function TodoRow({
         </span>
         <PriorityBadge priority={todo.priority} />
         {todo.status === 'in_progress' && (
-          <span className="text-[11px] px-1.5 py-0.5 rounded-full text-blue-700 bg-blue-50">進行中</span>
+          <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full text-blue-700 bg-blue-50">進行中</span>
         )}
         {subtaskCount > 0 && (
-          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+          <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
             {subtaskDone}/{subtaskCount}
           </span>
         )}
         {todo.assignee && (
-          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{userDisplayName(todo.assignee)}</span>
+          <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{userDisplayName(todo.assignee)}</span>
         )}
         {todo.due_date && (
-          <span className="text-[11px] font-medium"
+          <span className="text-[0.6875rem] font-medium"
             style={{ color: overdue ? '#ef4444' : soon ? '#f59e0b' : 'var(--text-muted)' }}>
             {overdue ? '⚠ ' : soon ? '◎ ' : ''}{formatDate(todo.due_date)}
           </span>
         )}
         {todo.phase_key && phases.length > 0 && (
-          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
             {phases.find(p => p.key === todo.phase_key)?.name}
           </span>
         )}
@@ -483,18 +483,18 @@ function TodoRow({
         <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           {depth === 0 && (
             <button onClick={e => { e.stopPropagation(); onAddSubtask(todo.id); }}
-              className="text-[11px] px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+              className="text-[0.6875rem] px-2 py-1 rounded hover:bg-slate-100 transition-colors"
               style={{ color: 'var(--text-muted)' }} title="サブタスク追加">
               +サブ
             </button>
           )}
           <button onClick={e => { e.stopPropagation(); onOpen(todo); }}
-            className="text-[11px] px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+            className="text-[0.6875rem] px-2 py-1 rounded hover:bg-slate-100 transition-colors"
             style={{ color: 'var(--text-muted)' }}>
             開く
           </button>
           <button onClick={e => { e.stopPropagation(); onDelete(todo.id); }}
-            className="text-[11px] px-2 py-1 rounded hover:bg-red-50 transition-colors text-red-400">
+            className="text-[0.6875rem] px-2 py-1 rounded hover:bg-red-50 transition-colors text-red-400">
             削除
           </button>
         </div>
@@ -544,12 +544,12 @@ function KanbanCard({
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <PriorityBadge priority={todo.priority} />
         {todo.assignee && (
-          <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{userDisplayName(todo.assignee)}</span>
+          <span className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>{userDisplayName(todo.assignee)}</span>
         )}
       </div>
 
       {todo.due_date && (
-        <p className="text-[11px] mt-1.5 font-medium"
+        <p className="text-[0.6875rem] mt-1.5 font-medium"
           style={{ color: overdue ? '#ef4444' : soon ? '#f59e0b' : 'var(--text-muted)' }}>
           {overdue ? '⚠ ' : soon ? '◎ ' : ''}{formatDate(todo.due_date)}
         </p>
@@ -561,7 +561,7 @@ function KanbanCard({
             <div className="h-full rounded-full bg-emerald-400"
               style={{ width: `${((todo.subtasks!.filter(s => s.status === 'done').length) / todo.subtasks!.length) * 100}%` }} />
           </div>
-          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          <span className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
             {todo.subtasks!.filter(s => s.status === 'done').length}/{todo.subtasks!.length}
           </span>
         </div>
@@ -1380,19 +1380,19 @@ function GanttView({
 
         {/* ──── フッター（スクロール非依存） ──── */}
         <div className="flex items-center justify-between mt-2 px-1 flex-wrap gap-2">
-          <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
             バー中央をドラッグ: 期間移動 ／ 右端をドラッグ: 期日変更 ／ 未スケジュールからドラッグ: 日付付与 ／ 最下段をドラッグ: 新規タスク作成
           </p>
           <div className="flex items-center gap-3">
             {(['todo', 'in_progress', 'done'] as const).map(s => (
               <div key={s} className="flex items-center gap-1">
                 <div style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GANTT_STATUS_COLORS[s], opacity: 0.85, flexShrink: 0 }} />
-                <span className="text-[10px]" style={{ color: '#64748b' }}>{TODO_STATUS_LABELS[s]}</span>
+                <span className="text-[0.625rem]" style={{ color: '#64748b' }}>{TODO_STATUS_LABELS[s]}</span>
               </div>
             ))}
             <div className="flex items-center gap-1">
               <div style={{ width: 3, height: 10, borderRadius: 2, backgroundColor: '#3b82f6', flexShrink: 0 }} />
-              <span className="text-[10px]" style={{ color: '#64748b' }}>優先度</span>
+              <span className="text-[0.625rem]" style={{ color: '#64748b' }}>優先度</span>
             </div>
           </div>
         </div>
@@ -1636,7 +1636,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
                 {isFiltering ? `${filteredCount} / ${totalCount}件` : `${doneCount} / ${totalCount} 完了`}
               </span>
               {urgentCount > 0 && (
-                <span className="text-[11px] px-1.5 py-0.5 rounded-full font-medium text-red-600 bg-red-50">
+                <span className="text-[0.6875rem] px-1.5 py-0.5 rounded-full font-medium text-red-600 bg-red-50">
                   ⚠ {urgentCount} 件期限切れ
                 </span>
               )}
@@ -1660,7 +1660,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
             style={hideDone
               ? { backgroundColor: 'var(--accent)', color: 'white' }
               : { color: 'var(--text-muted)', backgroundColor: 'transparent' }}>
-            <span className="text-[10px]">{hideDone ? '✓' : '○'}</span>
+            <span className="text-[0.625rem]">{hideDone ? '✓' : '○'}</span>
             完了を隠す
           </button>
 
@@ -1668,10 +1668,10 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
 
           {/* ステータス */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>状態</span>
+            <span className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-muted)' }}>状態</span>
             {STATUS_ORDER.map(s => (
               <button key={s} onClick={() => toggleStatus(s)}
-                className="text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors"
+                className="text-[0.6875rem] px-2 py-0.5 rounded-full font-medium transition-colors"
                 style={filterStatuses.has(s)
                   ? { backgroundColor: STATUS_COLUMN_COLORS[s], color: 'white' }
                   : { backgroundColor: `${STATUS_COLUMN_COLORS[s]}15`, color: STATUS_COLUMN_COLORS[s] }}>
@@ -1684,10 +1684,10 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
 
           {/* 優先度 */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>優先度</span>
+            <span className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-muted)' }}>優先度</span>
             {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => (
               <button key={p} onClick={() => togglePriority(p)}
-                className="text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors"
+                className="text-[0.6875rem] px-2 py-0.5 rounded-full font-medium transition-colors"
                 style={filterPriorities.has(p)
                   ? { backgroundColor: TODO_PRIORITY_COLORS[p], color: 'white' }
                   : { backgroundColor: `${TODO_PRIORITY_COLORS[p]}18`, color: TODO_PRIORITY_COLORS[p] }}>
@@ -1701,9 +1701,9 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
             <>
               <div className="w-px h-4 bg-slate-200" />
               <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>担当者</span>
+                <span className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-muted)' }}>担当者</span>
                 <select
-                  className="text-[11px] rounded-lg px-2 py-0.5 border transition-colors"
+                  className="text-[0.6875rem] rounded-lg px-2 py-0.5 border transition-colors"
                   style={{
                     borderColor: filterAssigneeId ? 'var(--accent)' : 'var(--border)',
                     color: filterAssigneeId ? 'var(--accent)' : 'var(--text-secondary)',
@@ -1726,7 +1726,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
           {isFiltering && (
             <button
               onClick={() => { setFilterStatuses(new Set()); setFilterPriorities(new Set()); setFilterAssigneeId(''); }}
-              className="text-[11px] ml-auto px-2 py-0.5 rounded-lg transition-colors"
+              className="text-[0.6875rem] ml-auto px-2 py-0.5 rounded-lg transition-colors"
               style={{ color: 'var(--text-muted)' }}>
               クリア ×
             </button>
@@ -1890,7 +1890,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
             <div className="p-4 space-y-5 flex-1">
               {/* 表示単位 */}
               <div>
-                <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>表示単位</p>
+                <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>表示単位</p>
                 <div className="flex flex-col gap-1">
                   {(Object.keys(GANTT_SCALE_LABELS) as GanttScale[]).map(s => (
                     <button key={s} onClick={() => setGanttScale(s)}
@@ -1913,14 +1913,14 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
                   style={hideDone
                     ? { backgroundColor: 'var(--accent)', color: 'white' }
                     : { color: 'var(--text-secondary)', backgroundColor: 'transparent' }}>
-                  <span className="text-[10px]">{hideDone ? '✓' : '○'}</span>
+                  <span className="text-[0.625rem]">{hideDone ? '✓' : '○'}</span>
                   完了を隠す
                 </button>
               </div>
 
               {/* ステータス */}
               <div>
-                <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>ステータス</p>
+                <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>ステータス</p>
                 <div className="flex flex-col gap-1">
                   {STATUS_ORDER.map(s => (
                     <button key={s} onClick={() => toggleStatus(s)}
@@ -1936,7 +1936,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
 
               {/* 優先度 */}
               <div>
-                <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>優先度</p>
+                <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>優先度</p>
                 <div className="flex flex-col gap-1">
                   {(['urgent', 'high', 'medium', 'low'] as TodoPriority[]).map(p => (
                     <button key={p} onClick={() => togglePriority(p)}
@@ -1953,9 +1953,9 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
               {/* 担当者 */}
               {assignableUsers.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>担当者</p>
+                  <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>担当者</p>
                   <select
-                    className="w-full text-[11px] rounded-lg px-2 py-1.5 border transition-colors"
+                    className="w-full text-[0.6875rem] rounded-lg px-2 py-1.5 border transition-colors"
                     style={{
                       borderColor: filterAssigneeId ? 'var(--accent)' : 'var(--border)',
                       color: filterAssigneeId ? 'var(--accent)' : 'var(--text-secondary)',
@@ -1984,7 +1984,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
             </div>
 
             {/* フッター */}
-            <div className="px-4 py-3 border-t text-[10px] leading-relaxed" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+            <div className="px-4 py-3 border-t text-[0.625rem] leading-relaxed" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
               バー: ドラッグで移動<br />右端: ドラッグで期日変更<br />ダブルクリック: 詳細を開く
             </div>
           </div>
