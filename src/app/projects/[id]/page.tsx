@@ -528,66 +528,68 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
               + 追加
             </button>
           </div>
-          {groupListValue.length === 0 ? (
-            <div className="rounded-xl border px-3 py-4 text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
-              まだ項目はありません。必要なまとまりを追加してください。
-            </div>
-          ) : (
-            groupListValue.map((item, itemIndex) => {
-              const summary = childTemplates
-                .slice(0, 2)
-                .map((childTemplate) => {
-                  const raw = (item[childTemplate.id] ?? item[childTemplate.key])?.value;
-                  if (!raw) return null;
-                  const { label, url } = parseUrlFieldValue(raw);
-                  if (url) return label || url;
-                  return raw;
-                })
-                .filter((v): v is string => Boolean(v))
-                .join(' · ');
-              return (
-                <details key={`${field.id}-${itemIndex}`} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
-                  <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{field.label} {itemIndex + 1}</p>
-                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{summary || '内容を入力してください'}</p>
+          <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+            {groupListValue.length === 0 ? (
+              <p className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目はありません。+ 追加で作成してください。</p>
+            ) : (
+              groupListValue.map((item, itemIndex) => {
+                const summaryParts = childTemplates
+                  .slice(0, 3)
+                  .map((childTemplate) => {
+                    const raw = (item[childTemplate.id] ?? item[childTemplate.key])?.value;
+                    if (!raw) return null;
+                    if (childTemplate.type === 'url') {
+                      const { label } = parseUrlFieldValue(raw);
+                      return label || null;
+                    }
+                    return raw;
+                  })
+                  .filter((v): v is string => Boolean(v));
+                return (
+                  <details key={`${field.id}-${itemIndex}`} className="border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
+                    <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center gap-3 hover:bg-[rgba(15,154,177,0.03)]">
+                      <span className="flex-1 text-xs truncate min-w-0" style={{ color: summaryParts.length > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                        {summaryParts.length > 0 ? summaryParts.join(' · ') : '（未入力）'}
+                      </span>
+                      <button
+                        type="button"
+                        className="shrink-0 text-[0.625rem] px-1.5 py-0.5 rounded transition-colors hover:opacity-70"
+                        style={{ color: 'var(--text-muted)' }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const nextItems = groupListValue.filter((_, i) => i !== itemIndex);
+                          onChange({ ...field, value: JSON.stringify(nextItems) });
+                        }}
+                      >
+                        ✕
+                      </button>
+                      <span className="shrink-0 text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>▾</span>
+                    </summary>
+                    <div className="border-t px-4 py-3 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(248,252,255,0.6)' }}>
+                      {childTemplates.map((childTemplate) => {
+                        const childField = buildChildField(childTemplate, item[childTemplate.id] ?? item[childTemplate.key], field.inherited);
+                        return (
+                          <ChildFieldValueInput
+                            key={childTemplate.id}
+                            field={childField}
+                            globalAssetObjects={globalAssetObjects}
+                            onChange={(nextChild) => {
+                              const nextItems = [...groupListValue];
+                              nextItems[itemIndex] = {
+                                ...nextItems[itemIndex],
+                                [childTemplate.id]: { value: nextChild.value, options: nextChild.options },
+                              };
+                              onChange({ ...field, value: JSON.stringify(nextItems) });
+                            }}
+                          />
+                        );
+                      })}
                     </div>
-                    <button
-                      type="button"
-                      className="btn-danger text-xs"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const nextItems = groupListValue.filter((_, currentIndex) => currentIndex !== itemIndex);
-                        onChange({ ...field, value: JSON.stringify(nextItems) });
-                      }}
-                    >
-                      削除
-                    </button>
-                  </summary>
-                  <div className="border-t p-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderColor: 'var(--border)' }}>
-                    {childTemplates.map((childTemplate) => {
-                      const childField = buildChildField(childTemplate, item[childTemplate.id] ?? item[childTemplate.key], field.inherited);
-                      return (
-                        <ChildFieldValueInput
-                          key={childTemplate.id}
-                          field={childField}
-                          globalAssetObjects={globalAssetObjects}
-                          onChange={(nextChild) => {
-                            const nextItems = [...groupListValue];
-                            nextItems[itemIndex] = {
-                              ...nextItems[itemIndex],
-                              [childTemplate.id]: { value: nextChild.value, options: nextChild.options },
-                            };
-                            onChange({ ...field, value: JSON.stringify(nextItems) });
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                </details>
-              );
-            })
-          )}
+                  </details>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
