@@ -543,31 +543,49 @@ function FieldTemplateRow({
       )}
 
       {field.type === 'list' && (
-        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>項目設定</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>繰り返しリストに入る項目の種別を1つ定義します。</p>
-            </div>
-            {childFields.length === 0 && (
+        <div className="rounded-xl border px-3 py-2.5 flex items-center gap-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+          <span className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>項目種別</span>
+          {childFields.length === 0 ? (
+            <button
+              type="button"
+              className="btn-secondary text-xs py-1 px-3"
+              onClick={() => onChange({ ...field, options: serializeFieldOptions({ children: [createChildTemplate(0)] }) })}
+            >
+              + 設定する
+            </button>
+          ) : (
+            <>
+              <select
+                className="field-input text-sm flex-1"
+                value={childFields[0].type}
+                onChange={(e) => {
+                  const nextChild = { ...childFields[0], type: e.target.value as ProjectFieldTemplate['type'] };
+                  onChange({ ...field, options: serializeFieldOptions({ children: [nextChild] }) });
+                }}
+              >
+                {Object.entries(FIELD_TYPE_LABELS)
+                  .filter(([type]) => !['group', 'group_list', 'list'].includes(type))
+                  .map(([type, label]) => (
+                    <option key={type} value={type}>{label}</option>
+                  ))}
+              </select>
+              <input
+                className="field-input text-sm flex-1"
+                value={childFields[0].label}
+                onChange={(e) => {
+                  const nextChild = { ...childFields[0], label: e.target.value };
+                  onChange({ ...field, options: serializeFieldOptions({ children: [nextChild] }) });
+                }}
+                placeholder="ラベル名"
+              />
               <button
                 type="button"
-                className="btn-secondary text-xs py-1 px-3"
-                onClick={() => onChange({ ...field, options: serializeFieldOptions({ children: [createChildTemplate(0)] }) })}
+                className="btn-danger text-xs shrink-0"
+                onClick={() => onChange({ ...field, options: serializeFieldOptions({ children: [] }) })}
               >
-                + 項目設定
+                削除
               </button>
-            )}
-          </div>
-          {childFields.length === 0 ? (
-            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目種別が設定されていません。</div>
-          ) : (
-            <ChildFieldTemplateRow
-              field={childFields[0]}
-              globalAssetObjects={globalAssetObjects}
-              onChange={(nextChild) => onChange({ ...field, options: serializeFieldOptions({ children: [nextChild] }) })}
-              onRemove={() => onChange({ ...field, options: serializeFieldOptions({ children: [] }) })}
-            />
+            </>
           )}
         </div>
       )}
