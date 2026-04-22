@@ -1,6 +1,6 @@
 export type ProjectType = string;
 export type ProjectStatus = 'draft' | 'active' | 'archived';
-export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'number' | 'select' | 'reference' | 'reference_multi' | 'group' | 'group_list';
+export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'number' | 'select' | 'reference' | 'reference_multi' | 'group' | 'group_list' | 'list';
 export type FieldLayout = 'half' | 'full';
 export type AssetType = string;
 export type GlobalAssetFieldType = 'text' | 'textarea' | 'url' | 'number' | 'date' | 'reference' | 'reference_multi';
@@ -397,5 +397,6 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   reference: '参照',
   reference_multi: '複数参照',
   group: 'グループ',
-  group_list: '繰り返し',
+  group_list: '繰り返しグループ',
+  list: '繰り返し',
 };

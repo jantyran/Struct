@@ -238,6 +238,21 @@ function formatCustomFieldValueWithOptions(
     return childLines.length > 0 ? `\n${childLines.join('\n')}` : '（未入力）';
   }
 
+  if (field.type === 'list') {
+    const options = safeJson<{ children?: Array<{ key: string; label: string; type?: string }> }>(field.options, {});
+    const childTemplate = (options.children ?? [])[0];
+    const values = safeJson<Array<Record<string, { value?: string } | string>>>(field.value, []);
+    if (values.length === 0) return '（未入力）';
+    const lines = values.map((item) => {
+      const childId = (childTemplate as { id?: string } | undefined)?.id;
+      const raw = (childId ? item[childId] : undefined) ?? (childTemplate ? item[childTemplate.key] : undefined);
+      const v = typeof raw === 'string' ? raw : raw?.value || '';
+      if (childTemplate?.type === 'url') return `  - ${formatUrlFieldValue(v)}`;
+      return `  - ${v || '（未入力）'}`;
+    });
+    return `\n${lines.join('\n')}`;
+  }
+
   if (field.type === 'group_list') {
     const options = safeJson<{ children?: Array<{ key: string; label: string }> }>(field.options, {});
     const values = safeJson<Array<Record<string, { value?: string } | string>>>(field.value, []);

@@ -274,7 +274,7 @@ function ChildFieldTemplateRow({
             }}
           >
             {Object.entries(FIELD_TYPE_LABELS)
-              .filter(([type]) => !['group', 'group_list'].includes(type))
+              .filter(([type]) => !['group', 'group_list', 'list'].includes(type))
               .map(([type, label]) => (
                 <option key={type} value={type}>{label}</option>
               ))}
@@ -491,7 +491,9 @@ function FieldTemplateRow({
                   ? serializeFieldOptions({ referenceObjectId: options.referenceObjectId || '' })
                   : nextType === 'group' || nextType === 'group_list'
                     ? serializeFieldOptions({ children: options.children ?? [] })
-                    : '{}';
+                    : nextType === 'list'
+                      ? serializeFieldOptions({ children: (options.children ?? []).slice(0, 1) })
+                      : '{}';
               onChange({ ...field, type: nextType, options: nextOptions });
             }}
           >
@@ -537,6 +539,36 @@ function FieldTemplateRow({
               <option key={object.id} value={object.id}>{object.name}</option>
             ))}
           </select>
+        </div>
+      )}
+
+      {field.type === 'list' && (
+        <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.7)' }}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>項目設定</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>繰り返しリストに入る項目の種別を1つ定義します。</p>
+            </div>
+            {childFields.length === 0 && (
+              <button
+                type="button"
+                className="btn-secondary text-xs py-1 px-3"
+                onClick={() => onChange({ ...field, options: serializeFieldOptions({ children: [createChildTemplate(0)] }) })}
+              >
+                + 項目設定
+              </button>
+            )}
+          </div>
+          {childFields.length === 0 ? (
+            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>まだ項目種別が設定されていません。</div>
+          ) : (
+            <ChildFieldTemplateRow
+              field={childFields[0]}
+              globalAssetObjects={globalAssetObjects}
+              onChange={(nextChild) => onChange({ ...field, options: serializeFieldOptions({ children: [nextChild] }) })}
+              onRemove={() => onChange({ ...field, options: serializeFieldOptions({ children: [] }) })}
+            />
+          )}
         </div>
       )}
 
