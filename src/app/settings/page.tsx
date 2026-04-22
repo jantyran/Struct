@@ -8,6 +8,12 @@ import { useAuth } from '@/components/AuthContext';
 
 const settingSections = [
   {
+    href: '/settings/user',
+    title: 'ユーザー設定',
+    description: '文字サイズや既定タブ、タスクの既定表示・既定フィルターなど、あなた個人の使い勝手を調整します。',
+    meta: '文字サイズ / 既定タブ / タスク表示 / タスクフィルター / アニメーション抑制',
+  },
+  {
     href: '/settings/organization',
     title: '組織設定全体',
     description: 'この組織で使っている設定を横断して一覧で確認します。',

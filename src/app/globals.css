@@ -21,6 +21,35 @@
   --shadow-soft: 0 22px 50px rgba(44, 112, 134, 0.12);
 }
 
+html[data-text-size='xsmall'] {
+  font-size: 14px;
+}
+
+html[data-text-size='small'] {
+  font-size: 15px;
+}
+
+html[data-text-size='medium'] {
+  font-size: 16px;
+}
+
+html[data-text-size='large'] {
+  font-size: 17px;
+}
+
+html[data-text-size='xlarge'] {
+  font-size: 18px;
+}
+
+html[data-reduce-motion='true'] *,
+html[data-reduce-motion='true'] *::before,
+html[data-reduce-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -289,4 +318,30 @@ html[data-compact] .space-y-4 > * + * { margin-top: 0.625rem; }
 }
 .btn-primary:hover {
   background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
+}
+
+/* ============================================================
+   ProseMirror base (Milkdown live editor)
+   ============================================================ */
+.ProseMirror { position: relative; word-wrap: break-word; white-space: pre-wrap; white-space: break-spaces; outline: none; }
+.ProseMirror li { position: relative; }
+.ProseMirror-selectednode { outline: 2px solid rgba(15,154,177,0.4); }
+li.ProseMirror-selectednode { outline: none; }
+img.ProseMirror-separator { display: inline !important; border: none !important; margin: 0 !important; }
+
+.milkdown-live-wrapper .ProseMirror {
+  min-height: inherit;
+  white-space: normal;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+  cursor: text;
+}
+.milkdown-live-wrapper .ProseMirror > *:first-child { margin-top: 0; }
+.milkdown-live-wrapper .ProseMirror p.is-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  float: left;
+  height: 0;
 }

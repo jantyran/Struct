@@ -5,6 +5,7 @@ import { TODO_STATUS_LABELS, TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS } from '
 import { withBasePath } from '@/lib/paths';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
+import { useAuth } from '@/components/AuthContext';
 
 // ──────────────────────────────────────────
 // 定数
@@ -600,7 +601,7 @@ const GANTT_STATUS_COLORS: Record<string, string> = {
 };
 
 interface GanttDragState {
-  type: 'move' | 'resize';
+  type: 'move' | 'resize_start' | 'resize_end';
   todoId: string;
   startClientX: number;
   origStart: string;
@@ -631,6 +632,7 @@ function GanttView({
   hideScaleUI?: boolean;
   onExpand?: () => void;
 }) {
+  const { user } = useAuth();
   const [dragState, setDragState] = useState<GanttDragState | null>(null);
   const [override, setOverride] = useState<GanttOverride | null>(null);
   const [createState, setCreateState] = useState<GanttCreateState | null>(null);
@@ -639,6 +641,13 @@ function GanttView({
   const [barContainerWidth, setBarContainerWidth] = useState(800);
   const svgRef = useRef<SVGSVGElement>(null);
   const barContainerRef = useRef<HTMLDivElement>(null);
+  const ganttFontScale =
+    user?.settings?.text_size === 'xsmall' ? 0.84
+      : user?.settings?.text_size === 'small' ? 0.92
+      : user?.settings?.text_size === 'large' ? 1.14
+      : user?.settings?.text_size === 'xlarge' ? 1.28
+      : 1;
+  const scaleFont = (size: number) => Math.round(size * ganttFontScale * 10) / 10;
 
   useEffect(() => {
     const el = barContainerRef.current;
@@ -809,7 +818,7 @@ function GanttView({
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const todayX = useMemo(() => dateToX(todayStr), [todayStr, scale, minDateBase]);
 
-  function handleBarMouseDown(e: React.MouseEvent, todo: Todo, type: 'move' | 'resize') {
+  function handleBarMouseDown(e: React.MouseEvent, todo: Todo, type: 'move' | 'resize_start' | 'resize_end') {
     e.preventDefault();
     e.stopPropagation();
     setDragState({
@@ -840,13 +849,21 @@ function GanttView({
         start_date: dragState.origStart ? addDays(dragState.origStart, deltaDays) : '',
         due_date: dragState.origEnd ? addDays(dragState.origEnd, deltaDays) : '',
       });
-    } else {
+    } else if (dragState.type === 'resize_end') {
       const newEnd = dragState.origEnd ? addDays(dragState.origEnd, deltaDays) : '';
       const minEnd = dragState.origStart || '';
       setOverride({
         todoId: dragState.todoId,
         start_date: dragState.origStart || '',
         due_date: newEnd >= minEnd ? newEnd : minEnd,
+      });
+    } else {
+      const newStart = dragState.origStart ? addDays(dragState.origStart, deltaDays) : '';
+      const maxStart = dragState.origEnd || '';
+      setOverride({
+        todoId: dragState.todoId,
+        start_date: newStart <= maxStart ? newStart : maxStart,
+        due_date: dragState.origEnd || '',
       });
     }
   }
@@ -964,14 +981,14 @@ function GanttView({
       )}
 
       {/* チャート本体 */}
-      <div style={{ cursor: dragState ? (dragState.type === 'resize' ? 'ew-resize' : 'grabbing') : 'default' }}>
-        <div className="flex" style={{ userSelect: 'none' }}>
+      <div className="max-w-full overflow-hidden" style={{ cursor: dragState ? (dragState.type === 'move' ? 'grabbing' : 'ew-resize') : 'default' }}>
+        <div className="flex min-w-0 max-w-full" style={{ userSelect: 'none' }}>
 
           {/* ──── 左: ラベル列（固定） ──── */}
           <div style={{ width: GANTT_LABEL_W, flexShrink: 0, borderRight: '1px solid #cbd5e1' }}>
             <svg width={GANTT_LABEL_W} height={svgHeight} style={{ display: 'block' }}>
               <rect x={0} y={0} width={GANTT_LABEL_W} height={GANTT_MONTH_H} fill="#f1f5f9" />
-              <text x={10} y={GANTT_MONTH_H * 0.72} fontSize={11} fill="#475569" fontWeight={600}>タスク</text>
+              <text x={10} y={GANTT_MONTH_H * 0.72} fontSize={scaleFont(11)} fill="#475569" fontWeight={600}>タスク</text>
               <rect x={0} y={GANTT_MONTH_H} width={GANTT_LABEL_W} height={GANTT_DAY_H} fill="#f8fafc" />
               <line x1={0} y1={GANTT_MONTH_H} x2={GANTT_LABEL_W} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
               <line x1={0} y1={GANTT_HEADER_H} x2={GANTT_LABEL_W} y2={GANTT_HEADER_H} stroke="#cbd5e1" strokeWidth={1} />
@@ -979,10 +996,10 @@ function GanttView({
                 <g>
                   <rect x={0} y={GANTT_HEADER_H} width={GANTT_LABEL_W} height={svgHeight - GANTT_HEADER_H}
                     fill="#f8fafc" />
-                  <text x={10} y={GANTT_HEADER_H + 26} fontSize={11} fill="#64748b" fontWeight={600}>
+                  <text x={10} y={GANTT_HEADER_H + 26} fontSize={scaleFont(11)} fill="#64748b" fontWeight={600}>
                     日程未設定
                   </text>
-                  <text x={10} y={GANTT_HEADER_H + 42} fontSize={10} fill="#94a3b8">
+                  <text x={10} y={GANTT_HEADER_H + 42} fontSize={scaleFont(10)} fill="#94a3b8">
                     右へドラッグして配置
                   </text>
                 </g>
@@ -1001,13 +1018,13 @@ function GanttView({
                       stroke="#f1f5f9" strokeWidth={0.5} />
                     <rect x={0} y={y + 6} width={3} height={GANTT_ROW_H - 12} rx={1.5}
                       fill={priorityColor} opacity={0.8} />
-                    <text x={10} y={y + GANTT_ROW_H * 0.4} fontSize={12}
+                    <text x={10} y={y + GANTT_ROW_H * 0.4} fontSize={scaleFont(12)}
                       fill={isDone ? '#9ca3af' : isOverdueBar ? '#ef4444' : '#1e293b'}
                       style={{ textDecoration: isDone ? 'line-through' : 'none', pointerEvents: 'none' }}>
                       {todo.title.length > 24 ? `${todo.title.slice(0, 24)}…` : todo.title}
                     </text>
                     {assigneeName && (
-                      <text x={10} y={y + GANTT_ROW_H * 0.72} fontSize={9.5} fill="#94a3b8"
+                      <text x={10} y={y + GANTT_ROW_H * 0.72} fontSize={scaleFont(9.5)} fill="#94a3b8"
                         style={{ pointerEvents: 'none' }}>
                         {assigneeName.length > 22 ? `${assigneeName.slice(0, 22)}…` : assigneeName}
                       </text>
@@ -1027,10 +1044,10 @@ function GanttView({
                         <line x1={0} y1={y} x2={GANTT_LABEL_W} y2={y} stroke="#e2e8f0" strokeWidth={1} strokeDasharray="4 3" />
                         <line x1={0} y1={y + GANTT_ROW_H} x2={GANTT_LABEL_W} y2={y + GANTT_ROW_H}
                           stroke="#e2e8f0" strokeWidth={1} />
-                        <text x={10} y={y + GANTT_ROW_H * 0.55} fontSize={11} fill="#64748b" fontWeight={500}>
+                        <text x={10} y={y + GANTT_ROW_H * 0.55} fontSize={scaleFont(11)} fill="#64748b" fontWeight={500}>
                           ＋ 新規タスク
                         </text>
-                        <text x={10} y={y + GANTT_ROW_H * 0.8} fontSize={9} fill="#94a3b8">
+                        <text x={10} y={y + GANTT_ROW_H * 0.8} fontSize={scaleFont(9)} fill="#94a3b8">
                           右をドラッグして期間設定
                         </text>
                       </>
@@ -1042,7 +1059,7 @@ function GanttView({
           </div>
 
           {/* ──── 右: バー列（横スクロール） ──── */}
-          <div className="overflow-x-auto flex-1" ref={barContainerRef}>
+          <div className="overflow-x-auto overflow-y-hidden flex-1 min-w-0 max-w-full" ref={barContainerRef}>
             <svg
               ref={svgRef}
               width={effectiveSvgWidth}
@@ -1095,7 +1112,7 @@ function GanttView({
                 <g key={i}>
                   <rect x={m.x} y={0} width={m.width} height={GANTT_MONTH_H}
                     fill={i % 2 === 0 ? '#f1f5f9' : '#e8edf2'} />
-                  <text x={m.x + 8} y={GANTT_MONTH_H * 0.72} fontSize={11} fill="#475569" fontWeight={600}>
+                  <text x={m.x + 8} y={GANTT_MONTH_H * 0.72} fontSize={scaleFont(11)} fill="#475569" fontWeight={600}>
                     {m.label}
                   </text>
                   <line x1={m.x} y1={0} x2={m.x} y2={GANTT_MONTH_H} stroke="#cbd5e1" strokeWidth={0.5} />
@@ -1115,7 +1132,7 @@ function GanttView({
                   )}
                   {tick.label && (
                     <text x={tick.x + tick.width / 2} y={GANTT_MONTH_H + GANTT_DAY_H * 0.68}
-                      textAnchor="middle" fontSize={10}
+                      textAnchor="middle" fontSize={scaleFont(10)}
                       fill={tick.isWeekend ? '#94a3b8' : '#64748b'}>
                       {tick.label}
                     </text>
@@ -1146,7 +1163,7 @@ function GanttView({
                   <rect x={todayX - 1} y={GANTT_HEADER_H} width={2} height={svgHeight - GANTT_HEADER_H}
                     fill="#ef4444" opacity={0.5} />
                   <circle cx={todayX} cy={GANTT_HEADER_H} r={4} fill="#ef4444" opacity={0.8} />
-                  <text x={todayX + 5} y={GANTT_HEADER_H - 4} fontSize={9} fill="#ef4444" fontWeight={600}>今日</text>
+                  <text x={todayX + 5} y={GANTT_HEADER_H - 4} fontSize={scaleFont(9)} fill="#ef4444" fontWeight={600}>今日</text>
                 </>
               )}
 
@@ -1176,21 +1193,29 @@ function GanttView({
                       onDoubleClick={() => onOpen(todo)}
                     />
                     {!isDone && (
-                      <rect x={x2 - RESIZE_HANDLE_PX} y={y + 10}
-                        width={RESIZE_HANDLE_PX} height={GANTT_ROW_H - 20}
-                        rx={4} fill="white" opacity={0.4}
-                        style={{ cursor: 'ew-resize' }}
-                        onMouseDown={e => handleBarMouseDown(e, todo, 'resize')}
-                      />
+                      <>
+                        <rect x={x1} y={y + 10}
+                          width={RESIZE_HANDLE_PX} height={GANTT_ROW_H - 20}
+                          rx={4} fill="white" opacity={0.4}
+                          style={{ cursor: 'ew-resize' }}
+                          onMouseDown={e => handleBarMouseDown(e, todo, 'resize_start')}
+                        />
+                        <rect x={x2 - RESIZE_HANDLE_PX} y={y + 10}
+                          width={RESIZE_HANDLE_PX} height={GANTT_ROW_H - 20}
+                          rx={4} fill="white" opacity={0.4}
+                          style={{ cursor: 'ew-resize' }}
+                          onMouseDown={e => handleBarMouseDown(e, todo, 'resize_end')}
+                        />
+                      </>
                     )}
                     {(x2 - x1) > 48 && (
-                      <text x={x1 + 7} y={y + GANTT_ROW_H * 0.61} fontSize={9.5} fill="white"
+                      <text x={x1 + 7} y={y + GANTT_ROW_H * 0.61} fontSize={scaleFont(9.5)} fill="white"
                         style={{ pointerEvents: 'none' }}>
                         {TODO_STATUS_LABELS[todo.status]}
                       </text>
                     )}
                     {isDragging && override && (
-                      <text x={x1} y={y + 8} fontSize={9} fill={barColor} fontWeight={700}
+                      <text x={x1} y={y + 8} fontSize={scaleFont(9)} fill={barColor} fontWeight={700}
                         style={{ pointerEvents: 'none' }}>
                         {override.start_date} → {override.due_date}
                       </text>
@@ -1223,7 +1248,7 @@ function GanttView({
                       x={cx}
                       y={GANTT_HEADER_H + 52}
                       textAnchor="middle"
-                      fontSize={12}
+                      fontSize={scaleFont(12)}
                       fill={ganttDropTarget ? '#0f9ab1' : '#64748b'}
                       fontWeight={600}
                     >
@@ -1234,7 +1259,7 @@ function GanttView({
                         x={cx}
                         y={GANTT_HEADER_H + 70}
                         textAnchor="middle"
-                        fontSize={10}
+                        fontSize={scaleFont(10)}
                         fill="#94a3b8"
                       >
                         上の「未スケジュール」エリアからドラッグして配置できます
@@ -1295,7 +1320,7 @@ function GanttView({
                               <rect x={labelX} y={y + 9} width={labelW} height={16} rx={3}
                                 fill="#475569" opacity={0.85} />
                               <text x={labelX + labelW / 2} y={y + 20}
-                                textAnchor="middle" fontSize={9.5} fill="white" fontWeight={600}
+                                textAnchor="middle" fontSize={scaleFont(9.5)} fill="white" fontWeight={600}
                                 style={{ pointerEvents: 'none' }}>
                                 {dateLabel}
                               </text>
@@ -1317,7 +1342,7 @@ function GanttView({
                                   <rect x={laneX} y={y + 9} width={44} height={16} rx={3}
                                     fill="#475569" opacity={0.85} />
                                   <text x={laneX + 22} y={y + 20}
-                                    textAnchor="middle" fontSize={9.5} fill="white" fontWeight={600}>
+                                    textAnchor="middle" fontSize={scaleFont(9.5)} fill="white" fontWeight={600}>
                                     {startLabel}
                                   </text>
                                   {laneW > 60 && (
@@ -1325,7 +1350,7 @@ function GanttView({
                                       <rect x={laneX + laneW - 44} y={y + 9} width={44} height={16} rx={3}
                                         fill="#475569" opacity={0.85} />
                                       <text x={laneX + laneW - 22} y={y + 20}
-                                        textAnchor="middle" fontSize={9.5} fill="white" fontWeight={600}>
+                                        textAnchor="middle" fontSize={scaleFont(9.5)} fill="white" fontWeight={600}>
                                         {endLabel}
                                       </text>
                                     </>
@@ -1339,7 +1364,7 @@ function GanttView({
                         {/* 非ホバー時のヒントテキスト */}
                         {laneHoverX === null && !createState && (
                           <text x={effectiveSvgWidth / 2} y={y + GANTT_ROW_H * 0.65}
-                            textAnchor="middle" fontSize={10} fill="#94a3b8"
+                            textAnchor="middle" fontSize={scaleFont(10)} fill="#94a3b8"
                             style={{ pointerEvents: 'none' }}>
                             ＋ ここをドラッグして期間付きタスクを作成
                           </text>
@@ -1391,7 +1416,8 @@ interface TodoTabProps {
 }
 
 export default function TodoTab({ projectId, todos, assignableUsers, phases, canEdit, onTodosChange }: TodoTabProps) {
-  const [view, setView] = useState<TodoView>('list');
+  const { user } = useAuth();
+  const [view, setView] = useState<TodoView>(user?.settings?.default_task_view ?? 'list');
   const [creating, setCreating] = useState(false);
   const [createDefaults, setCreateDefaults] = useState<Partial<Todo> | null>(null);
   const [creatingSubtaskFor, setCreatingSubtaskFor] = useState<string | null>(null);
@@ -1405,9 +1431,42 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   const [ganttScale, setGanttScale] = useState<GanttScale>('day');
 
   // ──── フィルター状態 ────
-  const [filterStatuses, setFilterStatuses] = useState<Set<TodoStatus>>(new Set());
-  const [filterPriorities, setFilterPriorities] = useState<Set<TodoPriority>>(new Set());
-  const [filterAssigneeId, setFilterAssigneeId] = useState<string>('');
+  const [filterStatuses, setFilterStatuses] = useState<Set<TodoStatus>>(new Set(user?.settings?.default_task_statuses ?? []));
+  const [filterPriorities, setFilterPriorities] = useState<Set<TodoPriority>>(new Set(user?.settings?.default_task_priorities ?? []));
+  const [filterAssigneeId, setFilterAssigneeId] = useState<string>(user?.settings?.default_task_assignee === 'me' ? user.id : (user?.settings?.default_task_assignee ?? ''));
+  const defaultTaskViewAppliedRef = useRef(false);
+  const defaultTaskFilterAppliedRef = useRef(false);
+
+  useEffect(() => {
+    const preferredView = user?.settings?.default_task_view;
+    if (!preferredView) return;
+    if (defaultTaskViewAppliedRef.current) return;
+    setView(preferredView);
+    defaultTaskViewAppliedRef.current = true;
+  }, [user?.settings?.default_task_view]);
+
+  useEffect(() => {
+    if (defaultTaskFilterAppliedRef.current) return;
+    setFilterStatuses(new Set(user?.settings?.default_task_statuses ?? []));
+    setFilterPriorities(new Set(user?.settings?.default_task_priorities ?? []));
+    if (user?.settings?.default_task_hide_done) {
+      setFilterStatuses((current) => {
+        const next = new Set(current);
+        next.add('todo');
+        next.add('in_progress');
+        next.delete('done');
+        return next;
+      });
+    }
+    setFilterAssigneeId(user?.settings?.default_task_assignee === 'me' ? user.id : (user?.settings?.default_task_assignee ?? ''));
+    defaultTaskFilterAppliedRef.current = true;
+  }, [
+    user?.id,
+    user?.settings?.default_task_assignee,
+    user?.settings?.default_task_hide_done,
+    user?.settings?.default_task_priorities,
+    user?.settings?.default_task_statuses,
+  ]);
 
   function toggleStatus(s: TodoStatus) {
     setFilterStatuses(prev => {
@@ -1556,7 +1615,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 min-w-0">
       {/* ヘッダー */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -1790,7 +1849,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
 
       {/* ──── ガントビュー ──── */}
       {view === 'gantt' && (
-        <div className="card overflow-hidden p-3">
+        <div className="card overflow-hidden p-3 min-w-0">
           <GanttView
             todos={filteredTodos}
             onOpen={setDetailTodo}

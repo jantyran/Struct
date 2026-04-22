@@ -41,6 +41,7 @@ function initSchema(db: Database.Database) {
       avatar_url TEXT DEFAULT '',
       organization_id TEXT,
       system_role TEXT DEFAULT 'USER',
+      user_settings TEXT DEFAULT '{}',
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -256,6 +257,7 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'users', 'avatar_url', `TEXT DEFAULT ''`);
   ensureColumn(db, 'users', 'organization_id', `TEXT`);
   ensureColumn(db, 'users', 'system_role', `TEXT DEFAULT 'USER'`);
+  ensureColumn(db, 'users', 'user_settings', `TEXT DEFAULT '{}'`);
   ensureColumn(db, 'organizations', 'address_street', `TEXT DEFAULT ''`);
   ensureColumn(db, 'organizations', 'address_city', `TEXT DEFAULT ''`);
   ensureColumn(db, 'organizations', 'address_state', `TEXT DEFAULT ''`);

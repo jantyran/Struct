@@ -27,6 +27,22 @@ export interface ShortcutBinding {
 
 export type ShortcutSettings = Record<ShortcutActionKey, ShortcutBinding>;
 
+export type UserTextSize = 'xsmall' | 'small' | 'medium' | 'large' | 'xlarge';
+export type UserDefaultProjectTab = 'fields' | 'tasks' | 'members' | 'notes' | 'assets';
+export type UserDefaultTaskView = 'list' | 'kanban' | 'gantt';
+export type UserDefaultTaskAssigneeFilter = '' | 'me' | 'unassigned';
+
+export interface UserSettings {
+  text_size: UserTextSize;
+  default_project_tab: UserDefaultProjectTab;
+  default_task_view: UserDefaultTaskView;
+  default_task_hide_done: boolean;
+  default_task_statuses: TodoStatus[];
+  default_task_priorities: TodoPriority[];
+  default_task_assignee: UserDefaultTaskAssigneeFilter;
+  reduce_motion: boolean;
+}
+
 export interface ProjectPhase {
   id: string;
   key: string;

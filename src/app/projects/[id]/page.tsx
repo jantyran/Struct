@@ -955,7 +955,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [additionalGenerationInstruction, setAdditionalGenerationInstruction] = useState('');
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
   const searchParams = useSearchParams();
-  const initialTab: ProjectDetailTabKey = searchParams.get('tab') === 'todos' ? 'tasks' : 'fields';
+  const requestedTab = searchParams.get('tab');
+  const initialTab: ProjectDetailTabKey =
+    requestedTab === 'todos'
+      ? 'tasks'
+      : requestedTab === 'fields' || requestedTab === 'tasks' || requestedTab === 'members' || requestedTab === 'notes' || requestedTab === 'assets'
+        ? requestedTab
+        : user?.settings?.default_project_tab || 'fields';
   const [primaryTab, setPrimaryTab] = useState<ProjectDetailTabKey>(initialTab);
   const [splitView, setSplitView] = useState(false);
   const [secondaryTab, setSecondaryTab] = useState<ProjectDetailTabKey>('notes');
@@ -981,6 +987,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [memberMessage, setMemberMessage] = useState('');
   const [memberSaving, setMemberSaving] = useState(false);
   const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
+  const userDefaultTabAppliedRef = useRef(false);
 
   const loadProject = useCallback(async () => {
     setLoadError('');
@@ -1505,6 +1512,16 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const findAlternateTab = useCallback((current: ProjectDetailTabKey) => {
     return tabOptions.find((option) => option.k !== current)?.k ?? current;
   }, [tabOptions]);
+
+  useEffect(() => {
+    if (requestedTab) return;
+    const preferredTab = user?.settings?.default_project_tab;
+    if (!preferredTab) return;
+    if (!tabOptions.some((option) => option.k === preferredTab)) return;
+    if (userDefaultTabAppliedRef.current) return;
+    setPrimaryTab(preferredTab);
+    userDefaultTabAppliedRef.current = true;
+  }, [requestedTab, tabOptions, user?.settings?.default_project_tab]);
 
   useEffect(() => {
     if (!tabOptions.some((option) => option.k === primaryTab)) {
@@ -2076,11 +2093,11 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   );
 
   const renderPane = (currentTab: ProjectDetailTabKey, pane: 'primary' | 'secondary') => (
-    <div className="min-h-0 flex flex-col">
+    <div className="min-h-0 min-w-0 flex flex-col">
       <div>
         {renderPaneTabs(currentTab, pane)}
       </div>
-      <div className="min-h-0 overflow-y-auto pt-6 space-y-6">
+      <div className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pt-6 space-y-6">
         {renderTabContent(currentTab, pane)}
       </div>
     </div>
@@ -2309,8 +2326,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       </div>
       
       {/* 本体 */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        <div className="flex-1 min-h-0 p-6">
+      <div className="flex-1 flex overflow-hidden min-h-0 min-w-0">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden p-6">
           {splitView ? (
             <div className="h-full min-h-0">
               <div className="hidden xl:flex h-full min-h-0">

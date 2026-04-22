@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { withBasePath } from '@/lib/paths';
+import { UserSettings } from '@/types';
 
 interface User {
   id: string;
@@ -11,6 +12,7 @@ interface User {
   avatar_url?: string;
   system_role?: string;
   system_permissions?: Record<string, boolean>;
+  settings?: UserSettings;
 }
 
 interface AuthContextType {
@@ -54,6 +56,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     checkSession();
   }, []);
+
+  useEffect(() => {
+    const textSize = user?.settings?.text_size ?? 'medium';
+    const reduceMotion = user?.settings?.reduce_motion ?? false;
+    document.documentElement.dataset.textSize = textSize;
+    document.documentElement.dataset.reduceMotion = reduceMotion ? 'true' : 'false';
+  }, [user?.settings?.reduce_motion, user?.settings?.text_size]);
 
   const logout = async () => {
     await fetch(withBasePath('/api/auth/logout'), { method: 'POST' });

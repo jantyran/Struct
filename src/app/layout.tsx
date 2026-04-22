@@ -121,9 +121,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <ShortcutProvider>
             <DevSettingsProvider>
-              <div className="flex h-full w-full">
+              <div className="flex h-full w-full min-w-0">
                 <Sidebar />
-                <main className="flex-1 overflow-y-auto" style={{ background: 'transparent' }}>
+                <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden" style={{ background: 'transparent' }}>
                   {children}
                 </main>
               </div>
