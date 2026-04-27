@@ -430,6 +430,140 @@ function SidebarPanel({ myTodos, managedUrgentTodos, thisWeekTodos, staleProject
 }
 
 // ──────────────────────────────────────────
+// テーブルビュー
+// ──────────────────────────────────────────
+type SortKey = 'name' | 'type' | 'status' | 'phase' | 'start_date' | 'end_date' | 'updated_at' | 'todo';
+function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
+  projects: ProjectWithTodos[];
+  typeLabelMap: Record<string, string>;
+  phaseMap: Record<string, { key: string; name: string }[]>;
+  onClone: (p: Project) => void;
+}) {
+  const router = useRouter();
+  const [sortKey, setSortKey] = useState<SortKey>('updated_at');
+  const [sortAsc, setSortAsc] = useState(false);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortAsc(v => !v);
+    else { setSortKey(key); setSortAsc(true); }
+  }
+
+  const sorted = [...projects].sort((a, b) => {
+    let va: string | number = '', vb: string | number = '';
+    if (sortKey === 'name') { va = a.name; vb = b.name; }
+    else if (sortKey === 'type') { va = typeLabelMap[a.type] || a.type; vb = typeLabelMap[b.type] || b.type; }
+    else if (sortKey === 'status') { va = a.status; vb = b.status; }
+    else if (sortKey === 'phase') { va = a.phase_key; vb = b.phase_key; }
+    else if (sortKey === 'start_date') { va = a.start_date || ''; vb = b.start_date || ''; }
+    else if (sortKey === 'end_date') { va = a.end_date || ''; vb = b.end_date || ''; }
+    else if (sortKey === 'updated_at') { va = a.updated_at || ''; vb = b.updated_at || ''; }
+    else if (sortKey === 'todo') { va = a.todo_done / (a.todo_total || 1); vb = b.todo_done / (b.todo_total || 1); }
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', archived: 'アーカイブ' };
+  const statusColors: Record<string, { color: string; bg: string }> = {
+    draft: { color: '#475569', bg: '#f1f5f9' },
+    active: { color: '#047857', bg: '#ecfdf5' },
+    archived: { color: '#64748b', bg: '#f1f5f9' },
+  };
+
+  function SortIcon({ k }: { k: SortKey }) {
+    if (sortKey !== k) return <span style={{ color: 'var(--text-muted)', opacity: 0.4 }}>↕</span>;
+    return <span style={{ color: 'var(--accent)' }}>{sortAsc ? '↑' : '↓'}</span>;
+  }
+
+  const thStyle = (k: SortKey): React.CSSProperties => ({
+    padding: '8px 12px', textAlign: 'left', fontSize: '0.6875rem', fontWeight: 600,
+    color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
+    borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
+    background: sortKey === k ? 'rgba(15,154,177,0.04)' : 'transparent',
+  });
+
+  return (
+    <div className="card overflow-hidden">
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+          <thead>
+            <tr>
+              {([
+                ['name', 'プロジェクト名'],
+                ['type', '種別'],
+                ['status', 'ステータス'],
+                ['phase', 'フェーズ'],
+                ['todo', 'Todo'],
+                ['start_date', '開始日'],
+                ['end_date', '終了日'],
+                ['updated_at', '最終更新'],
+              ] as [SortKey, string][]).map(([k, label]) => (
+                <th key={k} style={thStyle(k)} onClick={() => toggleSort(k)}>
+                  {label} <SortIcon k={k} />
+                </th>
+              ))}
+              <th style={{ ...thStyle('name'), cursor: 'default' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((p, i) => {
+              const phases = phaseMap[p.type] || [];
+              const phaseLabel = phases.find(ph => ph.key === p.phase_key)?.name || p.phase_key || '—';
+              const sc = statusColors[p.status] ?? statusColors.draft;
+              const todoOpen = p.todo_total - p.todo_done;
+              return (
+                <tr
+                  key={p.id}
+                  onClick={() => router.push(withBasePath(`/projects/${p.id}`))}
+                  style={{
+                    cursor: 'pointer',
+                    background: i % 2 === 0 ? 'transparent' : 'rgba(248,252,255,0.6)',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(15,154,177,0.05)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(248,252,255,0.6)')}
+                >
+                  <td style={{ padding: '10px 12px', fontWeight: 600, maxWidth: 280, minWidth: 160 }}>
+                    <span className="truncate block">{p.name}</span>
+                  </td>
+                  <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    {typeLabelMap[p.type] || p.type}
+                  </td>
+                  <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '0.6875rem', padding: '2px 8px', borderRadius: 999, fontWeight: 500, color: sc.color, background: sc.bg }}>
+                      {statusLabels[p.status] ?? p.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{phaseLabel}</td>
+                  <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                    {p.todo_total > 0 ? (
+                      <span style={{ color: todoOpen > 0 ? 'var(--text-secondary)' : 'var(--success)', fontSize: '0.75rem' }}>
+                        {p.todo_done}/{p.todo_total}
+                      </span>
+                    ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{p.start_date || '—'}</td>
+                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{p.end_date || '—'}</td>
+                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {p.updated_at ? p.updated_at.slice(0, 10) : '—'}
+                  </td>
+                  <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => onClone(p)}
+                      className="btn-secondary text-xs px-2.5 py-1"
+                    >クローン</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
 // ダッシュボード本体
 // ──────────────────────────────────────────
 export default function Dashboard() {
@@ -440,6 +574,15 @@ export default function Dashboard() {
   const [cloneSource, setCloneSource] = useState<Project | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'card' | 'table'>(() => {
+    if (typeof window === 'undefined') return 'card';
+    return (localStorage.getItem('dashboard_view') as 'card' | 'table') || 'card';
+  });
+
+  function switchView(mode: 'card' | 'table') {
+    setViewMode(mode);
+    localStorage.setItem('dashboard_view', mode);
+  }
 
   const load = useCallback(async () => {
     const res = await fetch(withBasePath('/api/dashboard'));
@@ -524,51 +667,77 @@ export default function Dashboard() {
       <div className="flex gap-5 items-start">
         {/* 左: プロジェクト一覧 */}
         <div className="flex-1 min-w-0">
-          {/* フィルター */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            {filterChips.map(f => (
-              <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
-                {f.l}
-              </button>
-            ))}
-
-            {/* タイプ別ドロップダウン */}
-            {project_type_definitions.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={() => setTypeDropdownOpen(v => !v)}
-                  className={`tab-btn${selectedTypeDef ? ' active' : ''}`}
-                >
-                  {selectedTypeDef ? selectedTypeDef.name : 'PJカテゴリ'} ▾
+          {/* フィルター + ビュー切り替え */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="flex flex-wrap gap-2 flex-1">
+              {filterChips.map(f => (
+                <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
+                  {f.l}
                 </button>
-                {typeDropdownOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setTypeDropdownOpen(false)} />
-                    <div className="absolute left-0 top-full mt-1 z-20 card py-1 min-w-[140px] shadow-lg">
-                      {selectedTypeDef && (
-                        <button
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
-                          style={{ color: 'var(--text-muted)' }}
-                          onClick={() => { setFilter('all'); setTypeDropdownOpen(false); }}
-                        >
-                          絞り込みを解除
-                        </button>
-                      )}
-                      {project_type_definitions.map(d => (
-                        <button
-                          key={d.key}
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
-                          style={{ color: filter === d.key ? 'var(--accent)' : 'var(--text-primary)', fontWeight: filter === d.key ? 600 : undefined }}
-                          onClick={() => { setFilter(d.key); setTypeDropdownOpen(false); }}
-                        >
-                          {d.name}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+              ))}
+
+              {/* タイプ別ドロップダウン */}
+              {project_type_definitions.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setTypeDropdownOpen(v => !v)}
+                    className={`tab-btn${selectedTypeDef ? ' active' : ''}`}
+                  >
+                    {selectedTypeDef ? selectedTypeDef.name : 'PJカテゴリ'} ▾
+                  </button>
+                  {typeDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setTypeDropdownOpen(false)} />
+                      <div className="absolute left-0 top-full mt-1 z-20 card py-1 min-w-[140px] shadow-lg">
+                        {selectedTypeDef && (
+                          <button
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
+                            style={{ color: 'var(--text-muted)' }}
+                            onClick={() => { setFilter('all'); setTypeDropdownOpen(false); }}
+                          >
+                            絞り込みを解除
+                          </button>
+                        )}
+                        {project_type_definitions.map(d => (
+                          <button
+                            key={d.key}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
+                            style={{ color: filter === d.key ? 'var(--accent)' : 'var(--text-primary)', fontWeight: filter === d.key ? 600 : undefined }}
+                            onClick={() => { setFilter(d.key); setTypeDropdownOpen(false); }}
+                          >
+                            {d.name}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* カード / テーブル切り替え */}
+            <div className="flex items-center gap-1 p-1 rounded-lg shrink-0" style={{ background: 'rgba(200,215,222,0.3)' }}>
+              <button
+                onClick={() => switchView('card')}
+                title="カードビュー"
+                className="rounded-md p-1.5 transition-colors"
+                style={{ background: viewMode === 'card' ? 'white' : 'transparent', boxShadow: viewMode === 'card' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', color: viewMode === 'card' ? 'var(--accent)' : 'var(--text-muted)' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                </svg>
+              </button>
+              <button
+                onClick={() => switchView('table')}
+                title="テーブルビュー"
+                className="rounded-md p-1.5 transition-colors"
+                style={{ background: viewMode === 'table' ? 'white' : 'transparent', boxShadow: viewMode === 'table' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', color: viewMode === 'table' ? 'var(--accent)' : 'var(--text-muted)' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
           {filtered.length === 0 ? (
@@ -577,6 +746,13 @@ export default function Dashboard() {
               <p className="text-sm">プロジェクトがまだありません</p>
               <button onClick={() => setShowNew(true)} className="btn-primary mt-4">最初のプロジェクトを作成</button>
             </div>
+          ) : viewMode === 'table' ? (
+            <ProjectTableView
+              projects={filtered}
+              typeLabelMap={typeLabelMap}
+              phaseMap={phaseMap}
+              onClone={setCloneSource}
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filtered.map(p => (
