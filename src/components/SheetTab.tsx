@@ -167,8 +167,6 @@ function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: Pro
   const [cursor, setCursor] = useState<CellPos | null>(null); // 選択終点
   const [hovRow, setHovRow] = useState<number | null>(null);
   const [ctx, setCtx] = useState<CtxState | null>(null);
-  const [editingColId, setEditingColId] = useState<string | null>(null);
-  const [colEditVal, setColEditVal] = useState('');
   const [sortCol, setSortCol] = useState<{ id: string; asc: boolean } | null>(null);
 
   // 履歴
@@ -247,7 +245,6 @@ function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: Pro
   }
   function renameCol(colId: string, name: string) {
     commit({ columns_def: cols.map(c => c.id === colId ? { ...c, name: name.trim() || c.name } : c), rows_data: rows });
-    setEditingColId(null);
   }
   function updateColWidth(colId: string, width: number) {
     onUpdate({ ...sheet, columns_def: cols.map(c => c.id === colId ? { ...c, width } : c) });
@@ -413,13 +410,14 @@ function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: Pro
   const isMultiSel = anchor && cursor && (anchor.row !== cursor.row || anchor.col !== cursor.col);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {ctx && (
         <ContextMenu ctx={ctx} rows={rows.length} cols={cols.length}
           onClose={() => setCtx(null)} onAction={handleCtxAction} />
       )}
       <div style={{
-        overflow: 'auto', flex: 1,
+        overflow: 'auto',
+        maxHeight: 'calc(100vh - 260px)',
         border: `1px solid ${C.border}`, borderRadius: 10,
         boxShadow: '0 1px 4px rgba(0,0,0,0.06)', background: C.cell,
       }}>
@@ -442,42 +440,46 @@ function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: Pro
                     borderBottom: `2px solid ${C.hBorder}`, borderRight: `1px solid ${C.border}`,
                     userSelect: 'none',
                   }}>
-                    {editingColId === col.id ? (
-                      <input autoFocus value={colEditVal}
-                        onChange={e => setColEditVal(e.target.value)}
-                        onBlur={() => renameCol(col.id, colEditVal)}
-                        onKeyDown={e => { if (e.key === 'Enter') renameCol(col.id, colEditVal); if (e.key === 'Escape') setEditingColId(null); }}
-                        style={{ width: '100%', height: '100%', border: 'none', outline: 'none', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, background: '#bfdbfe', color: '#1e40af' }}
+                    <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative' }}
+                      onContextMenu={e => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ri: null, ci }); }}
+                    >
+                      {/* 列名 — 常時編集可能 */}
+                      <input
+                        value={col.name}
+                        onChange={e => renameCol(col.id, e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }}
+                        style={{
+                          flex: 1, height: '100%', border: 'none', outline: 'none',
+                          padding: '0 4px 0 8px', fontSize: '0.75rem', fontWeight: 600,
+                          color: C.hText, background: 'transparent', cursor: 'text',
+                          minWidth: 0,
+                        }}
+                        onFocus={e => { e.target.style.background = '#e0f2fe'; e.target.style.color = '#0369a1'; }}
+                        onBlur={e => { e.target.style.background = 'transparent'; e.target.style.color = C.hText; }}
                       />
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative' }}>
-                        <button
-                          onClick={() => sortByCol(ci)}
-                          onDoubleClick={() => { setEditingColId(col.id); setColEditVal(col.name); }}
-                          onContextMenu={e => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ri: null, ci }); }}
-                          title="クリックでソート・ダブルクリックで名前変更"
-                          style={{
-                            flex: 1, height: '100%', display: 'flex', alignItems: 'center',
-                            padding: '0 8px', gap: 4, border: 'none', background: 'none',
-                            cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: C.hText,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>{col.name}</span>
-                          {isSortedCol && <span style={{ fontSize: '0.6875rem', color: '#0ea5e9', flexShrink: 0 }}>{sortCol.asc ? '↑' : '↓'}</span>}
-                        </button>
-                        {/* リサイズハンドル */}
-                        <div
-                          onPointerDown={e => startResize(e, col.id, colW)}
-                          style={{
-                            position: 'absolute', right: 0, top: 0, bottom: 0, width: 5,
-                            cursor: 'col-resize', zIndex: 1,
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#0ea5e9')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        />
-                      </div>
-                    )}
+                      {/* ソートボタン */}
+                      <button
+                        onClick={() => sortByCol(ci)}
+                        title="クリックでソート"
+                        style={{
+                          flexShrink: 0, padding: '0 4px', height: '100%',
+                          border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: '0.625rem', color: isSortedCol ? '#0ea5e9' : C.muted,
+                          display: 'flex', alignItems: 'center',
+                          opacity: isSortedCol ? 1 : 0,
+                          transition: 'opacity 0.1s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = isSortedCol ? '1' : '0')}
+                      >{isSortedCol ? (sortCol.asc ? '↑' : '↓') : '↕'}</button>
+                      {/* リサイズハンドル */}
+                      <div
+                        onPointerDown={e => startResize(e, col.id, colW)}
+                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 5, cursor: 'col-resize', zIndex: 1 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#0ea5e9')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      />
+                    </div>
                   </th>
                 );
               })}
@@ -677,7 +679,7 @@ export default function SheetTab({ projectId }: { projectId: string }) {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {showCreateModal && (
         <CreateSheetModal existingCount={sheets.length} onClose={() => setShowCreateModal(false)} onConfirm={createSheet} />
       )}
@@ -743,7 +745,7 @@ export default function SheetTab({ projectId }: { projectId: string }) {
       </div>
 
       {/* グリッドエリア */}
-      <div style={{ flex: 1, padding: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: 14 }}>
         {sheets.length === 0 ? (
           <div style={{ textAlign: 'center', paddingTop: 64, color: C.muted }}>
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ margin: '0 auto 12px', opacity: 0.3 }}>
