@@ -2955,6 +2955,23 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="h-full min-h-0 flex flex-col">
+      {/* 自動保存トースト */}
+      {(saving || savingMsg) && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium shadow-lg"
+          style={{ background: 'rgba(255,255,255,0.95)', border: '1px solid var(--border)', color: savingMsg ? 'var(--success)' : 'var(--text-secondary)', backdropFilter: 'blur(8px)' }}>
+          {saving ? (
+            <>
+              <svg className="animate-spin shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+              保存中...
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              保存済み
+            </>
+          )}
+        </div>
+      )}
       {/* ヘッダー */}
       <div className="border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, #ffffff 0%, rgba(241,250,252,0.95) 100%)' }}>
         {/* 1行: 戻る | タイトル + バッジ類 | ステータス + 保存 + 削除 */}
