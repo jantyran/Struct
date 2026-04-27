@@ -34,7 +34,15 @@ const LEGACY_DEFAULT_SIDEBAR_TAB_IDS = new Set(['sidebar-tab-ai', 'sidebar-tab-s
 
 function shouldUpgradeSidebarTabs(storedTabs: Partial<SidebarTabDefinition>[]): boolean {
   if (storedTabs.length === 0) return false;
-  return storedTabs.every((tab) => LEGACY_DEFAULT_SIDEBAR_TAB_IDS.has(String(tab.id ?? '')));
+  const hasLegacyTabIdsOnly = storedTabs.every((tab) => LEGACY_DEFAULT_SIDEBAR_TAB_IDS.has(String(tab.id ?? '')));
+  if (!hasLegacyTabIdsOnly) return false;
+
+  // 旧レイアウトへの移行判定は保守的に行う。
+  // 既に現行UIで保存されたタブまで毎回デフォルトへ戻すと、追加したウィジェットが消えてしまう。
+  return storedTabs.some((tab) =>
+    String(tab.id ?? '') === 'sidebar-tab-details' ||
+    safeArray<Partial<SectionFieldPlacement>>(tab.items).some((item) => item.kind === undefined)
+  );
 }
 
 const SECTION_COLOR_PRESETS = [

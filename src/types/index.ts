@@ -50,7 +50,7 @@ export interface ProjectPhase {
 }
 
 /** セクションやサイドバーに配置できるアイテムの種別 */
-export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list' | 'todo_list' | 'todo_summary' | 'member_list' | 'ai_tools' | 'divider' | 'subheading' | 'text_block' | 'callout' | 'label_badge' | 'spacer';
+export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list' | 'todo_list' | 'todo_summary' | 'member_list' | 'contact_list' | 'ai_tools' | 'divider' | 'subheading' | 'text_block' | 'callout' | 'label_badge' | 'spacer';
 
 /** 情報ウィジェットの仮想 field_id プレフィックス */
 export const WIDGET_FIELD_ID_PREFIX = '__widget:';
@@ -63,6 +63,7 @@ export const SECTION_INFO_WIDGETS: { kind: SectionItemKind; label: string; descr
   { kind: 'todo_list', label: 'タスク一覧', description: '未完了タスクを最大5件表示' },
   { kind: 'todo_summary', label: 'タスクサマリー', description: 'タスクの進捗を件数・割合で表示' },
   { kind: 'member_list', label: 'メンバー一覧', description: 'プロジェクトの担当メンバーを表示' },
+  { kind: 'contact_list', label: '関係者', description: 'プロジェクトに紐づく関係者を表示' },
   { kind: 'ai_tools', label: '生成・補完パネル', description: '生成・補完・参照スコープなどAI操作をまとめて表示' },
 ];
 
@@ -214,6 +215,7 @@ export interface Project {
   ownerId: string;
   owner?: ProjectUser;
   members?: ProjectMember[];
+  contacts?: ProjectContact[];
   invitations?: Array<{ email: string, role: string, status: string }>;
   assignable_users?: ProjectUser[];
   registered_users?: ProjectUser[];
@@ -233,6 +235,16 @@ export interface ProjectMember {
   id: string;
   user: ProjectUser;
   role: string;
+}
+
+export interface ProjectContact {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  company_name: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export type SystemPermissionKey =

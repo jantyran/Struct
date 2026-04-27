@@ -412,7 +412,24 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `role` は `project_role_definitions.key` を参照する
 - 現在の UI では登録済みユーザーを選択して追加する
 
-### 7.6 invitations
+### 7.6 project_contacts
+
+- `id`
+- `project_id`
+- `name`
+- `email`
+- `phone`
+- `company_name`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- プロジェクトメンバーとは別に持つ外部連絡先メモ
+- `name` のみ必須
+- 現在の UI ではプロジェクト詳細の `メンバー` タブから編集する
+
+### 7.7 invitations
 
 - `id`
 - `project_id`
@@ -428,7 +445,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - 招待機能はレガシー互換として残っている
 - 現在のプロジェクト詳細 UI では登録済みユーザー選択によるメンバー追加を使う
 
-### 7.7 custom_fields
+### 7.8 custom_fields
 
 - `id`
 - `project_id`
@@ -452,7 +469,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `group` / `group_list` は子項目定義を `options.children` に持つ
 - `group` / `group_list` の値は `value` に JSON 文字列で保存する
 
-### 7.8 generated_assets
+### 7.9 generated_assets
 
 - `id`
 - `project_id`
@@ -467,7 +484,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `asset_type` は固定列挙ではなく、生成コンテンツ定義の `key` ベース
 - `warnings` は JSON 文字列
 
-### 7.9 system_role_definitions
+### 7.10 system_role_definitions
 
 - `id`
 - `key`
@@ -488,7 +505,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
   - `USER`: 一般ユーザー
 - 初回シード時、既存ユーザーの最初の1人を `SYSTEM_ADMIN` にする
 
-### 7.10 project_role_definitions
+### 7.11 project_role_definitions
 
 - `id`
 - `key`
@@ -594,6 +611,13 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `POST /api/projects/[id]/members`
 - `PATCH /api/projects/[id]/members`
 - `DELETE /api/projects/[id]/members`
+- `POST /api/projects/[id]/contacts`
+- `PATCH /api/projects/[id]/contacts`
+- `DELETE /api/projects/[id]/contacts`
+- `GET /api/projects/[id]/sheets`
+- `POST /api/projects/[id]/sheets`
+- `PUT /api/projects/[id]/sheets/[sheetId]`
+- `DELETE /api/projects/[id]/sheets/[sheetId]`
 - `POST /api/projects/[id]/invite`
 
 ### 9.4 招待

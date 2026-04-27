@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition, ProjectContact } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
@@ -19,6 +19,7 @@ function normalizeProject(project: ProjectWithFields): ProjectWithFields {
     ...project,
     custom_fields: Array.isArray(project?.custom_fields) ? project.custom_fields : [],
     members: Array.isArray(project?.members) ? project.members : [],
+    contacts: Array.isArray(project?.contacts) ? project.contacts : [],
     invitations: Array.isArray(project?.invitations) ? project.invitations : [],
   };
 }
@@ -38,6 +39,83 @@ function OpenLinkIcon({ size = 12 }: { size?: number }) {
       <path d="M13.5 2.5 7.5 8.5" />
       <path d="M6.5 3.5h-2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-2" />
     </svg>
+  );
+}
+
+function CopyIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="3" width="8" height="10" rx="1.5" />
+      <path d="M3.5 11.5H3A1.5 1.5 0 0 1 1.5 10V4A1.5 1.5 0 0 1 3 2.5h5" />
+    </svg>
+  );
+}
+
+function CopyableContactValue({
+  value,
+  emptyLabel,
+  compact = false,
+}: {
+  value: string;
+  emptyLabel: string;
+  compact?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function fallbackCopy(text: string) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    textarea.style.pointerEvents = 'none';
+    document.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+    const success = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return success;
+  }
+
+  async function copyValue(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!value) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else if (!fallbackCopy(value)) {
+        throw new Error('copy_failed');
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      const success = fallbackCopy(value);
+      setCopied(success);
+      if (success) {
+        window.setTimeout(() => setCopied(false), 1200);
+      }
+    }
+  }
+
+  if (!value) {
+    return <span>{emptyLabel}</span>;
+  }
+
+  return (
+    <span className={compact ? 'flex items-center gap-2 min-w-0 max-w-full' : 'flex items-start gap-2 min-w-0 max-w-full'}>
+      <span className={compact ? 'min-w-0 truncate' : 'min-w-0 break-all whitespace-normal'}>{value}</span>
+      <button
+        type="button"
+        onClick={copyValue}
+        className="inline-flex items-center justify-center px-1.5 py-0.5 rounded border transition-opacity hover:opacity-70 shrink-0"
+        style={{ borderColor: 'var(--border)' }}
+        title="コピー"
+        aria-label="コピー"
+      >
+        {copied ? '✓' : <CopyIcon size={11} />}
+      </button>
+    </span>
   );
 }
 
@@ -1037,6 +1115,7 @@ function SectionInfoWidget({
   todos,
   todosLoading,
   members,
+  contacts,
   onNotesTabClick,
   onTasksTabClick,
   currentContentTemplates,
@@ -1073,6 +1152,7 @@ function SectionInfoWidget({
   todos?: import('@/types').Todo[];
   todosLoading?: boolean;
   members?: import('@/types').ProjectUser[];
+  contacts?: import('@/types').ProjectContact[];
   onNotesTabClick?: () => void;
   onTasksTabClick?: () => void;
   currentContentTemplates?: ProjectContentTemplate[];
@@ -1100,6 +1180,8 @@ function SectionInfoWidget({
   router?: ReturnType<typeof useRouter>;
 }) {
   const colClass = layout === 'full' ? 'col-span-2' : '';
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
 
   if (kind === 'project_type') {
     return (
@@ -1255,13 +1337,95 @@ function SectionInfoWidget({
         {memberList.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>メンバーがいません</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-1.5">
             {memberList.map(m => (
-              <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
-                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0" />
-                {m.name?.trim() || m.email}
-              </span>
+              <div
+                key={m.id}
+                className="w-full rounded-lg px-2.5 py-2 text-left text-xs"
+                style={{ backgroundColor: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (expandedMemberId === m.id) return;
+                    setExpandedMemberId(m.id);
+                  }}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0" />
+                    <span>{m.name?.trim() || m.email}</span>
+                  </div>
+                </button>
+                {expandedMemberId === m.id && (
+                  <div className="mt-1.5 pl-3 text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <CopyableContactValue value={m.email} emptyLabel="メール未登録" />
+                      <button
+                        type="button"
+                        onClick={() => setExpandedMemberId(null)}
+                        className="shrink-0"
+                        title="閉じる"
+                      >
+                        ▲
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (kind === 'contact_list') {
+    const contactList = contacts ?? [];
+    return (
+      <div className={`${colClass} surface-read`}>
+        <p className="field-label mb-2">関係者</p>
+        {contactList.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>関係者がいません</p>
+        ) : (
+          <div className="space-y-1.5">
+            {contactList.map((contact) => (
+              <div
+                key={contact.id}
+                className="w-full rounded-lg px-2.5 py-2 text-left text-xs"
+                style={{ backgroundColor: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.12)' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (expandedContactId === contact.id) return;
+                    setExpandedContactId(contact.id);
+                  }}
+                  className="w-full text-left"
+                >
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {contact.company_name ? `${contact.company_name} ${contact.name}` : contact.name}
+                  </p>
+                </button>
+                {expandedContactId === contact.id && (
+                  <div className="mt-1.5 space-y-1 text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p><CopyableContactValue value={contact.email} emptyLabel="メール未登録" /></p>
+                        <p><CopyableContactValue value={contact.phone} emptyLabel="電話未登録" /></p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedContactId(null)}
+                        className="shrink-0"
+                        title="閉じる"
+                      >
+                        ▲
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -1548,6 +1712,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [memberRole, setMemberRole] = useState('MEMBER');
   const [memberMessage, setMemberMessage] = useState('');
   const [memberSaving, setMemberSaving] = useState(false);
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [contactCompanyName, setContactCompanyName] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [contactSaving, setContactSaving] = useState(false);
+  const [contactDrafts, setContactDrafts] = useState<Record<string, { name: string; email: string; phone: string; company_name: string }>>({});
   const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
   const userDefaultTabAppliedRef = useRef(false);
 
@@ -1675,7 +1846,24 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     setAssetDirtyMap({});
     setSuggestions([]);
     setAiError('');
+    setContactDrafts({});
+    setContactMessage('');
   }, [id]);
+
+  useEffect(() => {
+    const nextDrafts = Object.fromEntries(
+      (project?.contacts ?? []).map((contact) => [
+        contact.id,
+        {
+          name: contact.name ?? '',
+          email: contact.email ?? '',
+          phone: contact.phone ?? '',
+          company_name: contact.company_name ?? '',
+        },
+      ])
+    );
+    setContactDrafts(nextDrafts);
+  }, [project?.contacts]);
 
   const currentProjectType = useMemo(
     () => projectTypes.find((definition) => definition.key === project?.type),
@@ -1874,6 +2062,98 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       setMemberMessage(payload.error || 'メンバー削除に失敗しました');
       return;
     }
+    await loadProject();
+  }
+
+  async function addProjectContact() {
+    if (!contactName.trim()) {
+      setContactMessage('名前は必須です');
+      return;
+    }
+
+    setContactSaving(true);
+    setContactMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/contacts`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: contactName,
+        email: contactEmail,
+        phone: contactPhone,
+        company_name: contactCompanyName,
+      }),
+    });
+    const payload = await res.json() as { error?: string };
+    setContactSaving(false);
+
+    if (!res.ok) {
+      setContactMessage(payload.error || '関係者の追加に失敗しました');
+      return;
+    }
+
+    setContactName('');
+    setContactEmail('');
+    setContactPhone('');
+    setContactCompanyName('');
+    setContactMessage('関係者を追加しました');
+    await loadProject();
+  }
+
+  function updateContactDraft(contactId: string, key: 'name' | 'email' | 'phone' | 'company_name', value: string) {
+    setContactDrafts((current) => ({
+      ...current,
+      [contactId]: {
+        name: current[contactId]?.name ?? '',
+        email: current[contactId]?.email ?? '',
+        phone: current[contactId]?.phone ?? '',
+        company_name: current[contactId]?.company_name ?? '',
+        [key]: value,
+      },
+    }));
+  }
+
+  async function saveProjectContact(contactId: string) {
+    const draft = contactDrafts[contactId];
+    if (!draft?.name.trim()) {
+      setContactMessage('名前は必須です');
+      return;
+    }
+
+    setContactSaving(true);
+    setContactMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/contacts`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: contactId,
+        name: draft.name,
+        email: draft.email,
+        phone: draft.phone,
+        company_name: draft.company_name,
+      }),
+    });
+    const payload = await res.json() as { error?: string };
+    setContactSaving(false);
+
+    if (!res.ok) {
+      setContactMessage(payload.error || '関係者の更新に失敗しました');
+      return;
+    }
+
+    setContactMessage('関係者を更新しました');
+    await loadProject();
+  }
+
+  async function removeProjectContact(contactId: string) {
+    if (!confirm('この関係者を削除しますか？')) return;
+    setContactMessage('');
+    const res = await fetch(withBasePath(`/api/projects/${id}/contacts?id=${encodeURIComponent(contactId)}`), { method: 'DELETE' });
+    if (!res.ok) {
+      const payload = await res.json() as { error?: string };
+      setContactMessage(payload.error || '関係者の削除に失敗しました');
+      return;
+    }
+    setContactMessage('関係者を削除しました');
     await loadProject();
   }
 
@@ -2136,8 +2416,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     ...(canViewItems ? [{ k: 'tasks' as const, l: 'タスク' }] : []),
     ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
     ...(canViewNotes ? [{ k: 'notes' as const, l: 'ノート' }] : []),
-    ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
     ...(canViewItems ? [{ k: 'sheets' as const, l: 'シート' }] : []),
+    ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
   ]), [canViewContent, canViewItems, canViewNotes]);
 
   const findAlternateTab = useCallback((current: ProjectDetailTabKey) => {
@@ -2216,6 +2496,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   });
   const roleLabel = (role: string) => projectRoleDefinitions.find((item) => item.key === role)?.name ?? role;
   const projectMemberUserIds = useMemo(() => new Set((project?.members ?? []).map((member) => member.user.id)), [project?.members]);
+  const projectContacts = project?.contacts ?? [];
   const selectableProjectUsers = useMemo(
     () => (project?.registered_users ?? []).filter((candidate) =>
       candidate.id !== project?.owner?.id && !projectMemberUserIds.has(candidate.id)
@@ -2496,7 +2777,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </div>
               )}
               {(project.members ?? []).map((member) => (
-                <div key={member.user.id} className="py-3 flex items-center gap-3">
+                <div key={member.user.id} className="py-3 flex items-start gap-3">
                   {member.user.avatar_url ? (
                     <img src={member.user.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border" style={{ borderColor: 'var(--border)' }} />
                   ) : (
@@ -2504,26 +2785,130 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                       {userInitials(member.user)}
                     </div>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{userDisplayName(member.user)}</p>
-                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{member.user.email}</p>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-medium leading-tight break-words">{userDisplayName(member.user)}</p>
+                    <div className="text-xs min-w-0 max-w-full" style={{ color: 'var(--text-muted)' }}>
+                      <CopyableContactValue value={member.user.email} emptyLabel="メール未登録" compact />
+                    </div>
                   </div>
-                  {canManageMembers ? (
-                    <select className="field-input text-xs py-1.5 w-52" value={member.role} onChange={(e) => updateProjectMemberRole(member.user.id, e.target.value)}>
-                      {projectRoleDefinitions.map((role) => (
-                        <option key={role.key} value={role.key}>{role.name}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>{roleLabel(member.role)}</span>
-                  )}
-                  {canManageMembers && (
-                    <button onClick={() => removeProjectMember(member.user.id)} className="btn-danger text-xs px-2 py-1">
-                      外す
-                    </button>
-                  )}
+                  <div className="shrink-0 flex items-center gap-2">
+                    {canManageMembers ? (
+                      <select className="field-input text-xs py-1.5 w-36" value={member.role} onChange={(e) => updateProjectMemberRole(member.user.id, e.target.value)}>
+                        {projectRoleDefinitions.map((role) => (
+                          <option key={role.key} value={role.key}>{role.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-xs px-2 py-1 rounded-full whitespace-nowrap" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>{roleLabel(member.role)}</span>
+                    )}
+                    {canManageMembers && (
+                      <button onClick={() => removeProjectMember(member.user.id)} className="btn-danger text-xs px-2 py-1 whitespace-nowrap">
+                        外す
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="card p-5 space-y-4">
+            <div>
+              <h2 className="section-title">関係者</h2>
+            </div>
+
+            {canManageMembers && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.1fr_1fr_1fr_1fr_auto] gap-3 items-end rounded-xl border p-4" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.66)' }}>
+                <div>
+                  <label className="field-label">名前</label>
+                  <input className="field-input" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="例: 山田 太郎" />
+                </div>
+                <div>
+                  <label className="field-label">メールアドレス</label>
+                  <input className="field-input" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="任意" />
+                </div>
+                <div>
+                  <label className="field-label">電話</label>
+                  <input className="field-input" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="任意" />
+                </div>
+                <div>
+                  <label className="field-label">会社名</label>
+                  <input className="field-input" value={contactCompanyName} onChange={(e) => setContactCompanyName(e.target.value)} placeholder="任意" />
+                </div>
+                <button onClick={addProjectContact} disabled={contactSaving || !contactName.trim()} className="btn-secondary text-sm">
+                  {contactSaving ? '追加中...' : '追加'}
+                </button>
+                {contactMessage && (
+                  <p className="md:col-span-2 xl:col-span-5 text-xs" style={{ color: contactMessage.includes('失敗') || contactMessage === '名前は必須です' ? '#b34a4a' : 'var(--success)' }}>
+                    {contactMessage}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {projectContacts.length === 0 ? (
+                <div className="rounded-xl border px-4 py-5 text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)', backgroundColor: 'rgba(255,255,255,0.5)' }}>
+                  関係者はまだ登録されていません。
+                </div>
+              ) : projectContacts.map((contact: ProjectContact) => {
+                const draft = contactDrafts[contact.id] ?? {
+                  name: contact.name ?? '',
+                  email: contact.email ?? '',
+                  phone: contact.phone ?? '',
+                  company_name: contact.company_name ?? '',
+                };
+                return (
+                  <div key={contact.id} className="rounded-xl border p-4 space-y-3" style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.5)' }}>
+                    {canManageMembers ? (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                          <div>
+                            <label className="field-label">名前</label>
+                            <input className="field-input" value={draft.name} onChange={(e) => updateContactDraft(contact.id, 'name', e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="field-label">メールアドレス</label>
+                            <input className="field-input" type="email" value={draft.email} onChange={(e) => updateContactDraft(contact.id, 'email', e.target.value)} placeholder="未入力可" />
+                          </div>
+                          <div>
+                            <label className="field-label">電話</label>
+                            <input className="field-input" value={draft.phone} onChange={(e) => updateContactDraft(contact.id, 'phone', e.target.value)} placeholder="未入力可" />
+                          </div>
+                          <div>
+                            <label className="field-label">会社名</label>
+                            <input className="field-input" value={draft.company_name} onChange={(e) => updateContactDraft(contact.id, 'company_name', e.target.value)} placeholder="未入力可" />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            追加: {contact.created_at ? new Date(contact.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => saveProjectContact(contact.id)} disabled={contactSaving || !draft.name.trim()} className="btn-secondary text-xs px-3 py-1">
+                              保存
+                            </button>
+                            <button onClick={() => removeProjectContact(contact.id)} className="btn-danger text-xs px-2 py-1">
+                              削除
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{contact.company_name ? `${contact.company_name} ${contact.name}` : contact.name}</p>
+                          <div className="text-xs mt-1 space-y-1" style={{ color: 'var(--text-muted)' }}>
+                            <p><CopyableContactValue value={contact.email} emptyLabel="メール未登録" /></p>
+                            <p><CopyableContactValue value={contact.phone} emptyLabel="電話未登録" /></p>
+                            <p>{contact.company_name || '会社名未登録'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -2577,6 +2962,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                                 todos={todos}
                                 todosLoading={todosLoading}
                                 members={assignableUsers}
+                                contacts={project.contacts ?? []}
                                 onNotesTabClick={() => setPaneTab(pane, 'notes')}
                                 onTasksTabClick={() => setPaneTab(pane, 'tasks')}
                                 currentContentTemplates={currentContentTemplates}
@@ -2809,6 +3195,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
           todos={todos}
           todosLoading={todosLoading}
           members={assignableUsers}
+          contacts={project.contacts ?? []}
           onNotesTabClick={() => setPrimaryTab('notes')}
           onTasksTabClick={() => setPrimaryTab('tasks')}
           currentContentTemplates={currentContentTemplates}

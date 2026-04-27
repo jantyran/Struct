@@ -896,6 +896,7 @@ const INFO_WIDGET_STYLE: Record<string, { icon: string; color: string }> = {
   todo_list: { icon: '✓', color: '#3b82f6' },
   todo_summary: { icon: '◉', color: '#10b981' },
   member_list: { icon: '👥', color: '#0ea5e9' },
+  contact_list: { icon: '✳', color: '#f97316' },
   ai_tools: { icon: '✦', color: '#0f9ab1' },
 };
 

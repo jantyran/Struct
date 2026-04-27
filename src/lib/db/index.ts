@@ -98,6 +98,19 @@ function initSchema(db: Database.Database) {
       UNIQUE(project_id, user_id)
     );
 
+    -- プロジェクト関係者メモ（ユーザー登録不要の外部連絡先）
+    CREATE TABLE IF NOT EXISTS project_contacts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      company_name TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
     -- 招待（未登録メールアドレスへの招待）
     CREATE TABLE IF NOT EXISTS invitations (
       id TEXT PRIMARY KEY,
@@ -283,6 +296,10 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'projects', 'organization_id', `TEXT`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
   ensureColumn(db, 'projects', 'primary_assignee_id', `TEXT`);
+  ensureColumn(db, 'project_contacts', 'email', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'project_contacts', 'phone', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'project_contacts', 'company_name', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'project_contacts', 'updated_at', `TEXT DEFAULT (datetime('now'))`);
   ensureColumn(db, 'custom_fields', 'template_id', `TEXT`);
   ensureColumn(db, 'custom_fields', 'layout', `TEXT DEFAULT 'half'`);
   ensureColumn(db, 'custom_fields', 'is_builtin', `INTEGER DEFAULT 0`);

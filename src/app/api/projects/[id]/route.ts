@@ -55,6 +55,12 @@ export async function GET(_req: Request, { params }: Params) {
       JOIN users u ON m.user_id = u.id
       WHERE m.project_id = ?
     `).all(params.id);
+    const contacts = db.prepare(`
+      SELECT id, name, email, phone, company_name, created_at, updated_at
+      FROM project_contacts
+      WHERE project_id = ?
+      ORDER BY datetime(created_at) ASC, rowid ASC
+    `).all(params.id);
     const invitations = db.prepare("SELECT * FROM invitations WHERE project_id = ? AND status = 'PENDING'").all(params.id);
     const registeredUsers = currentPermissions.can_manage_members
       ? db.prepare(`
@@ -86,6 +92,7 @@ export async function GET(_req: Request, { params }: Params) {
         user: { id: m.user_id, email: m.email, name: m.name, avatar_url: m.avatar_url },
         role: m.role,
       })),
+      contacts,
       invitations,
       assignable_users: assignableUsers,
       registered_users: registeredUsers,

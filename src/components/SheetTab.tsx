@@ -48,6 +48,10 @@ function makeCols(n: number): SheetColumn[] {
   return Array.from({ length: n }, (_, i) => ({ id: uuidv4(), name: `列 ${i + 1}`, width: DEFAULT_COL_WIDTH }));
 }
 
+function fallbackColumnName(index: number) {
+  return `row${index + 1}`;
+}
+
 // ─── シート作成モーダル ──────────────────────────────────
 function CreateSheetModal({ existingCount, onConfirm, onClose }: {
   existingCount: number;
@@ -140,14 +144,21 @@ function ContextMenu({ ctx, rows, cols, onClose, onAction }: {
 }
 
 // ─── セル入力 ────────────────────────────────────────────
-function CellInput({ value, onChange, active, onKeyDown, onFocus }: {
+function CellInput({ value, onChange, active, onKeyDown, onFocus, inputRef }: {
   value: string; onChange: (v: string) => void;
   active: boolean; onKeyDown: (e: React.KeyboardEvent) => void; onFocus: () => void;
+  inputRef?: (node: HTMLInputElement | null) => void;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (active) ref.current?.focus(); }, [active]);
+  const localRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (active) localRef.current?.focus(); }, [active]);
   return (
-    <input ref={ref} value={value} onChange={e => onChange(e.target.value)}
+    <input
+      ref={(node) => {
+        (localRef as React.MutableRefObject<HTMLInputElement | null>).current = node;
+        inputRef?.(node);
+      }}
+      value={value}
+      onChange={e => onChange(e.target.value)}
       onFocus={onFocus} onKeyDown={onKeyDown}
       style={{
         width: '100%', height: '100%', border: 'none', outline: 'none',
@@ -162,6 +173,7 @@ function CellInput({ value, onChange, active, onKeyDown, onFocus }: {
 function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: ProjectSheet) => void }) {
   const cols = sheet.columns_def;
   const rows = sheet.rows_data;
+  const [columnNameDrafts, setColumnNameDrafts] = useState<Record<string, string>>({});
 
   const [anchor, setAnchor] = useState<CellPos | null>(null); // フォーカス + 選択起点
   const [cursor, setCursor] = useState<CellPos | null>(null); // 選択終点
@@ -243,8 +255,17 @@ function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: Pro
     const newCol: SheetColumn = { id: uuidv4(), name: `列 ${cols.length + 1}`, width: DEFAULT_COL_WIDTH };
     commit({ columns_def: [...cols, newCol], rows_data: rows });
   }
-  function renameCol(colId: string, name: string) {
-    commit({ columns_def: cols.map(c => c.id === colId ? { ...c, name: name.trim() || c.name } : c), rows_data: rows });
+  function setColumnNameDraft(colId: string, name: string) {
+    setColumnNameDrafts((current) => ({ ...current, [colId]: name }));
+  }
+  function finalizeColName(colId: string, index: number, rawName: string) {
+    const finalizedName = rawName.trim() || fallbackColumnName(index);
+    setColumnNameDrafts((current) => {
+      const next = { ...current };
+      delete next[colId];
+      return next;
+    });
+    commit({ columns_def: cols.map(c => c.id === colId ? { ...c, name: finalizedName } : c), rows_data: rows });
   }
   function updateColWidth(colId: string, width: number) {
     onUpdate({ ...sheet, columns_def: cols.map(c => c.id === colId ? { ...c, width } : c) });
@@ -458,17 +479,43 @@ function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: Pro
                     >
                       {/* 列名 — 常時編集可能 */}
                       <input
-                        value={col.name}
-                        onChange={e => renameCol(col.id, e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }}
+                        value={Object.prototype.hasOwnProperty.call(columnNameDrafts, col.id) ? columnNameDrafts[col.id] : col.name}
+                        onChange={e => setColumnNameDraft(col.id, e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setColumnNameDrafts((current) => {
+                              const next = { ...current };
+                              delete next[col.id];
+                              return next;
+                            });
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
                         style={{
                           flex: 1, height: '100%', border: 'none', outline: 'none',
                           padding: '0 4px 0 8px', fontSize: '0.75rem', fontWeight: 600,
                           color: C.hText, background: 'transparent', cursor: 'text',
                           minWidth: 0,
                         }}
-                        onFocus={e => { e.target.style.background = '#e0f2fe'; e.target.style.color = '#0369a1'; }}
-                        onBlur={e => { e.target.style.background = 'transparent'; e.target.style.color = C.hText; }}
+                        onFocus={e => {
+                          setColumnNameDrafts((current) => (
+                            Object.prototype.hasOwnProperty.call(current, col.id)
+                              ? current
+                              : { ...current, [col.id]: col.name }
+                          ));
+                          e.target.style.background = '#e0f2fe';
+                          e.target.style.color = '#0369a1';
+                        }}
+                        onBlur={e => {
+                          finalizeColName(col.id, ci, e.target.value);
+                          e.target.style.background = 'transparent';
+                          e.target.style.color = C.hText;
+                        }}
                       />
                       {/* ソートボタン */}
                       <button
