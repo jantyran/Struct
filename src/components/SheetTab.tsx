@@ -320,25 +320,38 @@ function SheetGrid({ sheet, onUpdate }: { sheet: ProjectSheet; onUpdate: (s: Pro
         const tsv = rows.slice(r0, r1 + 1).map(row =>
           cols.slice(c0, c1 + 1).map(col => row.cells[col.id] ?? '').join('\t')
         ).join('\n');
-        await navigator.clipboard.writeText(tsv);
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(tsv);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = tsv; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+          }
+        } catch { /* ignore */ }
       }
       if (e.key === 'v' && anchor) {
         e.preventDefault();
-        const text = await navigator.clipboard.readText();
-        const pasteRows = text.split('\n').map(line => line.split('\t'));
-        const startR = anchor.row, startC = anchor.col;
-        const nextRows = rows.map((row, ri) => {
-          const pr = ri - startR;
-          if (pr < 0 || pr >= pasteRows.length) return row;
-          const pasteRow = pasteRows[pr];
-          const cells = { ...row.cells };
-          pasteRow.forEach((val, pi) => {
-            const ci = startC + pi;
-            if (ci < cols.length) cells[cols[ci].id] = val;
+        try {
+          const text = navigator.clipboard?.readText
+            ? await navigator.clipboard.readText()
+            : null;
+          if (!text) return;
+          const pasteRows = text.split('\n').map(line => line.split('\t'));
+          const startR = anchor.row, startC = anchor.col;
+          const nextRows = rows.map((row, ri) => {
+            const pr = ri - startR;
+            if (pr < 0 || pr >= pasteRows.length) return row;
+            const cells = { ...row.cells };
+            pasteRows[pr].forEach((val, pi) => {
+              const ci = startC + pi;
+              if (ci < cols.length) cells[cols[ci].id] = val;
+            });
+            return { ...row, cells };
           });
-          return { ...row, cells };
-        });
-        commit({ columns_def: cols, rows_data: nextRows });
+          commit({ columns_def: cols, rows_data: nextRows });
+        } catch { /* ignore */ }
       }
     }
     document.addEventListener('keydown', handleKey);
