@@ -217,6 +217,19 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
 
+    -- プロジェクトシート（多目的スプレッドシート）
+    CREATE TABLE IF NOT EXISTS project_sheets (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT '新しいシート',
+      columns_def TEXT NOT NULL DEFAULT '[]',
+      rows_data TEXT NOT NULL DEFAULT '[]',
+      created_by TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
     -- タスク（Todo）
     CREATE TABLE IF NOT EXISTS todos (
       id TEXT PRIMARY KEY,

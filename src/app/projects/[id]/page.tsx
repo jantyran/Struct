@@ -8,10 +8,11 @@ import { useAuth } from '@/components/AuthContext';
 import { useDevSettings } from '@/components/DevSettingsContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import TodoTab from '@/components/TodoTab';
+import SheetTab from '@/components/SheetTab';
 import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
-type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks';
+type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets';
 
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
@@ -2136,6 +2137,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
     ...(canViewNotes ? [{ k: 'notes' as const, l: 'ノート' }] : []),
     ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
+    ...(canViewItems ? [{ k: 'sheets' as const, l: 'シート' }] : []),
   ]), [canViewContent, canViewItems, canViewNotes]);
 
   const findAlternateTab = useCallback((current: ProjectDetailTabKey) => {
@@ -2255,6 +2257,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   );
 
   const renderTabContent = (tabKey: ProjectDetailTabKey, pane: 'primary' | 'secondary') => {
+    if (tabKey === 'sheets') {
+      return <SheetTab projectId={id} />;
+    }
+
     if (tabKey === 'tasks' && canViewItems) {
       return (
         <section className="space-y-4">
