@@ -432,7 +432,7 @@ function SidebarPanel({ myTodos, managedUrgentTodos, thisWeekTodos, staleProject
 // ──────────────────────────────────────────
 // テーブルビュー
 // ──────────────────────────────────────────
-type SortKey = 'name' | 'type' | 'status' | 'phase' | 'start_date' | 'end_date' | 'updated_at' | 'todo';
+type SortKey = 'name' | 'type' | 'status' | 'phase' | 'updated_at' | 'todo';
 function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
   projects: ProjectWithTodos[];
   typeLabelMap: Record<string, string>;
@@ -454,8 +454,6 @@ function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
     else if (sortKey === 'type') { va = typeLabelMap[a.type] || a.type; vb = typeLabelMap[b.type] || b.type; }
     else if (sortKey === 'status') { va = a.status; vb = b.status; }
     else if (sortKey === 'phase') { va = a.phase_key; vb = b.phase_key; }
-    else if (sortKey === 'start_date') { va = a.start_date || ''; vb = b.start_date || ''; }
-    else if (sortKey === 'end_date') { va = a.end_date || ''; vb = b.end_date || ''; }
     else if (sortKey === 'updated_at') { va = a.updated_at || ''; vb = b.updated_at || ''; }
     else if (sortKey === 'todo') { va = a.todo_done / (a.todo_total || 1); vb = b.todo_done / (b.todo_total || 1); }
     if (va < vb) return sortAsc ? -1 : 1;
@@ -494,8 +492,6 @@ function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
                 ['status', 'ステータス'],
                 ['phase', 'フェーズ'],
                 ['todo', 'Todo'],
-                ['start_date', '開始日'],
-                ['end_date', '終了日'],
                 ['updated_at', '最終更新'],
               ] as [SortKey, string][]).map(([k, label]) => (
                 <th key={k} style={thStyle(k)} onClick={() => toggleSort(k)}>
@@ -542,16 +538,22 @@ function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
                       </span>
                     ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{p.start_date || '—'}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{p.end_date || '—'}</td>
                   <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                     {p.updated_at ? p.updated_at.slice(0, 10) : '—'}
                   </td>
-                  <td style={{ padding: '10px 12px' }} onClick={e => e.stopPropagation()}>
+                  <td style={{ padding: '6px 12px' }} onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => onClone(p)}
-                      className="btn-secondary text-xs px-2.5 py-1"
-                    >クローン</button>
+                      title="クローン"
+                      className="rounded-lg p-1.5 transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                    </button>
                   </td>
                 </tr>
               );
