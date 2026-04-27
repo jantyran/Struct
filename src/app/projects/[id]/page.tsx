@@ -1531,6 +1531,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [openFieldSections, setOpenFieldSections] = useState<string[]>([]);
   // どの type key でセクション開閉を初期化済みか追跡する（undefined = 未初期化）
   const sectionInitTypeRef = useRef<string | undefined>(undefined);
+  const fieldSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [todosLoaded, setTodosLoaded] = useState(false);
   const [todosLoading, setTodosLoading] = useState(false);
@@ -1879,7 +1880,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     if (!project || idx < 0) return;
     const fields = [...project.custom_fields];
     fields[idx] = f;
-    setProject({ ...project, custom_fields: fields });
+    const next = { ...project, custom_fields: fields };
+    setProject(next);
+    if (fieldSaveTimerRef.current) clearTimeout(fieldSaveTimerRef.current);
+    fieldSaveTimerRef.current = setTimeout(() => { save(next); }, 800);
   }
 
   function toggleFieldSection(sectionName: string) {
