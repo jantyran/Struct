@@ -28,7 +28,7 @@ export interface ShortcutBinding {
 export type ShortcutSettings = Record<ShortcutActionKey, ShortcutBinding>;
 
 export type UserTextSize = 'xsmall' | 'small' | 'medium' | 'large' | 'xlarge';
-export type UserDefaultProjectTab = 'fields' | 'tasks' | 'members' | 'notes' | 'assets';
+export type UserDefaultProjectTab = 'fields' | 'structure' | 'tasks' | 'members' | 'notes' | 'sheets' | 'assets';
 export type UserDefaultTaskView = 'list' | 'kanban' | 'gantt';
 export type UserDefaultTaskAssigneeFilter = '' | 'me' | 'unassigned';
 
@@ -50,7 +50,7 @@ export interface ProjectPhase {
 }
 
 /** セクションやサイドバーに配置できるアイテムの種別 */
-export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'note_list' | 'todo_list' | 'todo_summary' | 'member_list' | 'contact_list' | 'ai_tools' | 'divider' | 'subheading' | 'text_block' | 'callout' | 'label_badge' | 'spacer';
+export type SectionItemKind = 'field' | 'project_type' | 'phase' | 'project_relations' | 'note_list' | 'todo_list' | 'todo_summary' | 'member_list' | 'contact_list' | 'ai_tools' | 'divider' | 'subheading' | 'text_block' | 'callout' | 'label_badge' | 'spacer';
 
 /** 情報ウィジェットの仮想 field_id プレフィックス */
 export const WIDGET_FIELD_ID_PREFIX = '__widget:';
@@ -59,6 +59,7 @@ export const WIDGET_FIELD_ID_PREFIX = '__widget:';
 export const SECTION_INFO_WIDGETS: { kind: SectionItemKind; label: string; description: string }[] = [
   { kind: 'project_type', label: 'プロジェクト種別', description: '種別名・キーを表示' },
   { kind: 'phase', label: '進行フェーズ', description: '現在のフェーズをパス形式で表示' },
+  { kind: 'project_relations', label: 'プロジェクト構成', description: '親・子・関連プロジェクトと進捗を表示/変更' },
   { kind: 'note_list', label: 'ノート一覧', description: 'プロジェクトのノートをインライン表示' },
   { kind: 'todo_list', label: 'タスク一覧', description: '未完了タスクを最大5件表示' },
   { kind: 'todo_summary', label: 'タスクサマリー', description: 'タスクの進捗を件数・割合で表示' },

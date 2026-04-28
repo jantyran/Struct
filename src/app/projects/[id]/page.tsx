@@ -10,6 +10,7 @@ import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import TodoTab from '@/components/TodoTab';
 import SheetTab from '@/components/SheetTab';
 import ProjectStructureTab from '@/components/ProjectStructureTab';
+import ProjectRelationsWidget from '@/components/ProjectRelationsWidget';
 import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
@@ -1110,6 +1111,7 @@ function SectionInfoWidget({
   layout,
   project,
   projectType,
+  projectTypes,
   phases,
   typeLabel,
   notes,
@@ -1117,6 +1119,9 @@ function SectionInfoWidget({
   todosLoading,
   members,
   contacts,
+  canEditProject,
+  onStructureTabClick,
+  onProjectParentChange,
   onNotesTabClick,
   onTasksTabClick,
   currentContentTemplates,
@@ -1147,6 +1152,7 @@ function SectionInfoWidget({
   layout: 'half' | 'full';
   project: ProjectWithFields;
   projectType: ProjectTypeDefinition | undefined;
+  projectTypes: ProjectTypeDefinition[];
   phases: ProjectPhase[];
   typeLabel: string;
   notes?: ProjectNote[];
@@ -1154,6 +1160,9 @@ function SectionInfoWidget({
   todosLoading?: boolean;
   members?: import('@/types').ProjectUser[];
   contacts?: import('@/types').ProjectContact[];
+  canEditProject?: boolean;
+  onStructureTabClick?: () => void;
+  onProjectParentChange?: (parentProjectId: string | null) => void;
   onNotesTabClick?: () => void;
   onTasksTabClick?: () => void;
   currentContentTemplates?: ProjectContentTemplate[];
@@ -1204,6 +1213,21 @@ function SectionInfoWidget({
         <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
           {currentPhase?.name || (phases.length === 0 ? '—' : '未設定')}
         </p>
+      </div>
+    );
+  }
+
+  if (kind === 'project_relations') {
+    return (
+      <div className={colClass}>
+        <ProjectRelationsWidget
+          projectId={project.id}
+          projectTypes={projectTypes}
+          canEdit={Boolean(canEditProject)}
+          compact={layout !== 'full'}
+          onOpenStructureTab={onStructureTabClick}
+          onProjectParentChange={onProjectParentChange}
+        />
       </div>
     );
   }
@@ -2435,11 +2459,11 @@ export default function ProjectPage() {
   const projectRoleDefinitions = project?.project_role_definitions ?? [];
   const tabOptions = useMemo(() => ([
     ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
-    ...(canViewProject ? [{ k: 'structure' as const, l: '構成' }] : []),
     ...(canViewItems ? [{ k: 'tasks' as const, l: 'タスク' }] : []),
     ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
     ...(canViewNotes ? [{ k: 'notes' as const, l: 'ノート' }] : []),
     ...(canViewItems ? [{ k: 'sheets' as const, l: 'シート' }] : []),
+    ...(canViewProject ? [{ k: 'structure' as const, l: '構成' }] : []),
     ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
   ]), [canViewContent, canViewItems, canViewNotes, canViewProject]);
 
@@ -3000,6 +3024,7 @@ export default function ProjectPage() {
                                 layout={item.layout as 'half' | 'full'}
                                 project={project}
                                 projectType={currentProjectType}
+                                projectTypes={projectTypes}
                                 phases={currentPhases}
                                 typeLabel={typeLabel}
                                 notes={notes}
@@ -3007,6 +3032,9 @@ export default function ProjectPage() {
                                 todosLoading={todosLoading}
                                 members={assignableUsers}
                                 contacts={project.contacts ?? []}
+                                canEditProject={canEditProject}
+                                onStructureTabClick={() => setPaneTab(pane, 'structure')}
+                                onProjectParentChange={(parentProjectId) => setProject({ ...project, parent_project_id: parentProjectId })}
                                 onNotesTabClick={() => setPaneTab(pane, 'notes')}
                                 onTasksTabClick={() => setPaneTab(pane, 'tasks')}
                                 currentContentTemplates={currentContentTemplates}
@@ -3233,6 +3261,7 @@ export default function ProjectPage() {
           layout="full"
           project={project}
           projectType={currentProjectType}
+          projectTypes={projectTypes}
           phases={currentPhases}
           typeLabel={typeLabel}
           notes={notes}
@@ -3240,6 +3269,9 @@ export default function ProjectPage() {
           todosLoading={todosLoading}
           members={assignableUsers}
           contacts={project.contacts ?? []}
+          canEditProject={canEditProject}
+          onStructureTabClick={() => setPrimaryTab('structure')}
+          onProjectParentChange={(parentProjectId) => setProject({ ...project, parent_project_id: parentProjectId })}
           onNotesTabClick={() => setPrimaryTab('notes')}
           onTasksTabClick={() => setPrimaryTab('tasks')}
           currentContentTemplates={currentContentTemplates}

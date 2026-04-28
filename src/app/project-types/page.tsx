@@ -892,6 +892,7 @@ function PlacementChip({
 const INFO_WIDGET_STYLE: Record<string, { icon: string; color: string }> = {
   project_type: { icon: '🏷', color: '#8b5cf6' },
   phase: { icon: '→', color: '#f59e0b' },
+  project_relations: { icon: '↔', color: '#14b8a6' },
   note_list: { icon: '📌', color: '#64748b' },
   todo_list: { icon: '✓', color: '#3b82f6' },
   todo_summary: { icon: '◉', color: '#10b981' },
