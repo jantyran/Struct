@@ -1655,6 +1655,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const { user, loading: authLoading, checkSession } = useAuth();
   const { settings: devSettings } = useDevSettings();
   const [project, setProject] = useState<ProjectWithFields | null>(null);
+  const [retro, setRetro] = useState<{
+    task_summary: { total_tasks: number; completed_tasks: number; on_time_tasks: number; avg_completion_days: number | null };
+    member_contributions: Array<{ user_id: string; name: string | null; email: string; completed: number }>;
+    monthly_completions: Array<{ month: string; count: number }>;
+    fastest_task: { title: string; completion_days: number } | null;
+    duration_days: number | null;
+  } | null>(null);
   const [assets, setAssets] = useState<GeneratedAsset[]>([]);
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [assetsLoading, setAssetsLoading] = useState(false);
@@ -1851,7 +1858,16 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     setAiError('');
     setContactDrafts({});
     setContactMessage('');
+    setRetro(null);
   }, [id]);
+
+  useEffect(() => {
+    if (project?.status !== 'completed') return;
+    fetch(withBasePath(`/api/projects/${project.id}/retro`))
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setRetro(data); })
+      .catch(() => {});
+  }, [project?.id, project?.status]);
 
   useEffect(() => {
     const nextDrafts = Object.fromEntries(
@@ -3581,6 +3597,45 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         )}
       </div>
       
+      {/* 完了プロジェクト振り返りバナー */}
+      {project.status === 'completed' && retro && (
+        <div className="px-6 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(241,250,252,0.8) 100%)' }}>
+          <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: '#059669' }}>プロジェクト振り返り</p>
+          <div className="flex flex-wrap gap-4">
+            {[
+              { label: '総タスク', value: retro.task_summary.total_tasks },
+              { label: '完了タスク', value: retro.task_summary.completed_tasks },
+              {
+                label: '期限遵守率',
+                value: retro.task_summary.completed_tasks > 0
+                  ? `${Math.round((retro.task_summary.on_time_tasks / retro.task_summary.completed_tasks) * 100)}%`
+                  : '—',
+              },
+              { label: '平均完了日数', value: retro.task_summary.avg_completion_days != null ? `${retro.task_summary.avg_completion_days}日` : '—' },
+              { label: '期間', value: retro.duration_days != null ? `${retro.duration_days}日` : '—' },
+              ...(retro.fastest_task ? [{ label: '最速完了', value: `${retro.fastest_task.completion_days}日 (${retro.fastest_task.title.slice(0, 12)}…)` }] : []),
+            ].map(item => (
+              <div key={item.label} className="text-center">
+                <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{item.value}</p>
+                <p className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>{item.label}</p>
+              </div>
+            ))}
+            {retro.member_contributions.length > 0 && (
+              <div>
+                <p className="text-[0.625rem] mb-0.5" style={{ color: 'var(--text-muted)' }}>貢献メンバー</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {retro.member_contributions.slice(0, 5).map(m => (
+                    <span key={m.user_id} className="text-[0.625rem] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-100">
+                      {m.name?.trim() || m.email.split('@')[0]} ({m.completed})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 本体 */}
       <div className="flex-1 flex overflow-hidden min-h-0 min-w-0">
         <div className="flex-1 min-h-0 min-w-0 overflow-hidden p-6 flex flex-col">

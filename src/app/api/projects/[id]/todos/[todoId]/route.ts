@@ -37,7 +37,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
   // 更新可能フィールドのみ適用
   const updates: Record<string, unknown> = {};
-  const allowed = ['title', 'description', 'status', 'priority', 'assignee_id', 'phase_key', 'start_date', 'due_date', 'sort_order', 'parent_id'] as const;
+  const allowed = ['title', 'description', 'status', 'priority', 'assignee_id', 'phase_key', 'start_date', 'due_date', 'sort_order', 'parent_id', 'tags'] as const;
   for (const key of allowed) {
     if (key in body) updates[key] = body[key] ?? null;
   }

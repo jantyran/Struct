@@ -99,6 +99,8 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onSub
   const [phaseKey, setPhaseKey] = useState(todo.phase_key ?? '');
   const [startDate, setStartDate] = useState(todo.start_date ?? '');
   const [dueDate, setDueDate] = useState(todo.due_date ?? '');
+  const [tags, setTags] = useState<string[]>(() => { try { return JSON.parse(todo.tags ?? '[]'); } catch { return []; } });
+  const [tagInput, setTagInput] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -116,8 +118,21 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onSub
 
   function handleSave() {
     if (!title.trim()) return;
-    onSave({ title: title.trim(), description, status, priority, assignee_id: assigneeId || null, phase_key: phaseKey, start_date: startDate, due_date: dueDate });
+    onSave({ title: title.trim(), description, status, priority, assignee_id: assigneeId || null, phase_key: phaseKey, start_date: startDate, due_date: dueDate, tags: JSON.stringify(tags) });
     onClose();
+  }
+
+  function addTag(tag: string) {
+    const t = tag.trim().replace(/^#/, '');
+    if (!t || tags.includes(t)) return;
+    const next = [...tags, t];
+    setTags(next);
+    setDirty(true);
+  }
+
+  function removeTag(t: string) {
+    setTags(tags.filter(x => x !== t));
+    setDirty(true);
   }
 
   const overdue = isOverdue(todo.due_date, status);
@@ -247,6 +262,41 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onSub
               <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>完了日</p>
               <p className="text-sm">{status === 'done' ? (formatDate(todo.completed_at ?? '') || '保存後に記録') : '—'}</p>
             </div>
+          </div>
+
+          {/* タグ */}
+          <div>
+            <p className="text-[0.6875rem] font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>タグ</p>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {tags.map(t => (
+                <span key={t} className="inline-flex items-center gap-1 text-[0.6875rem] px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                  #{t}
+                  {canEdit && (
+                    <button type="button" onClick={() => removeTag(t)} className="opacity-60 hover:opacity-100 transition-opacity leading-none">×</button>
+                  )}
+                </span>
+              ))}
+              {tags.length === 0 && !canEdit && (
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>なし</span>
+              )}
+            </div>
+            {canEdit && (
+              <input
+                className="field-input text-sm"
+                placeholder="タグを入力して Enter（例: 設計・確認・執筆）"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    addTag(tagInput);
+                    setTagInput('');
+                  } else if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
+                    removeTag(tags[tags.length - 1]);
+                  }
+                }}
+              />
+            )}
           </div>
 
           {/* サブタスク一覧 */}

@@ -88,11 +88,12 @@ export async function POST(req: Request, { params }: Params) {
   const id = uuidv4();
   const status = body.status ?? 'todo';
   const completedAt = status === 'done' ? new Date().toISOString() : null;
+  const tagsRaw = Array.isArray(body.tags) ? JSON.stringify(body.tags) : (body.tags ?? '[]');
   db.prepare(`
     INSERT INTO todos
       (id, project_id, parent_id, title, description, status, priority, assignee_id,
-       phase_key, start_date, due_date, sort_order, created_by, completed_at, completed_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       phase_key, start_date, due_date, sort_order, created_by, completed_at, completed_by, tags)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     params.id,
@@ -109,6 +110,7 @@ export async function POST(req: Request, { params }: Params) {
     user.id,
     completedAt,
     completedAt ? user.id : null,
+    tagsRaw,
   );
 
   const created = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo;

@@ -370,6 +370,7 @@ export interface Todo {
   created_at: string;
   completed_at?: string | null;
   completed_by?: string | null;
+  tags?: string;
   updated_at: string;
   subtasks?: Todo[];
 }

@@ -29,7 +29,7 @@ export default function MyPage() {
   ];
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div>
         <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
           {user?.name || user?.email || 'My page'}
