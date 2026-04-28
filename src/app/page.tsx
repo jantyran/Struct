@@ -661,43 +661,76 @@ export default function Dashboard() {
     ...(archivedCount > 0 ? [{ v: 'archived', l: `アーカイブ (${archivedCount})` }] : []),
   ];
 
-  const statCards = [
-    { label: '総プロジェクト', value: stats.total, color: 'text-cyan-700', accent: 'border-l-cyan-400' },
-    { label: 'アクティブ', value: stats.active, color: 'text-emerald-700', accent: 'border-l-emerald-400' },
-    { label: '下書き', value: stats.draft, color: 'text-slate-500', accent: 'border-l-slate-300' },
-    { label: '完了', value: stats.completed, color: 'text-emerald-700', accent: 'border-l-emerald-400' },
-    {
-      label: '自分のタスク（未完了）',
-      value: stats.my_todo_open,
-      color: stats.my_todo_urgent > 0 ? 'text-red-600' : 'text-amber-700',
-      accent: stats.my_todo_urgent > 0 ? 'border-l-red-400' : 'border-l-amber-400',
-      sub: stats.my_todo_urgent > 0 ? `うち ${stats.my_todo_urgent} 件が期限超過` : undefined,
-    },
-  ];
+  // アクティブプロジェクトのタスク完了率
+  const activePjs = projects.filter(p => p.status === 'active');
+  const activeTotalTasks = activePjs.reduce((s, p) => s + p.todo_total, 0);
+  const activeDoneTasks = activePjs.reduce((s, p) => s + p.todo_done, 0);
+  const completionRate = activeTotalTasks > 0 ? Math.round((activeDoneTasks / activeTotalTasks) * 100) : null;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* ヘッダー */}
-      <div className="card mb-6 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-6 bg-gradient-to-r from-cyan-50 via-white to-amber-50">
+      {/* ヘッダー + サマリー統計を一体化したカード */}
+      <div className="card mb-5 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-cyan-50 via-white to-amber-50 border-b" style={{ borderColor: 'var(--border)' }}>
           <div>
-            <p className="section-title mb-2">Workspace Overview</p>
-            <h1 className="text-2xl font-bold tracking-tight">ダッシュボード</h1>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>プロジェクトと施策の情報を構造化して管理する</p>
+            <h1 className="text-xl font-bold tracking-tight">ダッシュボード</h1>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>プロジェクトと施策の情報を構造化して管理する</p>
           </div>
           <button onClick={() => setShowNew(true)} className="btn-primary">+ 新規プロジェクト</button>
         </div>
-      </div>
 
-      {/* サマリー統計 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {statCards.map(s => (
-          <div key={s.label} className={`card p-4 border-l-4 ${s.accent}`}>
-            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
-            <p className={`text-2xl font-bold mt-1.5 ${s.color}`}>{s.value}</p>
-            {s.sub && <p className="text-xs mt-1 text-red-500">{s.sub}</p>}
+        {/* サマリー統計 — 4列1行 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0" style={{ borderColor: 'var(--border)' }}>
+          {/* プロジェクト */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>プロジェクト</p>
+            <div className="flex items-baseline gap-2 mt-1.5">
+              <span className="text-2xl font-bold text-cyan-700">{stats.active}</span>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>活動中</span>
+            </div>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              下書き {stats.draft} · 完了 {stats.completed} · 計 {stats.total}
+            </p>
           </div>
-        ))}
+
+          {/* 自分のタスク */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>自分のタスク</p>
+            <div className="flex items-baseline gap-2 mt-1.5">
+              <span className={`text-2xl font-bold ${stats.my_todo_urgent > 0 ? 'text-amber-700' : 'text-amber-700'}`}>{stats.my_todo_open}</span>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>未完了</span>
+            </div>
+            {stats.my_todo_urgent > 0
+              ? <p className="text-xs mt-1 text-red-500 font-medium">期限超過 {stats.my_todo_urgent} 件</p>
+              : <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>期限超過なし</p>
+            }
+          </div>
+
+          {/* 今週の期限 */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>今週の期限</p>
+            <div className="flex items-baseline gap-2 mt-1.5">
+              <span className={`text-2xl font-bold ${this_week_todos.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{this_week_todos.length}</span>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>件</span>
+            </div>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>7日以内に期限のタスク</p>
+          </div>
+
+          {/* チームの急ぎ / タスク完了率 */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>チームの急ぎ</p>
+            <div className="flex items-baseline gap-2 mt-1.5">
+              <span className={`text-2xl font-bold ${managed_urgent_todos.length > 0 ? 'text-red-600' : 'text-slate-400'}`}>{managed_urgent_todos.length}</span>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>件</span>
+            </div>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              管理PJの期限超過
+              {completionRate !== null && (
+                <span className="ml-2 font-medium" style={{ color: 'var(--accent)' }}>完了率 {completionRate}%</span>
+              )}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* メインコンテンツ: プロジェクト一覧 + サイドバー */}
