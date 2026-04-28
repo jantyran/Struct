@@ -1421,10 +1421,11 @@ interface TodoTabProps {
   assignableUsers: ProjectUser[];
   phases: ProjectPhase[];
   canEdit: boolean;
+  focusedTodoId?: string | null;
   onTodosChange: (todos: Todo[]) => void;
 }
 
-export default function TodoTab({ projectId, todos, assignableUsers, phases, canEdit, onTodosChange }: TodoTabProps) {
+export default function TodoTab({ projectId, todos, assignableUsers, phases, canEdit, focusedTodoId, onTodosChange }: TodoTabProps) {
   const { user } = useAuth();
   const [view, setView] = useState<TodoView>(user?.settings?.default_task_view ?? 'list');
   const [creating, setCreating] = useState(false);
@@ -1445,14 +1446,16 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
   const [filterAssigneeId, setFilterAssigneeId] = useState<string>(user?.settings?.default_task_assignee === 'me' ? user.id : (user?.settings?.default_task_assignee ?? ''));
   const defaultTaskViewAppliedRef = useRef(false);
   const defaultTaskFilterAppliedRef = useRef(false);
+  const autoOpenedTodoIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (focusedTodoId) return;
     const preferredView = user?.settings?.default_task_view;
     if (!preferredView) return;
     if (defaultTaskViewAppliedRef.current) return;
     setView(preferredView);
     defaultTaskViewAppliedRef.current = true;
-  }, [user?.settings?.default_task_view]);
+  }, [focusedTodoId, user?.settings?.default_task_view]);
 
   useEffect(() => {
     if (defaultTaskFilterAppliedRef.current) return;
@@ -1528,6 +1531,17 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     setPendingScrollTarget,
     scrollOptions,
   );
+
+  useEffect(() => {
+    if (!focusedTodoId) return;
+    if (autoOpenedTodoIdRef.current === focusedTodoId) return;
+    const target = todos.flatMap(todo => [todo, ...(todo.subtasks ?? [])]).find(todo => todo.id === focusedTodoId);
+    if (!target) return;
+    setView('list');
+    setDetailTodo(target);
+    setPendingScrollTarget(`todo-row-${target.id}`);
+    autoOpenedTodoIdRef.current = focusedTodoId;
+  }, [focusedTodoId, todos]);
 
   useRegisterShortcutScope(`todo-tab-${projectId}`, 'タスク', {
     new_record: canEdit ? () => {

@@ -1676,12 +1676,15 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [crawlingFieldId, setCrawlingFieldId] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get('tab');
-  const initialTab: ProjectDetailTabKey =
+  const requestedTodoId = searchParams.get('todo');
+  const requestedProjectTab: ProjectDetailTabKey | null =
     requestedTab === 'todos'
       ? 'tasks'
-      : requestedTab === 'fields' || requestedTab === 'tasks' || requestedTab === 'members' || requestedTab === 'notes' || requestedTab === 'assets'
+      : requestedTab === 'fields' || requestedTab === 'tasks' || requestedTab === 'members' || requestedTab === 'notes' || requestedTab === 'assets' || requestedTab === 'sheets'
         ? requestedTab
-        : user?.settings?.default_project_tab || 'fields';
+        : null;
+  const initialTab: ProjectDetailTabKey =
+    requestedProjectTab ?? user?.settings?.default_project_tab ?? 'fields';
   const [primaryTab, setPrimaryTab] = useState<ProjectDetailTabKey>(initialTab);
   const [splitView, setSplitView] = useState(false);
   const [secondaryTab, setSecondaryTab] = useState<ProjectDetailTabKey>('notes');
@@ -2425,14 +2428,21 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   }, [tabOptions]);
 
   useEffect(() => {
-    if (requestedTab) return;
+    if (requestedProjectTab) return;
     const preferredTab = user?.settings?.default_project_tab;
     if (!preferredTab) return;
     if (!tabOptions.some((option) => option.k === preferredTab)) return;
     if (userDefaultTabAppliedRef.current) return;
     setPrimaryTab(preferredTab);
     userDefaultTabAppliedRef.current = true;
-  }, [requestedTab, tabOptions, user?.settings?.default_project_tab]);
+  }, [requestedProjectTab, tabOptions, user?.settings?.default_project_tab]);
+
+  useEffect(() => {
+    if (!requestedProjectTab) return;
+    if (!tabOptions.some((option) => option.k === requestedProjectTab)) return;
+    if (primaryTab === requestedProjectTab) return;
+    setPrimaryTab(requestedProjectTab);
+  }, [primaryTab, requestedProjectTab, tabOptions]);
 
   useEffect(() => {
     if (!tabOptions.some((option) => option.k === primaryTab)) {
@@ -2556,6 +2566,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               assignableUsers={project.assignable_users ?? []}
               phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
               canEdit={canEditItems}
+              focusedTodoId={requestedTodoId}
               onTodosChange={setTodos}
             />
           )}

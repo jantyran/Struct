@@ -68,7 +68,7 @@ function TodoRow({ todo }: { todo: MyTodo }) {
 
   return (
     <Link
-      href={withBasePath(`/projects/${todo.project_id}?tab=todos`)}
+      href={withBasePath(`/projects/${todo.project_id}?tab=todos&todo=${encodeURIComponent(todo.id)}`)}
       className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors border-b last:border-0"
       style={{ borderColor: 'var(--border)' }}
     >
