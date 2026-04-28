@@ -139,9 +139,9 @@ export async function POST(request: Request, { params }: Params) {
         db.prepare(`
           INSERT INTO todos (
             id, project_id, parent_id, title, description, status, priority, assignee_id,
-            phase_key, start_date, due_date, sort_order, created_by
+            phase_key, start_date, due_date, sort_order, created_by, completed_at, completed_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           clonedTodoId,
           newId,
@@ -156,6 +156,8 @@ export async function POST(request: Request, { params }: Params) {
           includeValues ? (todo.due_date ?? '') : '',
           todo.sort_order ?? 0,
           user.id,
+          includeValues && todo.status === 'done' ? (todo.completed_at ?? null) : null,
+          includeValues && todo.status === 'done' ? (todo.completed_by ?? null) : null,
         );
       }
     });

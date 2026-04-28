@@ -140,6 +140,10 @@ export async function PUT(request: Request, { params }: Params) {
     const nextPrimaryAssigneeId = body.primary_assignee_id === undefined
       ? (projectAccess as any).primary_assignee_id ?? null
       : body.primary_assignee_id;
+    const currentStatus = (projectAccess as any).status as string;
+    const nextStatus = body.status ?? currentStatus;
+    const shouldMarkCompleted = nextStatus === 'completed' && currentStatus !== 'completed';
+    const shouldClearCompleted = nextStatus !== 'completed';
 
     if (nextPrimaryAssigneeId) {
       const assignable = db.prepare(`
@@ -160,14 +164,29 @@ export async function PUT(request: Request, { params }: Params) {
           phase_key = COALESCE(?, phase_key),
           status = COALESCE(?, status),
           primary_assignee_id = ?,
+          completed_at = CASE
+            WHEN ? THEN datetime('now')
+            WHEN ? THEN NULL
+            ELSE completed_at
+          END,
+          completed_by = CASE
+            WHEN ? THEN ?
+            WHEN ? THEN NULL
+            ELSE completed_by
+          END,
           updated_at = datetime('now')
         WHERE id = ?
       `).run(
         body.name ?? null,
         body.type ?? null,
         body.phase_key ?? null,
-        body.status ?? null,
+        nextStatus,
         nextPrimaryAssigneeId,
+        shouldMarkCompleted ? 1 : 0,
+        shouldClearCompleted ? 1 : 0,
+        shouldMarkCompleted ? 1 : 0,
+        user.id,
+        shouldClearCompleted ? 1 : 0,
         params.id
       );
 

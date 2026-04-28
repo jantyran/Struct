@@ -3431,6 +3431,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
             {([
               { value: 'draft',    label: '下書き',   dot: '#9fb8c4' },
               { value: 'active',   label: 'アクティブ', dot: '#1f9d72' },
+              { value: 'completed', label: '完了', dot: '#10b981' },
               { value: 'archived', label: 'アーカイブ', dot: '#9fb8c4' },
             ] as { value: typeof project.status; label: string; dot: string }[]).map((opt, i) => {
               const isSelected = project.status === opt.value;
@@ -3446,12 +3447,14 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     background: isSelected
                       ? opt.value === 'active'
                         ? 'linear-gradient(135deg, rgba(31,157,114,0.15) 0%, rgba(183,244,216,0.4) 100%)'
+                        : opt.value === 'completed'
+                          ? 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(209,250,229,0.5) 100%)'
                         : opt.value === 'draft'
                           ? 'linear-gradient(135deg, rgba(15,154,177,0.1) 0%, rgba(126,215,222,0.2) 100%)'
                           : 'rgba(159,184,196,0.12)'
                       : 'transparent',
                     color: isSelected
-                      ? opt.value === 'active' ? 'var(--success)' : opt.value === 'draft' ? 'var(--accent)' : 'var(--text-secondary)'
+                      ? opt.value === 'active' || opt.value === 'completed' ? 'var(--success)' : opt.value === 'draft' ? 'var(--accent)' : 'var(--text-secondary)'
                       : 'var(--text-muted)',
                   }}
                 >

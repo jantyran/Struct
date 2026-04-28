@@ -161,6 +161,7 @@ export async function GET() {
     total: projects.length,
     active: projects.filter(p => p.status === 'active').length,
     draft: projects.filter(p => p.status === 'draft').length,
+    completed: projects.filter(p => p.status === 'completed').length,
     my_todo_open: myOpenCount,
     my_todo_urgent: myUrgentCount,
   };

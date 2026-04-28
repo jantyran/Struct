@@ -1,5 +1,5 @@
 export type ProjectType = string;
-export type ProjectStatus = 'draft' | 'active' | 'archived';
+export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type FieldType = 'text' | 'textarea' | 'url' | 'date' | 'number' | 'select' | 'reference' | 'reference_multi' | 'group' | 'group_list' | 'list';
 export type FieldLayout = 'half' | 'full';
 export type AssetType = string;
@@ -211,6 +211,8 @@ export interface Project {
   channels?: string;
   description?: string;
   created_at: string;
+  completed_at?: string | null;
+  completed_by?: string | null;
   updated_at: string;
   ownerId: string;
   owner?: ProjectUser;
@@ -366,6 +368,8 @@ export interface Todo {
   sort_order: number;
   created_by: string;
   created_at: string;
+  completed_at?: string | null;
+  completed_by?: string | null;
   updated_at: string;
   subtasks?: Todo[];
 }

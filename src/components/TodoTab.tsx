@@ -239,6 +239,14 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onSub
                 <input type="date" className="field-input text-sm" value={dueDate} onChange={e => mark(setDueDate)(e.target.value)} />
               ) : <p className="text-sm" style={{ color: overdue ? '#ef4444' : undefined }}>{formatDate(dueDate) || '—'}</p>}
             </div>
+            <div>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>作成日</p>
+              <p className="text-sm">{formatDate(todo.created_at) || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[0.6875rem] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>完了日</p>
+              <p className="text-sm">{status === 'done' ? (formatDate(todo.completed_at ?? '') || '保存後に記録') : '—'}</p>
+            </div>
           </div>
 
           {/* サブタスク一覧 */}

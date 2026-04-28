@@ -82,6 +82,8 @@ function initSchema(db: Database.Database) {
       channels TEXT DEFAULT '[]',
       description TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT,
+      completed_by TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -226,6 +228,8 @@ function initSchema(db: Database.Database) {
       pinned INTEGER NOT NULL DEFAULT 0,
       created_by TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT,
+      completed_by TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
@@ -296,6 +300,10 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'projects', 'organization_id', `TEXT`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
   ensureColumn(db, 'projects', 'primary_assignee_id', `TEXT`);
+  ensureColumn(db, 'projects', 'completed_at', `TEXT`);
+  ensureColumn(db, 'projects', 'completed_by', `TEXT`);
+  ensureColumn(db, 'todos', 'completed_at', `TEXT`);
+  ensureColumn(db, 'todos', 'completed_by', `TEXT`);
   ensureColumn(db, 'project_contacts', 'email', `TEXT DEFAULT ''`);
   ensureColumn(db, 'project_contacts', 'phone', `TEXT DEFAULT ''`);
   ensureColumn(db, 'project_contacts', 'company_name', `TEXT DEFAULT ''`);
@@ -304,6 +312,19 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'custom_fields', 'layout', `TEXT DEFAULT 'half'`);
   ensureColumn(db, 'custom_fields', 'is_builtin', `INTEGER DEFAULT 0`);
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
+
+  db.prepare(`
+    UPDATE todos
+    SET completed_at = COALESCE(updated_at, created_at),
+        completed_by = COALESCE(completed_by, assignee_id, created_by)
+    WHERE status = 'done' AND completed_at IS NULL
+  `).run();
+  db.prepare(`
+    UPDATE projects
+    SET completed_at = COALESCE(updated_at, created_at),
+        completed_by = COALESCE(completed_by, primary_assignee_id, owner_id)
+    WHERE status = 'completed' AND completed_at IS NULL
+  `).run();
   seedSystemRoles(db);
   seedProjectRoles(db);
   migratePermissionKey(db, 'manage_global_assets', 'manage_master_data');

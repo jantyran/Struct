@@ -41,6 +41,15 @@ export async function PATCH(req: Request, { params }: Params) {
   for (const key of allowed) {
     if (key in body) updates[key] = body[key] ?? null;
   }
+  if ('status' in updates) {
+    if (updates.status === 'done' && todo.status !== 'done') {
+      updates.completed_at = new Date().toISOString();
+      updates.completed_by = user.id;
+    } else if (updates.status !== 'done') {
+      updates.completed_at = null;
+      updates.completed_by = null;
+    }
+  }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json(todo);
   }

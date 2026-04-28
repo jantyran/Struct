@@ -40,6 +40,7 @@ interface DashboardData {
     total: number;
     active: number;
     draft: number;
+    completed: number;
     my_todo_open: number;
     my_todo_urgent: number;
   };
@@ -251,8 +252,8 @@ function ProjectCard({ project, typeLabel, phases, onClone }: {
   phases: { key: string; name: string }[];
   onClone: (p: Project) => void;
 }) {
-  const statusColors: Record<string, string> = { draft: 'text-slate-600 bg-slate-100', active: 'text-emerald-700 bg-emerald-50', archived: 'text-slate-500 bg-slate-100' };
-  const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', archived: 'アーカイブ' };
+  const statusColors: Record<string, string> = { draft: 'text-slate-600 bg-slate-100', active: 'text-emerald-700 bg-emerald-50', completed: 'text-emerald-700 bg-emerald-50', archived: 'text-slate-500 bg-slate-100' };
+  const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', completed: '完了', archived: 'アーカイブ' };
   const typeColors: Record<string, string> = { event: 'text-sky-700', campaign: 'text-cyan-700', content: 'text-amber-700', other: 'text-slate-500' };
   const todoOpen = project.todo_total - project.todo_done;
 
@@ -492,10 +493,11 @@ function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
     return 0;
   });
 
-  const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', archived: 'アーカイブ' };
+  const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', completed: '完了', archived: 'アーカイブ' };
   const statusColors: Record<string, { color: string; bg: string }> = {
     draft: { color: '#475569', bg: '#f1f5f9' },
     active: { color: '#047857', bg: '#ecfdf5' },
+    completed: { color: '#047857', bg: '#ecfdf5' },
     archived: { color: '#64748b', bg: '#f1f5f9' },
   };
 
@@ -655,6 +657,7 @@ export default function Dashboard() {
     { v: 'all', l: 'すべて' },
     { v: 'active', l: 'アクティブ' },
     { v: 'draft', l: '下書き' },
+    { v: 'completed', l: '完了' },
     ...(archivedCount > 0 ? [{ v: 'archived', l: `アーカイブ (${archivedCount})` }] : []),
   ];
 
@@ -662,6 +665,7 @@ export default function Dashboard() {
     { label: '総プロジェクト', value: stats.total, color: 'text-cyan-700', accent: 'border-l-cyan-400' },
     { label: 'アクティブ', value: stats.active, color: 'text-emerald-700', accent: 'border-l-emerald-400' },
     { label: '下書き', value: stats.draft, color: 'text-slate-500', accent: 'border-l-slate-300' },
+    { label: '完了', value: stats.completed, color: 'text-emerald-700', accent: 'border-l-emerald-400' },
     {
       label: '自分のタスク（未完了）',
       value: stats.my_todo_open,

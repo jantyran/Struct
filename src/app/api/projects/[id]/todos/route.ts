@@ -86,18 +86,20 @@ export async function POST(req: Request, { params }: Params) {
   const maxOrder = (db.prepare(`SELECT MAX(sort_order) as m FROM todos WHERE project_id = ? AND parent_id IS NULL`).get(params.id) as { m: number | null }).m ?? -1;
 
   const id = uuidv4();
+  const status = body.status ?? 'todo';
+  const completedAt = status === 'done' ? new Date().toISOString() : null;
   db.prepare(`
     INSERT INTO todos
       (id, project_id, parent_id, title, description, status, priority, assignee_id,
-       phase_key, start_date, due_date, sort_order, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       phase_key, start_date, due_date, sort_order, created_by, completed_at, completed_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     params.id,
     body.parent_id ?? null,
     title,
     body.description ?? '',
-    body.status ?? 'todo',
+    status,
     body.priority ?? 'medium',
     body.assignee_id ?? null,
     body.phase_key ?? '',
@@ -105,6 +107,8 @@ export async function POST(req: Request, { params }: Params) {
     body.due_date ?? '',
     body.parent_id ? 0 : maxOrder + 1,
     user.id,
+    completedAt,
+    completedAt ? user.id : null,
   );
 
   const created = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Todo;
