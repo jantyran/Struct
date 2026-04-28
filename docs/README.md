@@ -22,6 +22,9 @@
 - `refactors/security-and-code-quality-2026-04-28.md`
   - 2026-04-28 のセキュリティ修正、依存更新、権限チェック整理の履歴
   - 実施した検証と残るリファクタ候補
+- `implementation-notes/project-relationships-and-hierarchy.md`
+  - プロジェクト階層、サブプロジェクト、関連プロジェクト機能の仕様案
+  - データモデル、権限、UI、API、段階導入方針
 
 ## 現在のアプリ要約
 
@@ -98,6 +101,10 @@ Struct は `MKTキャンペーン運用デスク` として、キャンペーン
 
 ## 今後の実装予定
 
+- `プロジェクト階層 / 関連プロジェクト`
+  - 親プロジェクト / 子プロジェクトによる施策群管理
+  - 依存・派生・参考などの関連プロジェクト管理
+  - 詳細仕様は `implementation-notes/project-relationships-and-hierarchy.md`
 - `レポート`
   - プロジェクトに紐づく成果レポート
   - KPI、背景、学び、インサイト、PDF出力を想定
