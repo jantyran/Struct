@@ -11,14 +11,6 @@ export async function GET(_req: Request, { params: routeParams }: Params) {
     const user = await requireSession();
     const db = getDb();
 
-    // Check access
-    const project = db.prepare(`
-      SELECT DISTINCT p.id FROM projects p
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.organization_id, user.id, user.id);
-
-    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'view_content')) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const assets = db.prepare(`
@@ -39,13 +31,6 @@ export async function DELETE(request: Request, { params: routeParams }: Params) 
     const { searchParams } = new URL(request.url);
     const assetId = searchParams.get('assetId');
 
-    const project = db.prepare(`
-      SELECT DISTINCT p.id FROM projects p
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.organization_id, user.id, user.id);
-
-    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
 
     if (!assetId) {
@@ -67,13 +52,6 @@ export async function PATCH(request: Request, { params: routeParams }: Params) {
     const db = getDb();
     const body = await request.json() as { assetId?: string; title?: string; content?: string };
 
-    const project = db.prepare(`
-      SELECT DISTINCT p.id FROM projects p
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.organization_id, user.id, user.id);
-
-    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
     if (!body.assetId) return NextResponse.json({ error: 'assetId is required' }, { status: 400 });
 

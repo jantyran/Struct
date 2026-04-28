@@ -32,16 +32,11 @@ export async function POST(request: Request, { params: routeParams }: Params) {
       return NextResponse.json({ error: 'asset_types が必要です' }, { status: 400 });
     }
 
-    const project = db.prepare(`
-      SELECT p.* FROM projects p
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.organization_id, user.id, user.id) as any;
-
-    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
       return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
     }
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id) as any;
+    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const noteIds: string[] = body.note_ids ?? [];
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];

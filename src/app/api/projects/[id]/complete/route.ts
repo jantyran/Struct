@@ -36,16 +36,11 @@ export async function POST(req: Request, { params: routeParams }: Params) {
   try {
     const db = getDb();
 
-    const project = db.prepare(`
-      SELECT p.* FROM projects p
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.organization_id, user.id, user.id) as any;
-
-    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
       return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
     }
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id) as any;
+    if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
     const notes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];

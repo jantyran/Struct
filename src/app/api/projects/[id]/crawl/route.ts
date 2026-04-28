@@ -21,12 +21,8 @@ export async function POST(request: Request, { params: routeParams }: Params) {
       return NextResponse.json({ error: 'field_id が必要です' }, { status: 400 });
     }
 
-    const field = db.prepare(`
-      SELECT f.* FROM custom_fields f
-      JOIN projects p ON f.project_id = p.id
-      LEFT JOIN project_members m ON p.id = m.project_id
-      WHERE f.id = ? AND p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(body.field_id, params.id, user.organization_id, user.id, user.id) as any;
+    const field = db.prepare('SELECT * FROM custom_fields WHERE id = ? AND project_id = ?')
+      .get(body.field_id, params.id) as any;
 
     if (!field) return NextResponse.json({ error: 'Field not found' }, { status: 404 });
     if (field.type !== 'url') return NextResponse.json({ error: 'URL型フィールドのみクローリング可能です' }, { status: 400 });

@@ -6,21 +6,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 interface Params { params: Promise<{ id: string }> }
 
-function getProjectManager(db: ReturnType<typeof getDb>, projectId: string, userId: string) {
-  const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
-  return db.prepare(`
-    SELECT p.owner_id, p.organization_id
-    FROM projects p
-    WHERE p.id = ? AND p.organization_id = ?
-  `).get(projectId, user?.organization_id ?? null) as { owner_id: string; organization_id?: string | null } | undefined;
-}
-
-function canManageMembers(db: ReturnType<typeof getDb>, project: { owner_id: string } | undefined, projectId: string, userId: string) {
-  if (!project) return false;
-  if (project.owner_id === userId) return true;
-  return requireProjectPermission(db, projectId, userId, 'manage_members');
-}
-
 function projectContacts(db: ReturnType<typeof getDb>, projectId: string) {
   return db.prepare(`
     SELECT id, name, email, phone, company_name, created_at, updated_at
@@ -39,8 +24,7 @@ export async function POST(request: Request, { params: routeParams }: Params) {
   try {
     const user = await requireSession();
     const db = getDb();
-    const project = getProjectManager(db, params.id, user.id);
-    if (!canManageMembers(db, project, params.id, user.id)) {
+    if (!requireProjectPermission(db, params.id, user.id, 'manage_members')) {
       return NextResponse.json({ error: 'メンバー管理権限がありません' }, { status: 403 });
     }
 
@@ -70,8 +54,7 @@ export async function PATCH(request: Request, { params: routeParams }: Params) {
   try {
     const user = await requireSession();
     const db = getDb();
-    const project = getProjectManager(db, params.id, user.id);
-    if (!canManageMembers(db, project, params.id, user.id)) {
+    if (!requireProjectPermission(db, params.id, user.id, 'manage_members')) {
       return NextResponse.json({ error: 'メンバー管理権限がありません' }, { status: 403 });
     }
 
@@ -110,8 +93,7 @@ export async function DELETE(request: Request, { params: routeParams }: Params) 
   try {
     const user = await requireSession();
     const db = getDb();
-    const project = getProjectManager(db, params.id, user.id);
-    if (!canManageMembers(db, project, params.id, user.id)) {
+    if (!requireProjectPermission(db, params.id, user.id, 'manage_members')) {
       return NextResponse.json({ error: 'メンバー管理権限がありません' }, { status: 403 });
     }
 
