@@ -5,9 +5,10 @@ import { requireSession } from '@/lib/auth';
 import { BASE_PATH } from '@/lib/paths';
 import { normalizeProjectMemberRole } from '@/lib/permissions';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();

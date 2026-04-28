@@ -3,9 +3,10 @@ import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { requireProjectPermission } from '@/lib/permissions';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
@@ -30,7 +31,8 @@ export async function GET(_req: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(request: Request, { params }: Params) {
+export async function DELETE(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
@@ -58,7 +60,8 @@ export async function DELETE(request: Request, { params }: Params) {
   }
 }
 
-export async function PATCH(request: Request, { params }: Params) {
+export async function PATCH(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import type { GlobalAssets, GlobalAssetField, GlobalAssetFieldType, GlobalAssetObject } from '@/types';
 import { withBasePath } from '@/lib/paths';
@@ -227,8 +227,9 @@ function RecordCard({
   );
 }
 
-export default function GlobalAssetObjectDetailPage({ params }: { params: { objectId: string } }) {
-  const { objectId } = params;
+export default function GlobalAssetObjectDetailPage() {
+  const routeParams = useParams<{ objectId: string }>();
+  const objectId = routeParams.objectId;
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const canManageGlobalAssets = Boolean(user?.system_permissions?.manage_master_data);

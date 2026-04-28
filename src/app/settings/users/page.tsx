@@ -29,6 +29,7 @@ export default function UsersSettingsPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [roles, setRoles] = useState<SystemRole[]>([]);
   const [canManageUsers, setCanManageUsers] = useState(false);
+  const [canManageSystemRoles, setCanManageSystemRoles] = useState(false);
   const [name, setName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [saving, setSaving] = useState(false);
@@ -67,10 +68,11 @@ export default function UsersSettingsPage() {
       return;
     }
     if (res.ok) {
-      const payload = await res.json() as { users: UserRow[]; roles: SystemRole[]; can_manage_users: boolean };
+      const payload = await res.json() as { users: UserRow[]; roles: SystemRole[]; can_manage_users: boolean; can_manage_system_roles?: boolean };
       setUsers(Array.isArray(payload.users) ? payload.users : []);
       setRoles(Array.isArray(payload.roles) ? payload.roles : []);
       setCanManageUsers(Boolean(payload.can_manage_users));
+      setCanManageSystemRoles(Boolean(payload.can_manage_system_roles));
     }
   }
 
@@ -221,7 +223,12 @@ export default function UsersSettingsPage() {
             </div>
             <div>
               <label className="field-label">システムロール</label>
-              <select className="field-input" value={newUser.system_role} onChange={(e) => setNewUser((current) => ({ ...current, system_role: e.target.value }))}>
+              <select
+                className="field-input"
+                value={canManageSystemRoles ? newUser.system_role : 'USER'}
+                disabled={!canManageSystemRoles}
+                onChange={(e) => setNewUser((current) => ({ ...current, system_role: e.target.value }))}
+              >
                 {roles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}
               </select>
             </div>
@@ -240,7 +247,7 @@ export default function UsersSettingsPage() {
         <div>
           <h2 className="section-title">登録ユーザー</h2>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-            {canManageUsers ? 'システム管理者は全ユーザーのプロフィールとシステムロールを変更できます。' : '自分のユーザー情報だけ表示しています。'}
+            {canManageUsers ? 'ユーザー管理権限に応じてプロフィールとシステムロールを変更できます。' : '自分のユーザー情報だけ表示しています。'}
           </p>
         </div>
         <div className="divide-y divide-slate-200/70">
@@ -280,6 +287,7 @@ export default function UsersSettingsPage() {
                   <select
                     className="field-input text-xs py-1.5 w-44"
                     value={item.system_role ?? 'USER'}
+                    disabled={!canManageSystemRoles || item.id === user.id}
                     onChange={(e) => updateUser(item, { system_role: e.target.value })}
                   >
                     {roles.map((role) => <option key={role.key} value={role.key}>{role.name}</option>)}

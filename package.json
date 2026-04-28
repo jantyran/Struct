@@ -20,13 +20,12 @@
     "cookie": "^1.1.1",
     "jose": "^6.2.2",
     "lodash-es": "^4.18.1",
-    "next": "14.2.5",
+    "next": "^15.5.15",
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "uuid": "^10.0.0",
-    "xlsx": "^0.18.5"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -40,5 +39,8 @@
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
   }
 }

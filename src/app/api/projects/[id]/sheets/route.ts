@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
+import { requireProjectPermission } from '@/lib/permissions';
 
 interface SheetRow { id: string; project_id: string; name: string; columns_def: string; rows_data: string; created_by: string; created_at: string; updated_at: string; }
 
@@ -9,6 +10,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const user = await requireSession();
   const db = getDb();
+  if (!requireProjectPermission(db, id, user.id, 'view_items')) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const rows = db.prepare('SELECT * FROM project_sheets WHERE project_id = ? ORDER BY created_at ASC').all(id) as SheetRow[];
   return NextResponse.json(rows.map(r => ({
     ...r,
@@ -21,6 +26,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const user = await requireSession();
   const db = getDb();
+  if (!requireProjectPermission(db, id, user.id, 'edit_items')) {
+    return NextResponse.json({ error: 'シート編集権限がありません' }, { status: 403 });
+  }
+
   const body = await req.json() as { name?: string };
   const sheetId = uuidv4();
   db.prepare(`

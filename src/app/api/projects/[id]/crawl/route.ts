@@ -2,14 +2,20 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { crawlUrl } from '@/lib/crawler';
 import { requireSession } from '@/lib/auth';
+import { requireProjectPermission } from '@/lib/permissions';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
     const body = await request.json() as { field_id: string };
+
+    if (!requireProjectPermission(db, params.id, user.id, 'edit_items')) {
+      return NextResponse.json({ error: '項目編集権限がありません' }, { status: 403 });
+    }
 
     if (!body.field_id) {
       return NextResponse.json({ error: 'field_id が必要です' }, { status: 400 });

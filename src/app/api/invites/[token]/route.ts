@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 
-interface Params { params: { token: string } }
+interface Params { params: Promise<{ token: string }> }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   const db = getDb();
   const invitation = db.prepare(`
     SELECT i.*, p.name as project_name FROM invitations i

@@ -5,20 +5,11 @@ import { requireProjectPermission } from '@/lib/permissions';
 import { v4 as uuidv4 } from 'uuid';
 import type { ProjectNote } from '@/types';
 
-interface Params { params: { id: string } }
-
-async function checkProjectAccess(projectId: string, userId: string) {
-  const db = getDb();
-  const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
-  return db.prepare(`
-    SELECT DISTINCT p.* FROM projects p
-    LEFT JOIN project_members m ON p.id = m.project_id
-    WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-  `).get(projectId, user?.organization_id ?? null, userId, userId);
-}
+interface Params { params: Promise<{ id: string }> }
 
 /** ノート一覧取得 */
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try {
     user = await requireSession();
@@ -26,14 +17,12 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const project = await checkProjectAccess(params.id, user.id);
-  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (!requireProjectPermission(getDb(), params.id, user.id, 'view_notes')) {
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user.id, 'view_notes')) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
   try {
-    const db = getDb();
     const notes = db.prepare(`
       SELECT * FROM project_notes
       WHERE project_id = ?
@@ -47,7 +36,8 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 /** ノート作成 */
-export async function POST(req: Request, { params }: Params) {
+export async function POST(req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try {
     user = await requireSession();
@@ -55,9 +45,8 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const project = await checkProjectAccess(params.id, user.id);
-  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (!requireProjectPermission(getDb(), params.id, user.id, 'edit_notes')) {
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user.id, 'edit_notes')) {
     return NextResponse.json({ error: 'ノート編集権限がありません' }, { status: 403 });
   }
 
@@ -72,7 +61,6 @@ export async function POST(req: Request, { params }: Params) {
   const noteBody = (body.body ?? '').trim();
 
   try {
-    const db = getDb();
     const id = uuidv4();
     db.prepare(`
       INSERT INTO project_notes (id, project_id, title, body, pinned, created_by)

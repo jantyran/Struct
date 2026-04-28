@@ -50,7 +50,8 @@ export async function createSessionToken(userId: string) {
 
 export async function createSession(userId: string) {
   const token = await createSessionToken(userId);
-  cookies().set("session", token, sessionCookieOptions());
+  const cookieStore = await cookies();
+  cookieStore.set("session", token, sessionCookieOptions());
   return token;
 }
 
@@ -60,7 +61,8 @@ export function attachSessionCookie(response: NextResponse, token: string) {
 }
 
 export async function getSession() {
-  const token = cookies().get("session")?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
   if (!token) return null;
 
   try {
@@ -87,8 +89,9 @@ export async function requireSession() {
   return user;
 }
 
-export function deleteSession() {
-  cookies().delete("session");
+export async function deleteSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete("session");
 }
 
 export function clearSessionCookie(response: NextResponse) {

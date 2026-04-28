@@ -8,6 +8,10 @@ import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: Request) {
+  if (process.env.ALLOW_PUBLIC_SIGNUP !== 'true') {
+    return NextResponse.json({ error: "新規登録は現在停止されています" }, { status: 403 });
+  }
+
   // アカウント作成スパム対策: IPごとに 5回/分 まで
   const ip = getClientIp(request);
   const rl = checkRateLimit(`signup:${ip}`, 5, 60_000);

@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try { user = await requireSession(); } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

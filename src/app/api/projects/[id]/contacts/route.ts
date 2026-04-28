@@ -4,7 +4,7 @@ import { requireSession } from '@/lib/auth';
 import { requireProjectPermission } from '@/lib/permissions';
 import { v4 as uuidv4 } from 'uuid';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 function getProjectManager(db: ReturnType<typeof getDb>, projectId: string, userId: string) {
   const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
@@ -34,7 +34,8 @@ function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
@@ -64,7 +65,8 @@ export async function POST(request: Request, { params }: Params) {
   }
 }
 
-export async function PATCH(request: Request, { params }: Params) {
+export async function PATCH(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
@@ -103,7 +105,8 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(request: Request, { params }: Params) {
+export async function DELETE(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();

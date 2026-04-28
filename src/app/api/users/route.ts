@@ -10,6 +10,7 @@ export async function GET() {
     const currentUser = await requireSession();
     const db = getDb();
     const canManageUsers = hasSystemPermission(db, currentUser.id, 'manage_users');
+    const canManageSystemRoles = hasSystemPermission(db, currentUser.id, 'manage_system_roles');
     const users = db.prepare(`
       SELECT id, email, name, avatar_url, system_role, organization_id, created_at
       FROM users
@@ -21,6 +22,7 @@ export async function GET() {
       users,
       roles: systemRoleDefinitions(db),
       can_manage_users: canManageUsers,
+      can_manage_system_roles: canManageSystemRoles,
     });
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,6 +34,7 @@ export async function PATCH(request: Request) {
     const currentUser = await requireSession();
     const db = getDb();
     const canManageUsers = hasSystemPermission(db, currentUser.id, 'manage_users');
+    const canManageSystemRoles = hasSystemPermission(db, currentUser.id, 'manage_system_roles');
     const body = await request.json() as { user_id?: string; name?: string; avatar_url?: string; system_role?: string };
     const targetUserId = canManageUsers && body.user_id ? body.user_id : currentUser.id;
     const target = db.prepare('SELECT id, system_role, organization_id FROM users WHERE id = ?').get(targetUserId) as { id: string; system_role: string; organization_id?: string | null } | undefined;
@@ -42,7 +45,13 @@ export async function PATCH(request: Request) {
 
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const avatarUrl = typeof body.avatar_url === 'string' ? body.avatar_url.trim() : '';
-    const nextSystemRole = canManageUsers && body.system_role ? body.system_role : target.system_role;
+    if (body.system_role && body.system_role !== target.system_role && !canManageSystemRoles) {
+      return NextResponse.json({ error: 'システムロール変更権限がありません' }, { status: 403 });
+    }
+    if (body.system_role && targetUserId === currentUser.id && body.system_role !== target.system_role) {
+      return NextResponse.json({ error: '自分自身のシステムロールは変更できません' }, { status: 400 });
+    }
+    const nextSystemRole = canManageSystemRoles && body.system_role ? body.system_role : target.system_role;
     if (!systemRoleExists(db, nextSystemRole)) {
       return NextResponse.json({ error: '存在しないシステムロールです' }, { status: 400 });
     }
@@ -72,6 +81,7 @@ export async function POST(request: Request) {
     if (!hasSystemPermission(db, currentUser.id, 'manage_users')) {
       return NextResponse.json({ error: 'ユーザー管理権限がありません' }, { status: 403 });
     }
+    const canManageSystemRoles = hasSystemPermission(db, currentUser.id, 'manage_system_roles');
 
     const body = await request.json() as {
       email?: string;
@@ -82,7 +92,10 @@ export async function POST(request: Request) {
     };
     const email = body.email?.trim().toLowerCase();
     const password = body.password ?? '';
-    const systemRole = body.system_role || 'USER';
+    const systemRole = canManageSystemRoles ? (body.system_role || 'USER') : 'USER';
+    if (body.system_role && body.system_role !== 'USER' && !canManageSystemRoles) {
+      return NextResponse.json({ error: 'システムロール変更権限がありません' }, { status: 403 });
+    }
 
     if (!email || !password) {
       return NextResponse.json({ error: 'メールアドレスと初期パスワードが必要です' }, { status: 400 });

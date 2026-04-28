@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition, ProjectContact } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
@@ -1649,8 +1649,9 @@ function DecorationPlacement({ item, layout = 'full' }: { item: SidebarTabDefini
 // ============================================================
 // メインページ
 // ============================================================
-export default function ProjectPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function ProjectPage() {
+  const routeParams = useParams<{ id: string }>();
+  const id = routeParams.id;
   const router = useRouter();
   const { user, loading: authLoading, checkSession } = useAuth();
   const { settings: devSettings } = useDevSettings();

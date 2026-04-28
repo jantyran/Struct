@@ -4,7 +4,7 @@ import { requireSession } from '@/lib/auth';
 import { normalizeProjectMemberRole, projectRoleExists, requireProjectPermission } from '@/lib/permissions';
 import { v4 as uuidv4 } from 'uuid';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 function normalizeRole(role: unknown) {
   return normalizeProjectMemberRole(role);
@@ -45,7 +45,8 @@ function projectMembers(db: ReturnType<typeof getDb>, projectId: string) {
   }));
 }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
@@ -87,7 +88,8 @@ export async function POST(request: Request, { params }: Params) {
   }
 }
 
-export async function PATCH(request: Request, { params }: Params) {
+export async function PATCH(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
@@ -117,7 +119,8 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(request: Request, { params }: Params) {
+export async function DELETE(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();

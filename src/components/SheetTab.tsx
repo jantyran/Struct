@@ -647,14 +647,6 @@ function exportCsv(sheet: ProjectSheet) {
   const a = document.createElement('a'); a.href = url; a.download = `${sheet.name}.csv`; a.click();
   URL.revokeObjectURL(url);
 }
-async function exportXlsx(sheet: ProjectSheet) {
-  const { utils, writeFile } = await import('xlsx');
-  const aoa = [sheet.columns_def.map(c => c.name), ...sheet.rows_data.map(row => sheet.columns_def.map(c => row.cells[c.id] ?? ''))];
-  const ws = utils.aoa_to_sheet(aoa);
-  const wb = utils.book_new();
-  utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
-  writeFile(wb, `${sheet.name}.xlsx`);
-}
 
 // ─── タブ本体 ─────────────────────────────────────────────
 export default function SheetTab({ projectId }: { projectId: string }) {
@@ -788,7 +780,6 @@ export default function SheetTab({ projectId }: { projectId: string }) {
             <>
               {[
                 { label: 'CSV', fn: () => exportCsv(activeSheet), hoverColor: '#0369a1' },
-                { label: 'Excel', fn: () => exportXlsx(activeSheet), hoverColor: '#16a34a' },
               ].map(b => (
                 <button key={b.label} onClick={b.fn}
                   style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', fontSize: '0.75rem', fontWeight: 500, border: `1px solid ${C.border}`, borderRadius: 7, background: '#fff', cursor: 'pointer', color: C.hText, transition: 'all 0.12s' }}

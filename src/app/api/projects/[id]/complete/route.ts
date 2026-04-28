@@ -14,9 +14,10 @@ import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { requireProjectPermission } from '@/lib/permissions';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
-export async function POST(req: Request, { params }: Params) {
+export async function POST(req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try {
     user = await requireSession();

@@ -8,7 +8,7 @@ import { projectAccessForUser, projectRoleDefinitions, requireProjectPermission 
 import type { CustomField } from '@/types';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 async function checkProjectAccess(projectId: string, userId: string) {
   const db = getDb();
@@ -20,7 +20,8 @@ async function checkProjectAccess(projectId: string, userId: string) {
   `).get(projectId, user?.organization_id ?? null, userId, userId);
 }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try {
     user = await requireSession();
@@ -105,7 +106,8 @@ export async function GET(_req: Request, { params }: Params) {
   }
 }
 
-export async function PUT(request: Request, { params }: Params) {
+export async function PUT(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
@@ -230,7 +232,8 @@ export async function PUT(request: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();

@@ -3,41 +3,41 @@ import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 import type { Todo } from '@/types';
+import { requireProjectPermission } from '@/lib/permissions';
 
-interface Params { params: { id: string } }
-
-function checkProjectAccess(projectId: string, userId: string) {
-  const db = getDb();
-  const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
-  return db.prepare(`
-    SELECT DISTINCT p.* FROM projects p
-    LEFT JOIN project_members m ON p.id = m.project_id
-    WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-  `).get(projectId, user?.organization_id ?? null, userId, userId);
-}
+interface Params { params: Promise<{ id: string }> }
 
 /** Todoにアサイニー情報を付与 */
 function attachAssignees(todos: Todo[]): Todo[] {
+  const assigneeIds = Array.from(new Set(todos.map((todo) => todo.assignee_id).filter(Boolean))) as string[];
+  if (assigneeIds.length === 0) return todos;
+
   const db = getDb();
+  const placeholders = assigneeIds.map(() => '?').join(',');
+  const users = db.prepare(`
+    SELECT id, name, email FROM users WHERE id IN (${placeholders})
+  `).all(...assigneeIds) as Array<{ id: string; name: string | null; email: string }>;
+  const userById = new Map(users.map((user) => [user.id, user]));
+
   return todos.map(todo => {
     if (!todo.assignee_id) return todo;
-    const user = db.prepare('SELECT id, name, email FROM users WHERE id = ?').get(todo.assignee_id) as { id: string; name: string | null; email: string } | undefined;
-    return { ...todo, assignee: user ?? null };
+    return { ...todo, assignee: userById.get(todo.assignee_id) ?? null };
   });
 }
 
 /** GET: Todo一覧 */
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try { user = await requireSession(); } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!checkProjectAccess(params.id, user.id)) {
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user.id, 'view_items')) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const db = getDb();
   // 親タスクのみ取得（サブタスクは subtasks フィールドで返す）
   const parentTodos = db.prepare(`
     SELECT * FROM todos
@@ -51,27 +51,32 @@ export async function GET(_req: Request, { params }: Params) {
     ORDER BY sort_order ASC, created_at ASC
   `).all(params.id) as Todo[];
 
+  const parentTodosWithAssignees = attachAssignees(parentTodos);
+  const subtasksWithAssignees = attachAssignees(subtasks);
+
   // 親タスクにサブタスクを紐付け
   const subtaskMap: Record<string, Todo[]> = {};
-  for (const sub of subtasks) {
+  for (const sub of subtasksWithAssignees) {
     if (!sub.parent_id) continue;
     if (!subtaskMap[sub.parent_id]) subtaskMap[sub.parent_id] = [];
     subtaskMap[sub.parent_id].push(sub);
   }
 
-  const withSubs = parentTodos.map(t => ({ ...t, subtasks: subtaskMap[t.id] ?? [] }));
-  return NextResponse.json(attachAssignees(withSubs));
+  const withSubs = parentTodosWithAssignees.map(t => ({ ...t, subtasks: subtaskMap[t.id] ?? [] }));
+  return NextResponse.json(withSubs);
 }
 
 /** POST: Todo作成 */
-export async function POST(req: Request, { params }: Params) {
+export async function POST(req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try { user = await requireSession(); } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!checkProjectAccess(params.id, user.id)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user.id, 'edit_items')) {
+    return NextResponse.json({ error: 'タスク編集権限がありません' }, { status: 403 });
   }
 
   let body: Partial<Todo>;
@@ -82,7 +87,10 @@ export async function POST(req: Request, { params }: Params) {
   const title = (body.title ?? '').trim();
   if (!title) return NextResponse.json({ error: 'タイトルは必須です' }, { status: 400 });
 
-  const db = getDb();
+  if (body.parent_id) {
+    const parent = db.prepare('SELECT 1 FROM todos WHERE id = ? AND project_id = ?').get(body.parent_id, params.id);
+    if (!parent) return NextResponse.json({ error: '親タスクが見つかりません' }, { status: 400 });
+  }
   const maxOrder = (db.prepare(`SELECT MAX(sort_order) as m FROM todos WHERE project_id = ? AND parent_id IS NULL`).get(params.id) as { m: number | null }).m ?? -1;
 
   const id = uuidv4();

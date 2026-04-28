@@ -4,20 +4,11 @@ import { requireSession } from '@/lib/auth';
 import { requireProjectPermission } from '@/lib/permissions';
 import type { ProjectNote } from '@/types';
 
-interface Params { params: { id: string; noteId: string } }
-
-async function checkProjectAccess(projectId: string, userId: string) {
-  const db = getDb();
-  const user = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
-  return db.prepare(`
-    SELECT DISTINCT p.* FROM projects p
-    LEFT JOIN project_members m ON p.id = m.project_id
-    WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-  `).get(projectId, user?.organization_id ?? null, userId, userId);
-}
+interface Params { params: Promise<{ id: string; noteId: string }> }
 
 /** ノート更新（title / body / pinned） */
-export async function PATCH(req: Request, { params }: Params) {
+export async function PATCH(req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try {
     user = await requireSession();
@@ -25,9 +16,8 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const project = await checkProjectAccess(params.id, user.id);
-  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (!requireProjectPermission(getDb(), params.id, user.id, 'edit_notes')) {
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user.id, 'edit_notes')) {
     return NextResponse.json({ error: 'ノート編集権限がありません' }, { status: 403 });
   }
 
@@ -39,7 +29,6 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   try {
-    const db = getDb();
     const note = db.prepare('SELECT * FROM project_notes WHERE id = ? AND project_id = ?').get(
       params.noteId, params.id
     ) as ProjectNote | undefined;
@@ -64,7 +53,8 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 /** ノート削除 */
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(_req: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   let user;
   try {
     user = await requireSession();
@@ -72,14 +62,12 @@ export async function DELETE(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const project = await checkProjectAccess(params.id, user.id);
-  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  if (!requireProjectPermission(getDb(), params.id, user.id, 'edit_notes')) {
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user.id, 'edit_notes')) {
     return NextResponse.json({ error: 'ノート編集権限がありません' }, { status: 403 });
   }
 
   try {
-    const db = getDb();
     const result = db.prepare('DELETE FROM project_notes WHERE id = ? AND project_id = ?').run(
       params.noteId, params.id
     );

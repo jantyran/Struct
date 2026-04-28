@@ -4,9 +4,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { requireSession } from '@/lib/auth';
 import type { CloneOptions } from '@/types';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();

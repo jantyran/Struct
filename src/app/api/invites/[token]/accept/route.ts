@@ -3,9 +3,10 @@ import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 
-interface Params { params: { token: string } }
+interface Params { params: Promise<{ token: string }> }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: Request, { params: routeParams }: Params) {
+  const params = await routeParams;
   try {
     const user = await requireSession();
     const db = getDb();
