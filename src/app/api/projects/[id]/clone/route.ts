@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { requireSession } from '@/lib/auth';
+import type { CloneOptions } from '@/types';
 
 interface Params { params: { id: string } }
 
@@ -9,11 +10,16 @@ export async function POST(request: Request, { params }: Params) {
   try {
     const user = await requireSession();
     const db = getDb();
-    const body = await request.json() as { new_name: string; include_values: boolean };
+    const body = await request.json() as CloneOptions;
 
     if (!body.new_name?.trim()) {
       return NextResponse.json({ error: 'new_name は必須です' }, { status: 400 });
     }
+    const includeValues = Boolean(body.include_values);
+    const includeTodos = body.include_todos !== false;
+    const includeSheets = body.include_sheets !== false;
+    const includeContacts = body.include_contacts !== false;
+    const includeNotes = body.include_notes === true;
 
     const source = db.prepare(`
       SELECT p.* FROM projects p
@@ -24,6 +30,18 @@ export async function POST(request: Request, { params }: Params) {
     if (!source) return NextResponse.json({ error: 'Source project not found' }, { status: 404 });
 
     const sourceFields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
+    const sourceContacts = includeContacts
+      ? db.prepare('SELECT * FROM project_contacts WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as any[]
+      : [];
+    const sourceSheets = includeSheets
+      ? db.prepare('SELECT * FROM project_sheets WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as any[]
+      : [];
+    const sourceNotes = includeNotes
+      ? db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as any[]
+      : [];
+    const sourceTodos = includeTodos
+      ? db.prepare('SELECT * FROM todos WHERE project_id = ? ORDER BY parent_id IS NOT NULL ASC, sort_order ASC, datetime(created_at) ASC').all(params.id) as any[]
+      : [];
 
     const newId = uuidv4();
 
@@ -56,15 +74,88 @@ export async function POST(request: Request, { params }: Params) {
           field.key,
           field.label,
           field.type,
-          body.include_values ? field.value : '',
+          includeValues ? field.value : '',
           field.options,
           field.layout === 'full' ? 'full' : 'half',
-          body.include_values && field.value ? 1 : 0,
-          body.include_values && field.value ? params.id : null,
-          body.include_values ? (field.crawled_content ?? null) : null,
+          includeValues && field.value ? 1 : 0,
+          includeValues && field.value ? params.id : null,
+          includeValues ? (field.crawled_content ?? null) : null,
           field.sort_order,
           field.is_builtin ?? 0,
           field.section ?? '',
+        );
+      }
+
+      for (const contact of sourceContacts) {
+        db.prepare(`
+          INSERT INTO project_contacts (id, project_id, name, email, phone, company_name)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          newId,
+          contact.name ?? '',
+          contact.email ?? '',
+          contact.phone ?? '',
+          contact.company_name ?? '',
+        );
+      }
+
+      for (const sheet of sourceSheets) {
+        db.prepare(`
+          INSERT INTO project_sheets (id, project_id, name, columns_def, rows_data, created_by)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          newId,
+          sheet.name || '新しいシート',
+          sheet.columns_def || '[]',
+          includeValues ? (sheet.rows_data || '[]') : '[]',
+          user.id,
+        );
+      }
+
+      for (const note of sourceNotes) {
+        db.prepare(`
+          INSERT INTO project_notes (id, project_id, title, body, pinned, created_by)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          newId,
+          note.title ?? '',
+          includeValues ? (note.body ?? '') : '',
+          note.pinned ?? 0,
+          user.id,
+        );
+      }
+
+      const todoIdMap = new Map<string, string>();
+      for (const todo of sourceTodos) {
+        todoIdMap.set(todo.id, uuidv4());
+      }
+      for (const todo of sourceTodos) {
+        const clonedTodoId = todoIdMap.get(todo.id);
+        if (!clonedTodoId) continue;
+        const clonedParentId = todo.parent_id ? todoIdMap.get(todo.parent_id) ?? null : null;
+        db.prepare(`
+          INSERT INTO todos (
+            id, project_id, parent_id, title, description, status, priority, assignee_id,
+            phase_key, start_date, due_date, sort_order, created_by
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          clonedTodoId,
+          newId,
+          clonedParentId,
+          todo.title ?? '',
+          todo.description ?? '',
+          includeValues ? (todo.status ?? 'todo') : 'todo',
+          todo.priority ?? 'medium',
+          includeValues ? (todo.assignee_id ?? null) : null,
+          todo.phase_key ?? '',
+          includeValues ? (todo.start_date ?? '') : '',
+          includeValues ? (todo.due_date ?? '') : '',
+          todo.sort_order ?? 0,
+          user.id,
         );
       }
     });

@@ -85,11 +85,12 @@ interface DetailModalProps {
   phases: ProjectPhase[];
   canEdit: boolean;
   onSave: (data: Partial<Todo>) => void;
+  onSubtaskStatusChange: (id: string, status: TodoStatus) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }
 
-function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDelete, onClose }: DetailModalProps) {
+function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onSubtaskStatusChange, onDelete, onClose }: DetailModalProps) {
   const [title, setTitle] = useState(todo.title);
   const [description, setDescription] = useState(todo.description ?? '');
   const [status, setStatus] = useState<TodoStatus>(todo.status);
@@ -240,16 +241,24 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onDel
             </div>
           </div>
 
-          {/* サブタスク一覧（読み取り） */}
+          {/* サブタスク一覧 */}
           {subtaskCount > 0 && (
             <div>
               <p className="text-[0.6875rem] font-medium mb-2" style={{ color: 'var(--text-muted)' }}>サブタスク</p>
               <div className="space-y-1">
                 {todo.subtasks!.map(sub => (
                   <div key={sub.id} className="flex items-center gap-2 text-sm py-1">
-                    <span className={`w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0 ${sub.status === 'done' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'}`}>
+                    <button
+                      type="button"
+                      className={`w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0 ${sub.status === 'done' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'} ${canEdit ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      onClick={() => {
+                        if (!canEdit) return;
+                        onSubtaskStatusChange(sub.id, sub.status === 'done' ? 'todo' : 'done');
+                      }}
+                      title={canEdit ? (sub.status === 'done' ? '未完了に戻す' : '完了にする') : undefined}
+                    >
                       {sub.status === 'done' && <svg viewBox="0 0 8 8" className="w-2 h-2"><path d="M1 4l2 2 4-4" stroke="white" strokeWidth={1.5} strokeLinecap="round" fill="none" /></svg>}
-                    </span>
+                    </button>
                     <span style={{ textDecoration: sub.status === 'done' ? 'line-through' : 'none', color: sub.status === 'done' ? 'var(--text-muted)' : 'var(--text-primary)' }}>{sub.title}</span>
                   </div>
                 ))}
@@ -1570,8 +1579,18 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
       if (t.id === id) return { ...merged, subtasks: t.subtasks };
       return { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === id ? merged : s) };
     }));
-    // detailTodoが開いていれば更新
-    setDetailTodo(prev => prev?.id === id ? { ...merged, subtasks: prev.subtasks } : prev);
+    // detailTodo が開いていれば、自身または内包するサブタスクも更新
+    setDetailTodo(prev => {
+      if (!prev) return prev;
+      if (prev.id === id) return { ...merged, subtasks: prev.subtasks };
+      if ((prev.subtasks ?? []).some(subtask => subtask.id === id)) {
+        return {
+          ...prev,
+          subtasks: (prev.subtasks ?? []).map(subtask => subtask.id === id ? { ...subtask, ...merged } : subtask),
+        };
+      }
+      return prev;
+    });
   }, [projectId, todos, assignableUsers, onTodosChange]);
 
   const deleteTodo = useCallback(async (id: string) => {
@@ -1759,6 +1778,7 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
           phases={phases}
           canEdit={canEdit}
           onSave={data => updateTodo(detailTodo.id, data)}
+          onSubtaskStatusChange={(id, status) => updateTodo(id, { status })}
           onDelete={deleteTodo}
           onClose={() => setDetailTodo(null)}
         />

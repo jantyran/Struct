@@ -133,7 +133,14 @@ function CloneModal({ source, onClose, onCloned }: {
   onClose: () => void;
   onCloned: (id: string) => void;
 }) {
-  const [options, setOptions] = useState<CloneOptions>({ new_name: `${source.name} (コピー)`, include_values: true });
+  const [options, setOptions] = useState<CloneOptions>({
+    new_name: `${source.name} (コピー)`,
+    include_values: false,
+    include_todos: true,
+    include_sheets: true,
+    include_contacts: true,
+    include_notes: false,
+  });
   const [loading, setLoading] = useState(false);
 
   async function handleClone() {
@@ -146,7 +153,7 @@ function CloneModal({ source, onClose, onCloned }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-sky-950/10 backdrop-blur-sm" onClick={onClose}>
-      <div className="card w-full max-w-md p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="card w-full max-w-md max-h-[90vh] overflow-y-auto p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-1">プロジェクトをクローン</h2>
         <p className="text-sm mb-5" style={{ color: 'var(--text-secondary)' }}>複製元: {source.name}</p>
         <div className="space-y-4">
@@ -158,8 +165,8 @@ function CloneModal({ source, onClose, onCloned }: {
             <label className="field-label">複製モード</label>
             <div className="space-y-2 mt-1">
               {[
-                { v: false, label: 'フィールド定義のみ', desc: '構造をコピーし、値はすべてリセット' },
-                { v: true, label: '定義 + 入力値', desc: '値も引き継ぎ、継承フラグを付与（要確認）' },
+                { v: false, label: '再実施用テンプレート', desc: '値・担当・日付・完了状態はリセット' },
+                { v: true, label: '入力値も含める', desc: '値・行データ・Todo状態・日付も引き継ぐ' },
               ].map(opt => (
                 <label key={String(opt.v)}
                   className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${options.include_values === opt.v ? 'bg-cyan-50' : 'bg-white/70'}`}
@@ -170,6 +177,30 @@ function CloneModal({ source, onClose, onCloned }: {
                     <div className="text-sm font-medium">{opt.label}</div>
                     <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{opt.desc}</div>
                   </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="field-label">複製する内容</label>
+            <div className="grid grid-cols-1 gap-2 mt-1">
+              {[
+                { key: 'include_todos' as const, label: 'Todo / サブタスク', desc: options.include_values ? '状態・担当・日付も含める' : 'タイトル・説明・優先度・フェーズだけコピー' },
+                { key: 'include_sheets' as const, label: 'シート', desc: options.include_values ? '列と行データをコピー' : 'シート名と列構造だけコピー' },
+                { key: 'include_contacts' as const, label: '関係者', desc: '名前・メール・電話・会社名をコピー' },
+                { key: 'include_notes' as const, label: 'ノート', desc: options.include_values ? '本文もコピー' : 'タイトルだけコピー' },
+              ].map(item => (
+                <label key={item.key} className="flex items-start gap-3 rounded-xl border bg-white/70 p-3 cursor-pointer" style={{ borderColor: 'var(--border)' }}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-cyan-600"
+                    checked={Boolean(options[item.key])}
+                    onChange={(event) => setOptions((current) => ({ ...current, [item.key]: event.target.checked }))}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">{item.label}</span>
+                    <span className="block text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{item.desc}</span>
+                  </span>
                 </label>
               ))}
             </div>

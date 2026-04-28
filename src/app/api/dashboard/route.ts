@@ -127,7 +127,7 @@ export async function GET() {
   const settingsRow = getOrganizationSettingsRow(db, user.organization_id);
   const projectTypeDefinitions = normalizeProjectTypeDefinitionsRow(settingsRow);
 
-  // 今後7日以内に期限の自分のタスク（今日より後）
+  // 期限切れ・本日・今後7日以内に期限の自分のタスク
   const weekEnd = new Date();
   weekEnd.setDate(weekEnd.getDate() + 7);
   const weekEndStr = weekEnd.toISOString().slice(0, 10);
@@ -140,11 +140,11 @@ export async function GET() {
     JOIN projects p ON t.project_id = p.id
     WHERE t.assignee_id = ?
       AND t.status != 'done'
-      AND t.due_date > ?
+      AND t.due_date != ''
       AND t.due_date <= ?
     ORDER BY t.due_date ASC
     LIMIT 10
-  `).all(user.id, today, weekEndStr) as DashboardTodo[];
+  `).all(user.id, weekEndStr) as DashboardTodo[];
 
   // 更新が14日以上止まっているアクティブプロジェクト
   const staleThreshold = new Date();

@@ -393,6 +393,10 @@ export const TODO_PRIORITY_COLORS: Record<TodoPriority, string> = {
 export interface CloneOptions {
   new_name: string;
   include_values: boolean;
+  include_todos?: boolean;
+  include_sheets?: boolean;
+  include_contacts?: boolean;
+  include_notes?: boolean;
 }
 
 export interface GenerateRequest {
