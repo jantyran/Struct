@@ -26,7 +26,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 ## 2. 技術スタック
 
 - フレームワーク
-  - Next.js 14 App Router
+  - Next.js 15 App Router
 - 言語
   - TypeScript
 - UI
@@ -62,10 +62,14 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `NEXT_PUBLIC_BASE_PATH`
   - 既定は空
   - サブパス配備時のみ使用
+- `ALLOW_PUBLIC_SIGNUP`
+  - `true` のときだけ `/api/auth/signup` を有効化
+  - 既定運用は `false`
 
 補足:
 
 - AI API キーとモデル設定は `.env` ではなく `設定 > AI設定` に保存する
+- `JWT_SECRET` は本番では必ず十分長いランダム文字列を設定する
 
 ## 3.1 起動ポリシー
 
@@ -270,6 +274,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - Cookie 名は `session`
 - `getSession()` で Cookie を検証し、現在ユーザーを返す
 - `requireSession()` は未認証時に例外を投げる
+- 公開 signup は `ALLOW_PUBLIC_SIGNUP=true` のときだけ有効
 
 ### 6.2 権限モデル
 
@@ -287,6 +292,12 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - プロジェクトオーナーは対象プロジェクトに対して強い権限を持つ
 - `edit_all_projects` や `delete_any_project` などのシステム権限はプロジェクトロールを上書きできる
 - 権限判定の共通処理は `src/lib/permissions.ts`
+- プロジェクト API は原則として `requireProjectPermission()` を通して権限判定する
+- 個別リソース更新では `id` と `project_id` の両方で対象を絞る
+- `manage_users` と `manage_system_roles` は分離する
+  - ユーザー作成・削除・プロフィール編集は `manage_users`
+  - システムロール付与・変更は `manage_system_roles`
+  - 自分自身のシステムロール変更は禁止
 
 ## 7. データモデル
 
@@ -320,13 +331,29 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 
 補足:
 
-- `scope_key = default` を現在の組織設定として扱う
+- `scope_key` は `org-settings:${organization_id}` 形式で保持する
+- 旧 `scope_key = default` の行は DB 初期化時に現行形式へ移行する
 - `objects` は マスターデータ オブジェクト定義とレコードの JSON
 - `project_types` はプロジェクト種別定義の JSON
 - `content_templates` は生成コンテンツ定義の JSON
 - `ai_settings` は AI 設定の JSON
+- `shortcut_settings` は組織共通ショートカット設定の JSON
 
-### 7.3 global_assets
+### 7.3 organizations
+
+- `id`
+- `name`
+- `slug`
+- `status`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- 現在は単一組織前提で 1 レコードを持つ
+- `users.organization_id`、`projects.organization_id`、`organization_settings.organization_id` の親になる
+
+### 7.4 global_assets
 
 - `id`
 - `user_id`
@@ -354,7 +381,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
   - 項目そのものの定義を保持
   - UI 配置情報は `sections.items` 側で扱う
 
-### 7.4 GlobalAssetObject
+### 7.5 GlobalAssetObject
 
 - `id`
 - `key`
@@ -373,7 +400,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `reference`
 - `reference_multi`
 
-### 7.4 projects
+### 7.6 projects
 
 - `id`
 - `name`
@@ -381,6 +408,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `phase_key`
 - `status`
 - `owner_id`
+- `organization_id`
 - `primary_assignee_id`
 - `cloned_from`
 - `target`
@@ -399,7 +427,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `primary_assignee_id` はプロジェクト全体の代表担当者
 - 主担当者はプロジェクトオーナーまたはプロジェクトメンバーから選択する
 
-### 7.5 project_members
+### 7.7 project_members
 
 - `id`
 - `project_id`
@@ -412,7 +440,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `role` は `project_role_definitions.key` を参照する
 - 現在の UI では登録済みユーザーを選択して追加する
 
-### 7.6 project_contacts
+### 7.8 project_contacts
 
 - `id`
 - `project_id`
@@ -429,7 +457,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `name` のみ必須
 - 現在の UI ではプロジェクト詳細の `メンバー` タブから編集する
 
-### 7.7 invitations
+### 7.9 invitations
 
 - `id`
 - `project_id`
@@ -445,7 +473,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - 招待機能はレガシー互換として残っている
 - 現在のプロジェクト詳細 UI では登録済みユーザー選択によるメンバー追加を使う
 
-### 7.8 custom_fields
+### 7.10 custom_fields
 
 - `id`
 - `project_id`
@@ -469,7 +497,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `group` / `group_list` は子項目定義を `options.children` に持つ
 - `group` / `group_list` の値は `value` に JSON 文字列で保存する
 
-### 7.9 generated_assets
+### 7.11 generated_assets
 
 - `id`
 - `project_id`
@@ -484,7 +512,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 - `asset_type` は固定列挙ではなく、生成コンテンツ定義の `key` ベース
 - `warnings` は JSON 文字列
 
-### 7.10 system_role_definitions
+### 7.12 system_role_definitions
 
 - `id`
 - `key`
@@ -505,7 +533,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
   - `USER`: 一般ユーザー
 - 初回シード時、既存ユーザーの最初の1人を `SYSTEM_ADMIN` にする
 
-### 7.11 project_role_definitions
+### 7.13 project_role_definitions
 
 - `id`
 - `key`
@@ -579,6 +607,7 @@ Struct は `MKTキャンペーン運用デスク` として使う、認証付き
 ### 9.1 認証
 
 - `POST /api/auth/signup`
+  - `ALLOW_PUBLIC_SIGNUP=true` のときだけ有効
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
@@ -874,18 +903,10 @@ AI には次の情報を渡します。
 - `group` / `group_list` の `value` も JSON 文字列で保持する
 - 招待 URL はレガシー招待機能でのみ `NEXT_PUBLIC_BASE_URL` に依存する
 - `JWT_SECRET` は本番では必ず明示設定する
+- 公開 signup を許可する場合だけ `ALLOW_PUBLIC_SIGNUP=true` にする
 - AI 設定は組織単位で保存する
 - システムロールとプロジェクトロールの初期データは `src/lib/permissions.ts` で定義し、DB 初期化時にシードする
-### 7.1.5 organizations
-
-- `id`
-- `name`
-- `slug`
-- `status`
-- `created_at`
-- `updated_at`
-
-補足:
-
-- 現在は単一組織前提で 1 レコードを持つ
-- `users.organization_id` と `projects.organization_id` と `organization_settings.organization_id` の親になる
+- URL crawl は `src/lib/crawler.ts` で外部 URL として検証する
+  - private / loopback / link-local などの IP は DNS 解決後にも拒否する
+  - リダイレクト先も同じ検証を通す
+  - HTML / XHTML / plain text 以外は拒否する

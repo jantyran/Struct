@@ -58,7 +58,7 @@ Struct は、`MKTキャンペーン運用デスク` として使う認証付き�
 
 ## 技術スタック
 
-- Next.js 14 App Router
+- Next.js 15 App Router
 - React 18
 - TypeScript
 - Tailwind CSS
@@ -90,12 +90,14 @@ npm run dev
 JWT_SECRET=任意の長い文字列
 NEXT_PUBLIC_BASE_URL=http://133.18.123.87:38427
 NEXT_PUBLIC_BASE_PATH=
+ALLOW_PUBLIC_SIGNUP=false
 ```
 
 補足:
 
 - ルート配備が既定です
 - サブパス配備時のみ `NEXT_PUBLIC_BASE_PATH=/struct` のように設定してください
+- 公開ユーザー登録を許可する場合だけ `ALLOW_PUBLIC_SIGNUP=true` にしてください
 - AI API キーは `.env` ではなく、ログイン後の `設定 > AI設定` から保存する運用です
 
 ## 起動ポリシー
@@ -122,17 +124,11 @@ NEXT_PUBLIC_BASE_PATH=
 ## 認証
 
 - `/signup` でユーザー登録
+  - API は `ALLOW_PUBLIC_SIGNUP=true` のときだけ有効
 - `/login` でログイン
 - セッションは `session` Cookie に JWT として保存
 
 ## 今後の実装予定
-
-### プロジェクト内日常運用
-
-- プロジェクトごとの `ToDo`
-- プロジェクトごとの `ノート`
-
-どちらも案件に紐づく日常運用情報として扱い、進行管理とメモ蓄積をプロジェクト画面内で完結できるようにする予定です。`ToDo` は日々の実務タスク管理、`ノート` は打ち合わせ記録や判断メモの蓄積を目的とします。
 
 ### AI セットアップアシスタント
 
