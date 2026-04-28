@@ -9,10 +9,11 @@ import { useDevSettings } from '@/components/DevSettingsContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import TodoTab from '@/components/TodoTab';
 import SheetTab from '@/components/SheetTab';
+import ProjectStructureTab from '@/components/ProjectStructureTab';
 import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
-type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets';
+type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
 
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
@@ -1688,7 +1689,7 @@ export default function ProjectPage() {
   const requestedProjectTab: ProjectDetailTabKey | null =
     requestedTab === 'todos'
       ? 'tasks'
-      : requestedTab === 'fields' || requestedTab === 'tasks' || requestedTab === 'members' || requestedTab === 'notes' || requestedTab === 'assets' || requestedTab === 'sheets'
+      : requestedTab === 'fields' || requestedTab === 'tasks' || requestedTab === 'members' || requestedTab === 'notes' || requestedTab === 'assets' || requestedTab === 'sheets' || requestedTab === 'structure'
         ? requestedTab
         : null;
   const initialTab: ProjectDetailTabKey =
@@ -2430,15 +2431,17 @@ export default function ProjectPage() {
   const canViewNotes = Boolean(currentPermissions?.can_view_notes);
   const canEditNotes = Boolean(currentPermissions?.can_edit_notes);
   const canDeleteProject = Boolean(currentPermissions?.can_delete);
+  const canViewProject = Boolean(currentPermissions?.can_view);
   const projectRoleDefinitions = project?.project_role_definitions ?? [];
   const tabOptions = useMemo(() => ([
     ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
+    ...(canViewProject ? [{ k: 'structure' as const, l: '構成' }] : []),
     ...(canViewItems ? [{ k: 'tasks' as const, l: 'タスク' }] : []),
     ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
     ...(canViewNotes ? [{ k: 'notes' as const, l: 'ノート' }] : []),
     ...(canViewItems ? [{ k: 'sheets' as const, l: 'シート' }] : []),
     ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
-  ]), [canViewContent, canViewItems, canViewNotes]);
+  ]), [canViewContent, canViewItems, canViewNotes, canViewProject]);
 
   const findAlternateTab = useCallback((current: ProjectDetailTabKey) => {
     return tabOptions.find((option) => option.k !== current)?.k ?? current;
@@ -2567,6 +2570,19 @@ export default function ProjectPage() {
   const renderTabContent = (tabKey: ProjectDetailTabKey, pane: 'primary' | 'secondary') => {
     if (tabKey === 'sheets') {
       return <SheetTab projectId={id} />;
+    }
+
+    if (tabKey === 'structure' && canViewProject) {
+      return (
+        <ProjectStructureTab
+          projectId={id}
+          projectType={project.type}
+          projectTypes={projectTypes}
+          assignableUsers={project.assignable_users ?? []}
+          canEdit={canEditProject}
+          onProjectParentChange={(parentProjectId) => setProject({ ...project, parent_project_id: parentProjectId })}
+        />
+      );
     }
 
     if (tabKey === 'tasks' && canViewItems) {

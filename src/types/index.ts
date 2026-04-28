@@ -200,6 +200,7 @@ export interface Project {
   type: ProjectType;
   phase_key: string;
   status: ProjectStatus;
+  parent_project_id?: string | null;
   cloned_from: string | null;
   primary_assignee_id?: string | null;
   primary_assignee?: ProjectUser | null;

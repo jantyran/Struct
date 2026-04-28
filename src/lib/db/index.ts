@@ -100,6 +100,19 @@ function initSchema(db: Database.Database) {
       UNIQUE(project_id, user_id)
     );
 
+    -- プロジェクト間のシンプルな関連リンク
+    CREATE TABLE IF NOT EXISTS project_relations (
+      id TEXT PRIMARY KEY,
+      project_a_id TEXT NOT NULL,
+      project_b_id TEXT NOT NULL,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_a_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_b_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+      UNIQUE(project_a_id, project_b_id)
+    );
+
     -- プロジェクト関係者メモ（ユーザー登録不要の外部連絡先）
     CREATE TABLE IF NOT EXISTS project_contacts (
       id TEXT PRIMARY KEY,
@@ -300,6 +313,7 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'projects', 'organization_id', `TEXT`);
   ensureColumn(db, 'projects', 'phase_key', `TEXT DEFAULT ''`);
   ensureColumn(db, 'projects', 'primary_assignee_id', `TEXT`);
+  ensureColumn(db, 'projects', 'parent_project_id', `TEXT`);
   ensureColumn(db, 'projects', 'completed_at', `TEXT`);
   ensureColumn(db, 'projects', 'completed_by', `TEXT`);
   ensureColumn(db, 'todos', 'completed_at', `TEXT`);
@@ -313,6 +327,12 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'custom_fields', 'layout', `TEXT DEFAULT 'half'`);
   ensureColumn(db, 'custom_fields', 'is_builtin', `INTEGER DEFAULT 0`);
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_projects_parent_project_id ON projects(parent_project_id);
+    CREATE INDEX IF NOT EXISTS idx_project_relations_project_a ON project_relations(project_a_id);
+    CREATE INDEX IF NOT EXISTS idx_project_relations_project_b ON project_relations(project_b_id);
+  `);
 
   db.prepare(`
     UPDATE todos
