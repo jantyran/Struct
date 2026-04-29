@@ -113,12 +113,12 @@ export default function GlobalSearch() {
   }
 
   return (
-    <div ref={wrapperRef} className="relative w-full max-w-2xl">
+    <div ref={wrapperRef} className="relative w-full">
       <div
-        className="flex items-center gap-2 rounded-lg border px-3 py-2"
+        className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5"
         style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.86)' }}
       >
-        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>⌕</span>
+        <span className="text-xs shrink-0" style={{ color: 'var(--text-muted)' }}>⌕</span>
         <input
           value={query}
           onChange={(event) => {
@@ -127,12 +127,12 @@ export default function GlobalSearch() {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          className="w-full bg-transparent text-sm outline-none"
+          className="min-w-0 w-full bg-transparent text-xs outline-none placeholder:text-[0.6875rem]"
           style={{ color: 'var(--text-primary)' }}
-          placeholder="プロジェクト、タスク、ノート、生成コンテンツを検索"
+          placeholder="横断検索"
           aria-label="横断検索"
         />
-        {loading && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>検索中</span>}
+        {loading && <span className="shrink-0 text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>検索中</span>}
       </div>
 
       {open && trimmedQuery.length >= 2 && (
@@ -141,7 +141,7 @@ export default function GlobalSearch() {
           style={{ borderColor: 'var(--border)', backgroundColor: 'rgba(255,255,255,0.98)' }}
         >
           {groupedResults.length === 0 ? (
-            <div className="px-4 py-5 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+            <div className="px-3 py-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
               {loading ? '検索中...' : '該当する結果はありません'}
             </div>
           ) : (
@@ -157,26 +157,26 @@ export default function GlobalSearch() {
                     backgroundColor: index === activeIndex ? 'rgba(15,154,177,0.08)' : 'transparent',
                   }}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <span className="rounded-full px-2 py-0.5 text-[0.625rem] font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
                           {TYPE_LABELS[result.type]}
                         </span>
-                        <span className="text-[0.6875rem] truncate" style={{ color: 'var(--text-muted)' }}>
+                        <span className="min-w-0 truncate text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
                           {result.project_name}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                      <p className="mt-1 text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
                         {result.title}
                       </p>
                       {result.excerpt && (
-                        <p className="mt-0.5 text-xs line-clamp-2" style={{ color: 'var(--text-muted)' }}>
+                        <p className="mt-0.5 text-[0.6875rem] line-clamp-2 leading-snug" style={{ color: 'var(--text-muted)' }}>
                           {result.excerpt}
                         </p>
                       )}
                     </div>
-                    <span className="shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>開く</span>
+                    <span className="shrink-0 text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>開く</span>
                   </div>
                 </button>
               ))}
