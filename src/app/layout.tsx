@@ -44,6 +44,12 @@ function Sidebar() {
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>プロジェクト・施策管理ツール</p>
       </div>
 
+      {user && (
+        <div className="px-3 pt-3">
+          <GlobalSearch />
+        </div>
+      )}
+
       {/* ナビ */}
       <nav className="p-3 flex-1">
         <ul className="space-y-1">
@@ -113,23 +119,6 @@ function Sidebar() {
   );
 }
 
-function TopHeader() {
-  const { user } = useAuth();
-  if (!user) return null;
-
-  return (
-    <header
-      className="shrink-0 border-b px-5 py-3"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(241,250,252,0.86) 100%)',
-      }}
-    >
-      <GlobalSearch />
-    </header>
-  );
-}
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
@@ -143,11 +132,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <DevSettingsProvider>
               <div className="flex h-full w-full min-w-0">
                 <Sidebar />
-                <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden" style={{ background: 'transparent' }}>
-                  <TopHeader />
-                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-                    {children}
-                  </div>
+                <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden" style={{ background: 'transparent' }}>
+                  {children}
                 </main>
               </div>
             </DevSettingsProvider>
