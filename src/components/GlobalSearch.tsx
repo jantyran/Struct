@@ -129,7 +129,7 @@ export default function GlobalSearch() {
           onKeyDown={handleKeyDown}
           className="min-w-0 w-full bg-transparent text-xs outline-none placeholder:text-[0.6875rem]"
           style={{ color: 'var(--text-primary)' }}
-          placeholder="横断検索"
+          placeholder="プロジェクト、タスク、ノート、生成コンテンツを検索"
           aria-label="横断検索"
         />
         {loading && <span className="shrink-0 text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>検索中</span>}
