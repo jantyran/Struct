@@ -252,13 +252,22 @@ function ProjectCard({ project, typeLabel, phases, onClone }: {
   phases: { key: string; name: string }[];
   onClone: (p: Project) => void;
 }) {
+  const router = useRouter();
+  const detailHref = withBasePath(`/projects/${project.id}`);
   const statusColors: Record<string, string> = { draft: 'text-slate-600 bg-slate-100', active: 'text-emerald-700 bg-emerald-50', completed: 'text-emerald-700 bg-emerald-50', archived: 'text-slate-500 bg-slate-100' };
   const statusLabels: Record<string, string> = { draft: '下書き', active: 'アクティブ', completed: '完了', archived: 'アーカイブ' };
   const typeColors: Record<string, string> = { event: 'text-sky-700', campaign: 'text-cyan-700', content: 'text-amber-700', other: 'text-slate-500' };
   const todoOpen = project.todo_total - project.todo_done;
 
   return (
-    <Link href={withBasePath(`/projects/${project.id}`)} className="card card-link flex flex-col">
+    <Link
+      href={detailHref}
+      prefetch={false}
+      onPointerEnter={() => router.prefetch(detailHref)}
+      onMouseEnter={() => router.prefetch(detailHref)}
+      onFocus={() => router.prefetch(detailHref)}
+      className="card card-link flex flex-col"
+    >
       <div className="p-5 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">
           <span className={`text-[0.6875rem] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>{typeLabel}</span>
@@ -313,6 +322,8 @@ function ProjectCard({ project, typeLabel, phases, onClone }: {
 // サイドバー: Todoカード1行
 // ──────────────────────────────────────────
 function SidebarTodoRow({ todo, showAssignee }: { todo: DashboardTodo; showAssignee?: boolean }) {
+  const router = useRouter();
+  const detailHref = withBasePath(`/projects/${todo.project_id}?tab=todos&todo=${encodeURIComponent(todo.id)}`);
   const today = new Date().toISOString().slice(0, 10);
   const overdue = todo.due_date && todo.due_date < today && todo.status !== 'done';
   const dueToday = todo.due_date === today && todo.status !== 'done';
@@ -320,7 +331,11 @@ function SidebarTodoRow({ todo, showAssignee }: { todo: DashboardTodo; showAssig
 
   return (
     <Link
-      href={withBasePath(`/projects/${todo.project_id}?tab=todos&todo=${encodeURIComponent(todo.id)}`)}
+      href={detailHref}
+      prefetch={false}
+      onPointerEnter={() => router.prefetch(detailHref)}
+      onMouseEnter={() => router.prefetch(detailHref)}
+      onFocus={() => router.prefetch(detailHref)}
       className="flex items-start gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors border-b last:border-0 group"
       style={{ borderColor: 'var(--border)' }}
     >
@@ -442,6 +457,7 @@ function SidebarPanel({ myTodos, managedUrgentTodos, thisWeekTodos, staleProject
               <Link
                 key={p.id}
                 href={withBasePath(`/projects/${p.id}`)}
+                prefetch={false}
                 className="flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors border-b last:border-0"
                 style={{ borderColor: 'var(--border)' }}
               >
@@ -536,6 +552,7 @@ function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
           </thead>
           <tbody>
             {sorted.map((p, i) => {
+              const detailHref = withBasePath(`/projects/${p.id}`);
               const phases = phaseMap[p.type] || [];
               const phaseLabel = phases.find(ph => ph.key === p.phase_key)?.name || p.phase_key || '—';
               const sc = statusColors[p.status] ?? statusColors.draft;
@@ -543,13 +560,16 @@ function ProjectTableView({ projects, typeLabelMap, phaseMap, onClone }: {
               return (
                 <tr
                   key={p.id}
-                  onClick={() => router.push(withBasePath(`/projects/${p.id}`))}
+                  onClick={() => router.push(detailHref)}
                   style={{
                     cursor: 'pointer',
                     background: i % 2 === 0 ? 'transparent' : 'rgba(248,252,255,0.6)',
                     borderBottom: '1px solid var(--border)',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(15,154,177,0.05)')}
+                  onMouseEnter={e => {
+                    router.prefetch(detailHref);
+                    e.currentTarget.style.background = 'rgba(15,154,177,0.05)';
+                  }}
                   onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(248,252,255,0.6)')}
                 >
                   <td style={{ padding: '10px 12px', fontWeight: 600, maxWidth: 280, minWidth: 160 }}>

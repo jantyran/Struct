@@ -22,6 +22,9 @@
 - `refactors/security-and-code-quality-2026-04-28.md`
   - 2026-04-28 のセキュリティ修正、依存更新、権限チェック整理の履歴
   - 実施した検証と残るリファクタ候補
+- `refactors/performance-optimization-2026-04-30.md`
+  - プロジェクト詳細の初期表示高速化の記録
+  - 今後のリファクタで守る性能ルール
 - `implementation-notes/project-relationships-and-hierarchy.md`
   - プロジェクト階層、サブプロジェクト、関連プロジェクト機能の仕様案
   - データモデル、権限、UI、API、段階導入方針

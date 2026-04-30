@@ -7,6 +7,7 @@ import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/li
 import { projectAccessForUser, projectRoleDefinitions, requireProjectPermission } from '@/lib/permissions';
 import type { CustomField } from '@/types';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
+import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -79,6 +80,8 @@ export async function GET(_req: Request, { params: routeParams }: Params) {
     return NextResponse.json({
       ...project,
       custom_fields: currentPermissions.can_view_items ? syncedFields : [],
+      current_project_type_definition: currentDefinition ?? null,
+      global_asset_objects: normalizeGlobalAssetsRow(settingsRow).objects,
       owner: { id: project.owner_id, email: project.owner_email, name: project.owner_name, avatar_url: project.owner_avatar_url },
       primary_assignee: project.primary_assignee_id
         ? {

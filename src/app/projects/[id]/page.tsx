@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition, ProjectContact } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
@@ -7,14 +8,48 @@ import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { useDevSettings } from '@/components/DevSettingsContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
-import TodoTab from '@/components/TodoTab';
-import SheetTab from '@/components/SheetTab';
-import ProjectStructureTab from '@/components/ProjectStructureTab';
-import ProjectRelationsWidget from '@/components/ProjectRelationsWidget';
-import { MarkdownRichTextEditor, MarkdownViewer } from '@/components/MarkdownRichTextEditor';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
+
+const LazyPanelFallback = ({ label }: { label: string }) => (
+  <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+    <p className="text-sm">{label}</p>
+  </div>
+);
+
+const TodoTab = dynamic(() => import('@/components/TodoTab'), {
+  ssr: false,
+  loading: () => <LazyPanelFallback label="タスクを準備中..." />,
+});
+
+const SheetTab = dynamic(() => import('@/components/SheetTab'), {
+  ssr: false,
+  loading: () => <LazyPanelFallback label="シートを準備中..." />,
+});
+
+const ProjectStructureTab = dynamic(() => import('@/components/ProjectStructureTab'), {
+  ssr: false,
+  loading: () => <LazyPanelFallback label="構成を準備中..." />,
+});
+
+const ProjectRelationsWidget = dynamic(() => import('@/components/ProjectRelationsWidget'), {
+  ssr: false,
+  loading: () => <LazyPanelFallback label="プロジェクト構成を準備中..." />,
+});
+
+const MarkdownRichTextEditor = dynamic(
+  () => import('@/components/MarkdownRichTextEditor').then((mod) => mod.MarkdownRichTextEditor),
+  {
+    ssr: false,
+    loading: () => <LazyPanelFallback label="エディタを準備中..." />,
+  }
+);
+
+const MarkdownViewer = dynamic(() => import('@/components/MarkdownViewer'), {
+  ssr: false,
+  loading: () => <p className="text-xs" style={{ color: 'var(--text-muted)' }}>本文を準備中...</p>,
+});
 
 function normalizeProject(project: ProjectWithFields): ProjectWithFields {
   return {
@@ -1692,8 +1727,12 @@ export default function ProjectPage() {
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [projectTypes, setProjectTypes] = useState<ProjectTypeDefinition[]>([]);
+  const [projectTypesLoaded, setProjectTypesLoaded] = useState(false);
+  const [projectTypesLoading, setProjectTypesLoading] = useState(false);
   const [globalAssetObjects, setGlobalAssetObjects] = useState<GlobalAssetObject[]>([]);
   const [contentTemplates, setContentTemplates] = useState<ProjectContentTemplate[]>([]);
+  const [contentTemplatesLoaded, setContentTemplatesLoaded] = useState(false);
+  const [contentTemplatesLoading, setContentTemplatesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingMsg, setSavingMsg] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -1756,22 +1795,12 @@ export default function ProjectPage() {
   const [contactSaving, setContactSaving] = useState(false);
   const [contactDrafts, setContactDrafts] = useState<Record<string, { name: string; email: string; phone: string; company_name: string }>>({});
   const scrollOptions = useMemo(() => ({ behavior: 'smooth', block: 'center' } as const), []);
-  const userDefaultTabAppliedRef = useRef(false);
+  const userDefaultTabAppliedRef = useRef(Boolean(requestedProjectTab));
 
   const loadProject = useCallback(async () => {
     setLoadError('');
     const projectRes = await fetch(withBasePath(`/api/projects/${id}`));
-    const [projectTypesRes, globalAssetsRes, contentTemplatesRes] = await Promise.all([
-      fetch(withBasePath('/api/project-types')),
-      fetch(withBasePath('/api/master-data')),
-      fetch(withBasePath('/api/content-templates')),
-    ]);
-    const [pr, projectTypesPayload, globalAssetsPayload, contentTemplatesPayload] = await Promise.all([
-      projectRes.json(),
-      projectTypesRes.json(),
-      globalAssetsRes.json(),
-      contentTemplatesRes.json(),
-    ]);
+    const pr = await projectRes.json();
 
     if (projectRes.status === 401) {
       setProject(null);
@@ -1800,11 +1829,43 @@ export default function ProjectPage() {
       return;
     }
 
-    setProject(normalizeProject(pr as ProjectWithFields));
-    setProjectTypes(Array.isArray(projectTypesPayload.project_types) ? projectTypesPayload.project_types as ProjectTypeDefinition[] : []);
-    setGlobalAssetObjects(Array.isArray(globalAssetsPayload.objects) ? globalAssetsPayload.objects as GlobalAssetObject[] : []);
-    setContentTemplates(Array.isArray(contentTemplatesPayload.content_templates) ? contentTemplatesPayload.content_templates as ProjectContentTemplate[] : []);
+    const payload = pr as ProjectWithFields & {
+      current_project_type_definition?: ProjectTypeDefinition | null;
+      global_asset_objects?: GlobalAssetObject[];
+    };
+    setProject(normalizeProject(payload));
+    setProjectTypes(payload.current_project_type_definition ? [payload.current_project_type_definition] : []);
+    setProjectTypesLoaded(false);
+    setGlobalAssetObjects(Array.isArray(payload.global_asset_objects) ? payload.global_asset_objects : []);
   }, [id, router]);
+
+  const loadProjectTypes = useCallback(async () => {
+    if (projectTypesLoaded || projectTypesLoading) return;
+    setProjectTypesLoading(true);
+    try {
+      const res = await fetch(withBasePath('/api/project-types'));
+      if (!res.ok) return;
+      const payload = await res.json();
+      setProjectTypes(Array.isArray(payload.project_types) ? payload.project_types as ProjectTypeDefinition[] : []);
+      setProjectTypesLoaded(true);
+    } finally {
+      setProjectTypesLoading(false);
+    }
+  }, [projectTypesLoaded, projectTypesLoading]);
+
+  const loadContentTemplates = useCallback(async () => {
+    if (contentTemplatesLoaded || contentTemplatesLoading) return;
+    setContentTemplatesLoading(true);
+    try {
+      const res = await fetch(withBasePath('/api/content-templates'));
+      if (!res.ok) return;
+      const payload = await res.json();
+      setContentTemplates(Array.isArray(payload.content_templates) ? payload.content_templates as ProjectContentTemplate[] : []);
+      setContentTemplatesLoaded(true);
+    } finally {
+      setContentTemplatesLoading(false);
+    }
+  }, [contentTemplatesLoaded, contentTemplatesLoading]);
 
   const loadAssets = useCallback(async (force = false) => {
     if (!force && (assetsLoaded || assetsLoading)) return;
@@ -1934,6 +1995,28 @@ export default function ProjectPage() {
       ) ||
       (currentProjectType?.sidebar_tabs ?? []).some((tab) =>
         tab.items.some((item) => item.kind === 'todo_list' || item.kind === 'todo_summary')
+      ),
+    [currentProjectType]
+  );
+
+  const hasAiToolsWidget = useMemo(
+    () =>
+      (currentProjectType?.sections ?? []).some((section) =>
+        section.items.some((item) => item.kind === 'ai_tools')
+      ) ||
+      (currentProjectType?.sidebar_tabs ?? []).some((tab) =>
+        tab.items.some((item) => item.kind === 'ai_tools')
+      ),
+    [currentProjectType]
+  );
+
+  const hasProjectRelationsWidget = useMemo(
+    () =>
+      (currentProjectType?.sections ?? []).some((section) =>
+        section.items.some((item) => item.kind === 'project_relations')
+      ) ||
+      (currentProjectType?.sidebar_tabs ?? []).some((tab) =>
+        tab.items.some((item) => item.kind === 'project_relations')
       ),
     [currentProjectType]
   );
@@ -2339,10 +2422,12 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!project) return;
     const visibleTabs = new Set<ProjectDetailTabKey>(splitView ? [primaryTab, secondaryTab] : [primaryTab]);
+    if (visibleTabs.has('structure') || hasProjectRelationsWidget) void loadProjectTypes();
     if (visibleTabs.has('assets')) void loadAssets();
+    if (visibleTabs.has('assets') || hasAiToolsWidget) void loadContentTemplates();
     if (visibleTabs.has('tasks') || hasInlineTodoWidget) void loadTodos();
     if (visibleTabs.has('notes') || hasInlineNoteWidget || project.current_permissions?.can_view_notes) void loadNotes();
-  }, [project, splitView, primaryTab, secondaryTab, hasInlineNoteWidget, hasInlineTodoWidget, loadAssets, loadTodos, loadNotes]);
+  }, [project, splitView, primaryTab, secondaryTab, hasAiToolsWidget, hasInlineNoteWidget, hasInlineTodoWidget, hasProjectRelationsWidget, loadAssets, loadContentTemplates, loadProjectTypes, loadTodos, loadNotes]);
 
   usePendingScrollTarget(
     pendingNoteScrollTarget,
@@ -2509,6 +2594,13 @@ export default function ProjectPage() {
     const currentTab = pane === 'primary' ? primaryTab : secondaryTab;
     if (currentTab === nextTab) return;
     if (!confirmLeaveUnsaved()) return;
+    if (searchParams.has('tab') || searchParams.has('todo')) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('tab');
+      params.delete('todo');
+      const nextQuery = params.toString();
+      router.replace(withBasePath(`/projects/${id}${nextQuery ? `?${nextQuery}` : ''}`), { scroll: false });
+    }
     if (pane === 'primary') {
       if (splitView && nextTab === secondaryTab) {
         setSecondaryTab(primaryTab);
@@ -2520,7 +2612,18 @@ export default function ProjectPage() {
       setPrimaryTab(secondaryTab);
     }
     setSecondaryTab(nextTab);
-  }, [confirmLeaveUnsaved, primaryTab, secondaryTab, splitView]);
+  }, [confirmLeaveUnsaved, id, primaryTab, router, searchParams, secondaryTab, splitView]);
+
+  const clearConsumedTodoRoute = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    const hadTodo = params.has('todo');
+    const requestedTaskTab = params.get('tab') === 'todos' || params.get('tab') === 'tasks';
+    if (!hadTodo && !requestedTaskTab) return;
+    params.delete('todo');
+    if (requestedTaskTab) params.delete('tab');
+    const nextQuery = params.toString();
+    router.replace(withBasePath(`/projects/${id}${nextQuery ? `?${nextQuery}` : ''}`), { scroll: false });
+  }, [id, router, searchParams]);
 
   const noteTabVisible = splitView ? (primaryTab === 'notes' || secondaryTab === 'notes') : primaryTab === 'notes';
 
@@ -2624,6 +2727,7 @@ export default function ProjectPage() {
               phases={projectTypes.find(pt => pt.key === project.type)?.phases ?? []}
               canEdit={canEditItems}
               focusedTodoId={requestedTodoId}
+              onFocusedTodoConsumed={clearConsumedTodoRoute}
               onTodosChange={setTodos}
             />
           )}

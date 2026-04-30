@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useRegisterShortcutScope, useShortcutSettings } from '@/components/ShortcutProvider';
 import { formatShortcutCombo } from '@/lib/shortcut-settings';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { commonmark } from '@milkdown/kit/preset/commonmark';
 import { Editor, rootCtx, defaultValueCtx } from '@milkdown/kit/core';
@@ -229,16 +227,6 @@ function MilkdownInner({
       style={{ minHeight, backgroundColor: 'white', color: 'var(--text-primary)' }}
     >
       <Milkdown />
-    </div>
-  );
-}
-
-function MarkdownViewer({ content, className }: { content: string; className?: string }) {
-  return (
-    <div className={`md-body ${className ?? ''}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {content}
-      </ReactMarkdown>
     </div>
   );
 }
@@ -468,5 +456,3 @@ export function MarkdownRichTextEditor({
     </div>
   );
 }
-
-export { MarkdownViewer };

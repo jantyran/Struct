@@ -140,7 +140,7 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onSub
   const subtaskDone = todo.subtasks?.filter(s => s.status === 'done').length ?? 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* ヘッダー */}
         <div className="px-6 pt-5 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -390,7 +390,7 @@ function TodoCreateModal({ assignableUsers, phases, parentTodo, initialValues, o
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={onCancel}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={onCancel}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
         <div className="px-6 pt-5 pb-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-start gap-3">
@@ -1480,10 +1480,11 @@ interface TodoTabProps {
   phases: ProjectPhase[];
   canEdit: boolean;
   focusedTodoId?: string | null;
+  onFocusedTodoConsumed?: () => void;
   onTodosChange: (todos: Todo[]) => void;
 }
 
-export default function TodoTab({ projectId, todos, assignableUsers, phases, canEdit, focusedTodoId, onTodosChange }: TodoTabProps) {
+export default function TodoTab({ projectId, todos, assignableUsers, phases, canEdit, focusedTodoId, onFocusedTodoConsumed, onTodosChange }: TodoTabProps) {
   const { user } = useAuth();
   const [view, setView] = useState<TodoView>(user?.settings?.default_task_view ?? 'list');
   const [creating, setCreating] = useState(false);
@@ -1599,7 +1600,8 @@ export default function TodoTab({ projectId, todos, assignableUsers, phases, can
     setDetailTodo(target);
     setPendingScrollTarget(`todo-row-${target.id}`);
     autoOpenedTodoIdRef.current = focusedTodoId;
-  }, [focusedTodoId, todos]);
+    onFocusedTodoConsumed?.();
+  }, [focusedTodoId, onFocusedTodoConsumed, todos]);
 
   useRegisterShortcutScope(`todo-tab-${projectId}`, 'タスク', {
     new_record: canEdit ? () => {

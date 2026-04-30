@@ -329,9 +329,22 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
 
   db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_projects_organization_updated ON projects(organization_id, updated_at);
     CREATE INDEX IF NOT EXISTS idx_projects_parent_project_id ON projects(parent_project_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_owner ON projects(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_users_organization ON users(organization_id);
+    CREATE INDEX IF NOT EXISTS idx_project_members_project ON project_members(project_id);
+    CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
     CREATE INDEX IF NOT EXISTS idx_project_relations_project_a ON project_relations(project_a_id);
     CREATE INDEX IF NOT EXISTS idx_project_relations_project_b ON project_relations(project_b_id);
+    CREATE INDEX IF NOT EXISTS idx_custom_fields_project_sort ON custom_fields(project_id, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_todos_project_parent_sort ON todos(project_id, parent_id, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_todos_assignee_status_due ON todos(assignee_id, status, due_date);
+    CREATE INDEX IF NOT EXISTS idx_project_notes_project_order ON project_notes(project_id, pinned, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_generated_assets_project_created ON generated_assets(project_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_project_sheets_project_created ON project_sheets(project_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_project_contacts_project_created ON project_contacts(project_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_invitations_project_status ON invitations(project_id, status);
   `);
 
   db.prepare(`
