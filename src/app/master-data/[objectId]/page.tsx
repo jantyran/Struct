@@ -8,7 +8,7 @@ import type { GlobalAssets, GlobalAssetField, GlobalAssetFieldType, GlobalAssetO
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
-import { defaultGlobalAssetObjects, normalizeGlobalAssets } from '@/lib/global-assets';
+import { normalizeGlobalAssets } from '@/lib/global-assets';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 
 function parseFieldOptions(options?: string) {
@@ -23,7 +23,7 @@ function parseFieldOptions(options?: string) {
 }
 
 const EMPTY_GA: GlobalAssets = {
-  objects: defaultGlobalAssetObjects(),
+  objects: [],
   updated_at: '',
 };
 
@@ -50,7 +50,7 @@ function FieldRow({
 }) {
   const options = parseFieldOptions(field.options);
   return (
-    <div className="grid grid-cols-[1.2fr_1fr_160px_180px_80px] gap-2 items-end">
+    <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_160px_180px_80px] gap-2 items-end">
       <div>
         <label className="field-label">項目名</label>
         <input className="field-input text-sm" value={field.label} onChange={(e) => onChange({ ...field, label: e.target.value })} />
@@ -234,6 +234,7 @@ export default function GlobalAssetObjectDetailPage() {
   const { user, loading: authLoading } = useAuth();
   const canManageGlobalAssets = Boolean(user?.system_permissions?.manage_master_data);
   const [data, setData] = useState<GlobalAssets>(EMPTY_GA);
+  const [loadingData, setLoadingData] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [objectSettingsOpen, setObjectSettingsOpen] = useState(false);
@@ -246,29 +247,35 @@ export default function GlobalAssetObjectDetailPage() {
     if (authLoading) return;
     if (!user) {
       setData(EMPTY_GA);
+      setLoadingData(false);
       router.push(withBasePath('/login'));
       return;
     }
     if (!user.system_permissions?.manage_master_data) {
       setData(EMPTY_GA);
+      setLoadingData(false);
       router.push(withBasePath('/settings'));
       return;
     }
 
+    setLoadingData(true);
     (async () => {
       const res = await fetch(withBasePath('/api/master-data'));
       if (res.status === 401) {
         setData(EMPTY_GA);
+        setLoadingData(false);
         router.push(withBasePath('/login'));
         return;
       }
       if (res.status === 403) {
         setData(EMPTY_GA);
+        setLoadingData(false);
         router.push(withBasePath('/settings'));
         return;
       }
       const payload = await res.json();
       setData(normalizeGlobalAssets(payload));
+      setLoadingData(false);
     })();
   }, [authLoading, router, user]);
 
@@ -424,7 +431,7 @@ export default function GlobalAssetObjectDetailPage() {
     );
   }
 
-  if (authLoading) {
+  if (authLoading || loadingData) {
     return (
       <div className="p-6 max-w-6xl mx-auto">
         <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>読み込み中...</div>
@@ -465,7 +472,7 @@ export default function GlobalAssetObjectDetailPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link href={withBasePath('/master-data')} className="text-sm text-gray-400 hover:text-gray-200">← マスターデータ 一覧へ戻る</Link>
           <h1 className="text-2xl font-bold mt-2">{object.name}</h1>
@@ -473,7 +480,7 @@ export default function GlobalAssetObjectDetailPage() {
             このオブジェクトの設定とレコードを管理します。
           </p>
         </div>
-        <button onClick={() => persist(data)} disabled={saving} className="btn-primary">
+        <button onClick={() => persist(data)} disabled={saving} className="btn-primary w-full sm:w-auto">
           {saving ? '保存中...' : saved ? '✓ 保存済み' : '保存'}
         </button>
       </div>
@@ -534,7 +541,7 @@ export default function GlobalAssetObjectDetailPage() {
       </section>
 
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="section-title">レコード一覧</h2>
           <button onClick={addRecord} className="btn-secondary text-xs py-1 px-3">+ レコード追加</button>
         </div>

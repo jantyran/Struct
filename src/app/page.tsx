@@ -374,7 +374,7 @@ function SidebarPanel({ myTodos, managedUrgentTodos, thisWeekTodos, staleProject
   myUrgentCount: number;
 }) {
   return (
-    <div className="flex flex-col gap-4 w-80 shrink-0">
+    <div className="flex flex-col gap-4 w-full lg:w-80 lg:shrink-0">
       {/* 自分のタスク */}
       <div className="card overflow-hidden">
         <div className="px-3 py-2.5 border-b flex items-center gap-2" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface-secondary)' }}>
@@ -691,12 +691,12 @@ export default function Dashboard() {
     <div className="p-6 max-w-7xl mx-auto">
       {/* ヘッダー + サマリー統計を一体化したカード */}
       <div className="card mb-5 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-cyan-50 via-white to-amber-50 border-b" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6 py-4 bg-gradient-to-r from-cyan-50 via-white to-amber-50 border-b" style={{ borderColor: 'var(--border)' }}>
           <div>
             <h1 className="text-xl font-bold tracking-tight">ダッシュボード</h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>プロジェクトと施策の情報を構造化して管理する</p>
           </div>
-          <button onClick={() => setShowNew(true)} className="btn-primary">+ 新規プロジェクト</button>
+          <button onClick={() => setShowNew(true)} className="btn-primary w-full sm:w-auto">+ 新規プロジェクト</button>
         </div>
 
         {/* サマリー統計 — 4列1行 */}
@@ -754,7 +754,7 @@ export default function Dashboard() {
       </div>
 
       {/* メインコンテンツ: プロジェクト一覧 + サイドバー */}
-      <div className="flex gap-5 items-start">
+      <div className="flex flex-col lg:flex-row gap-5 items-stretch lg:items-start">
         {/* 左: プロジェクト一覧 */}
         <div className="flex-1 min-w-0">
           {/* フィルター + ビュー切り替え */}

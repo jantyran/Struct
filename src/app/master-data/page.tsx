@@ -7,10 +7,10 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GlobalAssets, GlobalAssetObject } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
-import { createGlobalAssetObject, defaultGlobalAssetObjects, normalizeGlobalAssets } from '@/lib/global-assets';
+import { createGlobalAssetObject, normalizeGlobalAssets } from '@/lib/global-assets';
 
 const EMPTY_GA: GlobalAssets = {
-  objects: defaultGlobalAssetObjects(),
+  objects: [],
   updated_at: '',
 };
 
@@ -68,6 +68,7 @@ export default function GlobalAssetsPage() {
   const { user, loading: authLoading } = useAuth();
   const canManageGlobalAssets = Boolean(user?.system_permissions?.manage_master_data);
   const [data, setData] = useState<GlobalAssets>(EMPTY_GA);
+  const [loadingData, setLoadingData] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showNewObjectModal, setShowNewObjectModal] = useState(false);
@@ -76,29 +77,35 @@ export default function GlobalAssetsPage() {
     if (authLoading) return;
     if (!user) {
       setData(EMPTY_GA);
+      setLoadingData(false);
       router.push(withBasePath('/login'));
       return;
     }
     if (!user.system_permissions?.manage_master_data) {
       setData(EMPTY_GA);
+      setLoadingData(false);
       router.push(withBasePath('/settings'));
       return;
     }
 
+    setLoadingData(true);
     (async () => {
       const res = await fetch(withBasePath('/api/master-data'));
       if (res.status === 401) {
         setData(EMPTY_GA);
+        setLoadingData(false);
         router.push(withBasePath('/login'));
         return;
       }
       if (res.status === 403) {
         setData(EMPTY_GA);
+        setLoadingData(false);
         router.push(withBasePath('/settings'));
         return;
       }
       const payload = await res.json();
       setData(normalizeGlobalAssets(payload));
+      setLoadingData(false);
     })();
   }, [authLoading, router, user]);
 
@@ -199,62 +206,70 @@ export default function GlobalAssetsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold">マスターデータ</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            オブジェクト一覧と管理ハブです。各オブジェクトの設定とレコード編集は詳細ページで行います。
-          </p>
+      {loadingData ? (
+        <div className="card p-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
+          読み込み中...
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setShowNewObjectModal(true)} className="btn-secondary">+ オブジェクト追加</button>
-          <button onClick={handleSave} disabled={saving} className="btn-primary">
-            {saving ? '保存中...' : saved ? '✓ 保存済み' : '保存'}
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-8">
-        {data.objects.map((object, objectIndex) => (
-          <section key={object.id} className="card p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold">{object.name}</h2>
-                  {object.is_default && <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">既定</span>}
-                </div>
-                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>キー: {object.key}</p>
-                {object.description && (
-                  <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>{object.description}</p>
-                )}
-                <div className="flex gap-4 mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <span>項目 {object.fields.length}</span>
-                  <span>レコード {object.records.length}</span>
-                </div>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <Link href={withBasePath(`/master-data/${object.id}`)} className="btn-primary text-sm">
-                  詳細を開く
-                </Link>
-                <button onClick={() => removeObject(objectIndex)} className="btn-danger text-sm">削除</button>
-              </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+            <div>
+              <h1 className="text-xl font-bold">マスターデータ</h1>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                オブジェクト一覧と管理ハブです。各オブジェクトの設定とレコード編集は詳細ページで行います。
+              </p>
             </div>
-          </section>
-        ))}
-      </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <button onClick={() => setShowNewObjectModal(true)} className="btn-secondary">+ オブジェクト追加</button>
+              <button onClick={handleSave} disabled={saving} className="btn-primary">
+                {saving ? '保存中...' : saved ? '✓ 保存済み' : '保存'}
+              </button>
+            </div>
+          </div>
 
-      {data.updated_at && (
-        <p className="text-xs mt-6" style={{ color: 'var(--text-muted)' }}>
-          最終更新: {new Date(data.updated_at).toLocaleString('ja-JP')}
-        </p>
-      )}
+          <div className="space-y-8">
+            {data.objects.map((object, objectIndex) => (
+              <section key={object.id} className="card p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-semibold">{object.name}</h2>
+                      {object.is_default && <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300">既定</span>}
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>キー: {object.key}</p>
+                    {object.description && (
+                      <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>{object.description}</p>
+                    )}
+                    <div className="flex gap-4 mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <span>項目 {object.fields.length}</span>
+                      <span>レコード {object.records.length}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                    <Link href={withBasePath(`/master-data/${object.id}`)} className="btn-primary text-sm">
+                      詳細を開く
+                    </Link>
+                    <button onClick={() => removeObject(objectIndex)} className="btn-danger text-sm">削除</button>
+                  </div>
+                </div>
+              </section>
+            ))}
+          </div>
 
-      {showNewObjectModal && (
-        <NewObjectModal
-          onClose={() => setShowNewObjectModal(false)}
-          onSubmit={createObjectAndOpen}
-          submitting={saving}
-        />
+          {data.updated_at && (
+            <p className="text-xs mt-6" style={{ color: 'var(--text-muted)' }}>
+              最終更新: {new Date(data.updated_at).toLocaleString('ja-JP')}
+            </p>
+          )}
+
+          {showNewObjectModal && (
+            <NewObjectModal
+              onClose={() => setShowNewObjectModal(false)}
+              onSubmit={createObjectAndOpen}
+              submitting={saving}
+            />
+          )}
+        </>
       )}
     </div>
   );

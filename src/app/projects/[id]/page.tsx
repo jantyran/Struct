@@ -301,16 +301,21 @@ function UrlFieldInput({
   onChange,
   onCrawl,
   crawling,
+  startEditingKey,
+  onEditingDone,
 }: {
   value: string;
   onChange: (v: string) => void;
   onCrawl?: () => void;
   crawling?: boolean;
+  startEditingKey?: string | null;
+  onEditingDone?: () => void;
 }) {
   const parsed = parseUrlFieldValue(value);
   const [editing, setEditing] = useState(false);
   const [draftLabel, setDraftLabel] = useState(parsed.label);
   const [draftUrl, setDraftUrl] = useState(parsed.url);
+  const lastStartEditingKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const { label, url } = parseUrlFieldValue(value);
@@ -318,9 +323,19 @@ function UrlFieldInput({
     setDraftUrl(url);
   }, [value]);
 
+  useEffect(() => {
+    if (!startEditingKey || lastStartEditingKeyRef.current === startEditingKey) return;
+    lastStartEditingKeyRef.current = startEditingKey;
+    const { label, url } = parseUrlFieldValue(value);
+    setDraftLabel(label);
+    setDraftUrl(url);
+    setEditing(true);
+  }, [startEditingKey, value]);
+
   function handleDone() {
     onChange(serializeUrlFieldValue(draftLabel, draftUrl));
     setEditing(false);
+    onEditingDone?.();
   }
 
   if (editing) {
@@ -602,11 +617,13 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   const groupValue = parseGroupValue(field.value);
   const groupListValue = parseGroupListValue(field.value);
   const [viewingRecord, setViewingRecord] = useState<GlobalAssetObject['records'][number] | null>(null);
+  const [editingListItemKey, setEditingListItemKey] = useState<string | null>(null);
 
   function addRepeatingItem() {
     if (field.type === 'list') {
       const t = childTemplates[0];
       const emptyItem = t ? { [t.id]: { value: '', options: t.options } } : {};
+      setEditingListItemKey(`${field.id}:${groupListValue.length}`);
       onChange({ ...field, value: JSON.stringify([...groupListValue, emptyItem]) });
     } else if (field.type === 'group_list') {
       const emptyItem = childTemplates.reduce<Record<string, GroupChildState>>((acc, t) => {
@@ -720,7 +737,12 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
                   >
                     <div className="flex-1 min-w-0">
                       {singleTemplate.type === 'url' ? (
-                        <UrlFieldInput value={childField.value} onChange={updateListValue} />
+                        <UrlFieldInput
+                          value={childField.value}
+                          onChange={updateListValue}
+                          startEditingKey={editingListItemKey === `${field.id}:${itemIndex}` ? editingListItemKey : null}
+                          onEditingDone={() => setEditingListItemKey(null)}
+                        />
                       ) : singleTemplate.type === 'select' ? (
                         <select className="field-input text-xs w-full" value={childField.value} onChange={(e) => updateListValue(e.target.value)}>
                           <option value="">（選択）</option>
@@ -3433,7 +3455,7 @@ export default function ProjectPage() {
 
     if (!sidebarOpen) {
       return (
-        <div className="w-10 shrink-0 border-l flex flex-col items-center justify-start pt-4" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
+        <div className="w-full xl:w-10 shrink-0 border-t xl:border-t-0 xl:border-l flex flex-row xl:flex-col items-center justify-start p-3 xl:pt-4 xl:p-0" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -3451,7 +3473,7 @@ export default function ProjectPage() {
     }
 
     return (
-      <div className="w-80 shrink-0 border-l flex flex-col min-h-0" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
+      <div className="w-full xl:w-80 shrink-0 border-t xl:border-t-0 xl:border-l flex flex-col min-h-0 max-h-[42vh] xl:max-h-none" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
         <div className="shrink-0 px-4 pt-3 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-end gap-3">
             <div className="flex gap-1 flex-1 min-w-0 items-end">
@@ -3548,7 +3570,7 @@ export default function ProjectPage() {
       {/* ヘッダー */}
       <div className="border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, #ffffff 0%, rgba(241,250,252,0.95) 100%)' }}>
         {/* 1行: 戻る | タイトル + バッジ類 | ステータス + 保存 + 削除 */}
-        <div className="px-6 py-3 flex items-center gap-3">
+        <div className="px-4 md:px-6 py-3 flex flex-wrap items-center gap-3">
           {/* 戻るボタン */}
           <button
             onClick={() => {
@@ -3576,7 +3598,7 @@ export default function ProjectPage() {
           />
 
           {/* バッジ群（種別・クローン・要確認） */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             <span
               className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] font-semibold"
               style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.2)' }}
@@ -3596,7 +3618,7 @@ export default function ProjectPage() {
           </div>
 
           {/* ステータス・ピルセレクター */}
-          <div className="flex items-center rounded-xl overflow-hidden border shrink-0" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}>
+          <div className="flex max-w-full overflow-x-auto items-center rounded-xl border shrink-0" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}>
             {([
               { value: 'draft',    label: '下書き',   dot: '#9fb8c4' },
               { value: 'active',   label: 'アクティブ', dot: '#1f9d72' },
@@ -3744,7 +3766,7 @@ export default function ProjectPage() {
             </div>
           </div>
         ) : (
-          <div className="px-6 pb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+          <div className="px-4 md:px-6 pb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
             この種別にはまだフェーズ定義がありません。プロジェクト種別設定で追加してください。
           </div>
         )}
@@ -3752,7 +3774,7 @@ export default function ProjectPage() {
       
       {/* 完了プロジェクト振り返りバナー */}
       {project.status === 'completed' && retro && (
-        <div className="px-6 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(241,250,252,0.8) 100%)' }}>
+        <div className="px-4 md:px-6 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(241,250,252,0.8) 100%)' }}>
           <p className="text-[0.6875rem] font-semibold mb-2" style={{ color: '#059669' }}>プロジェクト振り返り</p>
           <div className="flex flex-wrap gap-4">
             {[
@@ -3790,8 +3812,8 @@ export default function ProjectPage() {
       )}
 
       {/* 本体 */}
-      <div className="flex-1 flex overflow-hidden min-h-0 min-w-0">
-        <div className="flex-1 min-h-0 min-w-0 overflow-hidden p-6 flex flex-col">
+      <div className="flex-1 flex flex-col xl:flex-row overflow-hidden min-h-0 min-w-0">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden p-4 md:p-6 flex flex-col">
           {splitView ? (
             <div className="h-full min-h-0 flex flex-col">
               <div className="hidden xl:flex h-full min-h-0">

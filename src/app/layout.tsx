@@ -30,7 +30,7 @@ function Sidebar() {
 
   return (
     <aside
-      className="w-60 shrink-0 flex flex-col border-r backdrop-blur-xl"
+      className="app-sidebar w-60 shrink-0 flex flex-col border-r backdrop-blur-xl"
       style={{
         borderColor: 'var(--border)',
         background: 'linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(240,250,252,0.94) 100%)',
@@ -45,13 +45,13 @@ function Sidebar() {
       </div>
 
       {user && (
-        <div className="px-3 pt-3">
+        <div className="app-sidebar-search px-3 pt-3">
           <GlobalSearch />
         </div>
       )}
 
       {/* ナビ */}
-      <nav className="p-3 flex-1">
+      <nav className="app-sidebar-nav p-3 flex-1">
         <ul className="space-y-1">
           {navItems.map(item => (
             <li key={item.href}>
@@ -78,13 +78,13 @@ function Sidebar() {
       </nav>
 
       {!user && !loading && (
-        <div className="p-4 border-t text-xs leading-5" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+        <div className="app-sidebar-public p-4 border-t text-xs leading-5" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
           Struct は、プロジェクトと施策の情報整理、進行管理、実行支援をひとつにまとめる管理ツールです。
         </div>
       )}
 
       {user && (
-        <div className="p-4 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
+        <div className="app-sidebar-user p-4 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
           <Link
             href={withBasePath('/settings')}
             className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -130,9 +130,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <ShortcutProvider>
             <DevSettingsProvider>
-              <div className="flex h-full w-full min-w-0">
+              <div className="app-shell flex h-full w-full min-w-0">
                 <Sidebar />
-                <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden" style={{ background: 'transparent' }}>
+                <main className="app-main flex-1 min-w-0 overflow-y-auto overflow-x-hidden" style={{ background: 'transparent' }}>
                   {children}
                 </main>
               </div>
