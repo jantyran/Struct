@@ -100,7 +100,9 @@ SQLite 単体で動作するため Docker 不要。`git clone` → `npm install`
 
 ### 動作環境
 
-- Node.js v20 以上（LTS 推奨）
+- Node.js v20 以上（v22 LTS 推奨）
+- macOS / Linux 推奨
+- **Windows の場合**: `better-sqlite3` のネイティブビルドに [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) と Python が必要です。インストール後に `npm install` を実行してください。WSL2 上での動作も可能です。
 
 ### クイックスタート（開発）
 
