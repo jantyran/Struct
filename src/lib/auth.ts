@@ -69,7 +69,7 @@ export async function getSession() {
     const { payload } = await jwtVerify(token, getSecret());
     const userId = payload.userId as string;
     const db = getDb();
-    const user = db.prepare('SELECT id, email, name, avatar_url, system_role, organization_id, user_settings FROM users WHERE id = ?').get(userId) as any;
+    const user = db.prepare('SELECT id, email, name, avatar_url, system_role, organization_id, user_settings FROM users WHERE id = ?').get(userId) as { id: string; email: string; name: string; avatar_url: string | null; system_role: string | null; organization_id: string | null; user_settings: string | null } | undefined;
     if (!user) return null;
     const organizationId = user.organization_id || getUserOrganizationId(db, user.id);
     return {

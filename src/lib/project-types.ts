@@ -514,7 +514,7 @@ function normalizeTypeDefinition(
   definition: Partial<ProjectTypeDefinition> & { field_templates?: Partial<ProjectFieldTemplate>[]; sections?: Partial<SectionDefinition>[]; sidebar_tabs?: Partial<SidebarTabDefinition>[] },
   index: number
 ): ProjectTypeDefinition {
-  const legacyContentTemplates = safeArray<{ id?: string }>((definition as any).content_templates);
+  const legacyContentTemplates = safeArray<{ id?: string }>((definition as Partial<ProjectTypeDefinition> & { content_templates?: unknown[] }).content_templates);
   const contentTemplateIds = safeArray<string>(definition.content_template_ids).filter(Boolean);
   const fallbackContentTemplateIds =
     definition.key === 'event'
@@ -593,7 +593,7 @@ export function normalizeProjectTypeDefinitions(data: Partial<ProjectTypeDefinit
   return normalized.length > 0 ? normalized : defaultProjectTypeDefinitions();
 }
 
-export function normalizeProjectTypeDefinitionsRow(row: any): ProjectTypeDefinition[] {
+export function normalizeProjectTypeDefinitionsRow(row: Record<string, unknown>): ProjectTypeDefinition[] {
   const parsed = safeJson<ProjectTypeDefinition[]>(row?.project_types, []);
   return normalizeProjectTypeDefinitions(parsed);
 }

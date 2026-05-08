@@ -57,7 +57,7 @@ export async function PATCH(request: Request, { params: routeParams }: Params) {
 
     const existing = db.prepare(`
       SELECT * FROM generated_assets WHERE id = ? AND project_id = ?
-    `).get(body.assetId, params.id) as any;
+    `).get(body.assetId, params.id) as { id: string; title: string; content: string } | undefined;
 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 

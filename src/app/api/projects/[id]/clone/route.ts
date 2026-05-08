@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { requireSession } from '@/lib/auth';
-import type { CloneOptions } from '@/types';
+import type { CloneOptions, Project, CustomField, ProjectContact, ProjectNote, Todo } from '@/types';
+
+type ProjectSheet = { id: string; name: string; columns_def: string; rows_data: string };
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -26,22 +28,22 @@ export async function POST(request: Request, { params: routeParams }: Params) {
       SELECT p.* FROM projects p
       LEFT JOIN project_members m ON p.id = m.project_id
       WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-    `).get(params.id, user.organization_id, user.id, user.id) as any;
+    `).get(params.id, user.organization_id, user.id, user.id) as Project | undefined;
 
     if (!source) return NextResponse.json({ error: 'Source project not found' }, { status: 404 });
 
-    const sourceFields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
+    const sourceFields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as CustomField[];
     const sourceContacts = includeContacts
-      ? db.prepare('SELECT * FROM project_contacts WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as any[]
+      ? db.prepare('SELECT * FROM project_contacts WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as ProjectContact[]
       : [];
     const sourceSheets = includeSheets
-      ? db.prepare('SELECT * FROM project_sheets WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as any[]
+      ? db.prepare('SELECT * FROM project_sheets WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as ProjectSheet[]
       : [];
     const sourceNotes = includeNotes
-      ? db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as any[]
+      ? db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY datetime(created_at) ASC, rowid ASC').all(params.id) as ProjectNote[]
       : [];
     const sourceTodos = includeTodos
-      ? db.prepare('SELECT * FROM todos WHERE project_id = ? ORDER BY parent_id IS NOT NULL ASC, sort_order ASC, datetime(created_at) ASC').all(params.id) as any[]
+      ? db.prepare('SELECT * FROM todos WHERE project_id = ? ORDER BY parent_id IS NOT NULL ASC, sort_order ASC, datetime(created_at) ASC').all(params.id) as Todo[]
       : [];
 
     const newId = uuidv4();

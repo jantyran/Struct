@@ -111,7 +111,7 @@ function CopyableContactValue({
 // ============================================================
 // NotePickerButton
 // ============================================================
-function NotePickerButton({
+export function NotePickerButton({
   notes,
   selectedIds,
   onChange,

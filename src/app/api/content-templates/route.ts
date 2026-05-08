@@ -37,7 +37,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'プロジェクト設定管理権限がありません' }, { status: 403 });
     }
     const body = await request.json() as { content_templates?: unknown };
-    const templates = normalizeContentTemplates(body.content_templates as any[]);
+    const templates = normalizeContentTemplates(body.content_templates as Partial<import('@/types').ProjectContentTemplate>[] | undefined);
     getOrganizationSettingsRow(db, user.organization_id);
 
     db.prepare(`

@@ -4,6 +4,8 @@ import { requireSession } from '@/lib/auth';
 import { normalizeProjectMemberRole, projectRoleExists, requireProjectPermission } from '@/lib/permissions';
 import { v4 as uuidv4 } from 'uuid';
 
+type MemberRow = { id: string; role: string; user_id: string; email: string; name: string; avatar_url: string | null };
+
 interface Params { params: Promise<{ id: string }> }
 
 function normalizeRole(role: unknown) {
@@ -33,16 +35,10 @@ function projectMembers(db: ReturnType<typeof getDb>, projectId: string) {
     JOIN users u ON m.user_id = u.id
     WHERE m.project_id = ?
     ORDER BY m.created_at ASC
-  `).all(projectId).map((member: any) => ({
-    id: member.id,
-    role: member.role,
-    user: {
-      id: member.user_id,
-      email: member.email,
-      name: member.name,
-      avatar_url: member.avatar_url,
-    },
-  }));
+  `).all(projectId).map((member) => {
+    const m = member as MemberRow;
+    return { id: m.id, role: m.role, user: { id: m.user_id, email: m.email, name: m.name, avatar_url: m.avatar_url } };
+  });
 }
 
 export async function POST(request: Request, { params: routeParams }: Params) {

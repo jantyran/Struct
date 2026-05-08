@@ -39,7 +39,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'プロジェクト設定管理権限がありません' }, { status: 403 });
     }
     const body = await request.json() as { project_types?: unknown };
-    const definitions = normalizeProjectTypeDefinitions(body.project_types as any[]);
+    const definitions = normalizeProjectTypeDefinitions(body.project_types as Partial<import('@/types').ProjectTypeDefinition>[] | undefined);
     getOrganizationSettingsRow(db, user.organization_id);
 
     const tx = db.transaction(() => {

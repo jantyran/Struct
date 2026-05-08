@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 
+type OrganizationRow = Record<string, unknown> & { id: string };
+
 export const DEFAULT_ORGANIZATION_SLUG = 'default';
 export const DEFAULT_ORGANIZATION_NAME = 'Default Organization';
 export const buildOrganizationSettingsScopeKey = (organizationId: string) => `org-settings:${organizationId}`;
@@ -11,7 +13,7 @@ export function ensureDefaultOrganization(db: Database.Database) {
     FROM organizations
     ORDER BY datetime(COALESCE(created_at, '1970-01-01')) ASC, rowid ASC
     LIMIT 1
-  `).get() as any;
+  `).get() as OrganizationRow | undefined;
   if (!organization) {
     const id = uuidv4();
     db.prepare(`
@@ -22,14 +24,14 @@ export function ensureDefaultOrganization(db: Database.Database) {
       )
       VALUES (?, ?, ?, 'active', '', '', '', '', 'Japan', 'ja', 'ja-JP', 'Asia/Tokyo', 'ja-JP', datetime('now'))
     `).run(id, DEFAULT_ORGANIZATION_NAME, DEFAULT_ORGANIZATION_SLUG);
-    organization = db.prepare('SELECT * FROM organizations WHERE id = ?').get(id) as any;
+    organization = db.prepare('SELECT * FROM organizations WHERE id = ?').get(id) as OrganizationRow;
   }
   return organization;
 }
 
 export function getOrganizationRow(db: Database.Database, organizationId?: string) {
   const resolvedOrganizationId = organizationId || getDefaultOrganizationId(db);
-  let organization = db.prepare('SELECT * FROM organizations WHERE id = ?').get(resolvedOrganizationId) as any;
+  let organization = db.prepare('SELECT * FROM organizations WHERE id = ?').get(resolvedOrganizationId) as OrganizationRow | undefined;
   if (!organization) {
     organization = ensureDefaultOrganization(db);
   }
@@ -48,13 +50,13 @@ export function getUserOrganizationId(db: Database.Database, userId: string) {
 
 export function getOrganizationSettingsRow(db: Database.Database, organizationId?: string) {
   const resolvedOrganizationId = organizationId || getDefaultOrganizationId(db);
-  let row = db.prepare('SELECT * FROM organization_settings WHERE organization_id = ?').get(resolvedOrganizationId) as any;
+  let row = db.prepare('SELECT * FROM organization_settings WHERE organization_id = ?').get(resolvedOrganizationId) as Record<string, unknown> | undefined;
   if (!row) {
     db.prepare(`
       INSERT INTO organization_settings (id, organization_id, scope_key)
       VALUES (?, ?, ?)
     `).run(uuidv4(), resolvedOrganizationId, buildOrganizationSettingsScopeKey(resolvedOrganizationId));
-    row = db.prepare('SELECT * FROM organization_settings WHERE organization_id = ?').get(resolvedOrganizationId) as any;
+    row = db.prepare('SELECT * FROM organization_settings WHERE organization_id = ?').get(resolvedOrganizationId) as Record<string, unknown>;
   }
   return row;
 }

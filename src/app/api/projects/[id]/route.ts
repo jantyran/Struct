@@ -5,9 +5,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import { persistProjectCustomFields, syncCustomFieldsWithDefinition } from '@/lib/project-field-sync';
 import { projectAccessForUser, projectRoleDefinitions, requireProjectPermission } from '@/lib/permissions';
-import type { CustomField } from '@/types';
+import type { CustomField, Project } from '@/types';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
+
+type ProjectRow = Project & {
+  owner_email: string; owner_name: string; owner_avatar_url: string | null;
+  primary_assignee_email: string | null; primary_assignee_name: string | null; primary_assignee_avatar_url: string | null;
+};
+type MemberRow = { id: string; user_id: string; email: string; name: string; avatar_url: string | null; role: string };
+type ProjectAccessRow = Project & { member_role: string | null };
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -18,7 +25,7 @@ async function checkProjectAccess(projectId: string, userId: string) {
     SELECT DISTINCT p.*, m.role AS member_role FROM projects p
     LEFT JOIN project_members m ON p.id = m.project_id
     WHERE p.id = ? AND p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
-  `).get(projectId, user?.organization_id ?? null, userId, userId);
+  `).get(projectId, user?.organization_id ?? null, userId, userId) as ProjectAccessRow | undefined;
 }
 
 export async function GET(_req: Request, { params: routeParams }: Params) {
@@ -40,7 +47,7 @@ export async function GET(_req: Request, { params: routeParams }: Params) {
       JOIN users owner ON p.owner_id = owner.id
       LEFT JOIN users lead ON p.primary_assignee_id = lead.id
       WHERE p.id = ? AND p.organization_id = ?
-    `).get(params.id, user.organization_id) as any;
+    `).get(params.id, user.organization_id) as ProjectRow | undefined;
 
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const currentPermissions = projectAccessForUser(db, params.id, user.id);
@@ -74,7 +81,7 @@ export async function GET(_req: Request, { params: routeParams }: Params) {
       : [];
     const assignableUsers = [
       { id: project.owner_id, email: project.owner_email, name: project.owner_name, avatar_url: project.owner_avatar_url },
-      ...members.map((m: any) => ({ id: m.user_id, email: m.email, name: m.name, avatar_url: m.avatar_url })),
+      ...members.map((m) => { const row = m as MemberRow; return { id: row.user_id, email: row.email, name: row.name, avatar_url: row.avatar_url }; }),
     ];
 
     return NextResponse.json({
@@ -91,11 +98,10 @@ export async function GET(_req: Request, { params: routeParams }: Params) {
             avatar_url: project.primary_assignee_avatar_url,
           }
         : null,
-      members: members.map((m: any) => ({
-        id: m.id,
-        user: { id: m.user_id, email: m.email, name: m.name, avatar_url: m.avatar_url },
-        role: m.role,
-      })),
+      members: members.map((m) => {
+        const row = m as MemberRow;
+        return { id: row.id, user: { id: row.user_id, email: row.email, name: row.name, avatar_url: row.avatar_url }, role: row.role };
+      }),
       contacts,
       invitations,
       assignable_users: assignableUsers,
@@ -143,9 +149,9 @@ export async function PUT(request: Request, { params: routeParams }: Params) {
       }>;
     };
     const nextPrimaryAssigneeId = body.primary_assignee_id === undefined
-      ? (projectAccess as any).primary_assignee_id ?? null
+      ? projectAccess.primary_assignee_id ?? null
       : body.primary_assignee_id;
-    const currentStatus = (projectAccess as any).status as string;
+    const currentStatus = projectAccess.status;
     const nextStatus = body.status ?? currentStatus;
     const shouldMarkCompleted = nextStatus === 'completed' && currentStatus !== 'completed';
     const shouldClearCompleted = nextStatus !== 'completed';
@@ -199,7 +205,7 @@ export async function PUT(request: Request, { params: routeParams }: Params) {
         if (!currentPermissions.can_edit_items) throw new Error('NO_ITEM_EDIT_PERMISSION');
         const settingsRow = getOrganizationSettingsRow(db, user.organization_id);
         const definitions = normalizeProjectTypeDefinitionsRow(settingsRow);
-        const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? (projectAccess as any).type));
+        const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? projectAccess.type));
         const incomingFields = body.custom_fields.map((f, idx) => ({
           id: f.id ?? uuidv4(),
           project_id: params.id,
@@ -225,7 +231,7 @@ export async function PUT(request: Request, { params: routeParams }: Params) {
 
     const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id);
     const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id);
-    return NextResponse.json({ ...updated as any, custom_fields: fields });
+    return NextResponse.json({ ...(updated as Project), custom_fields: fields });
   } catch (err) {
     if ((err as Error).message === 'NO_ITEM_EDIT_PERMISSION') {
       return NextResponse.json({ error: '項目編集権限がありません' }, { status: 403 });
@@ -240,7 +246,7 @@ export async function DELETE(_req: Request, { params: routeParams }: Params) {
   try {
     const user = await requireSession();
     const db = getDb();
-    const project = db.prepare('SELECT owner_id FROM projects WHERE id = ? AND organization_id = ?').get(params.id, user.organization_id) as any;
+    const project = db.prepare('SELECT owner_id FROM projects WHERE id = ? AND organization_id = ?').get(params.id, user.organization_id) as { owner_id: string } | undefined;
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (!requireProjectPermission(db, params.id, user.id, 'delete_project')) return NextResponse.json({ error: '削除権限がありません' }, { status: 403 });
 

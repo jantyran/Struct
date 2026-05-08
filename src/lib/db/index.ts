@@ -435,7 +435,7 @@ function ensureOrganizationModel(db: Database.Database) {
       datetime(COALESCE(ga.updated_at, '1970-01-01')) DESC,
       datetime(COALESCE(u.created_at, '1970-01-01')) ASC
     LIMIT 1
-  `).get() as any;
+  `).get() as Record<string, unknown> | undefined;
 
   const organizations = db.prepare('SELECT id FROM organizations ORDER BY datetime(COALESCE(created_at, \'1970-01-01\')) ASC, rowid ASC').all() as Array<{ id: string }>;
 

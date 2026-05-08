@@ -44,7 +44,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
     }
     const body = await request.json() as { settings?: unknown };
-    const settings = normalizeAISettings((body.settings as any) || {});
+    const settings = normalizeAISettings((body.settings as Partial<import('@/types').AISettings>) || {});
     getOrganizationSettingsRow(db, user.organization_id);
 
     db.prepare(`

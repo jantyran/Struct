@@ -97,11 +97,8 @@ export async function GET() {
     WHERE assignee_id = ? AND status != 'done'
   `).get(user.id) as { cnt: number }).cnt;
 
-  // 自分がオーナーのプロジェクト内の急ぎタスク（全ユーザー分）
-  // DB から返る行は owner_id（スネークケース）のため any キャストで参照
   const ownedProjectIds = projects
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter(p => (p as any).owner_id === user.id)
+    .filter(p => p.owner_id === user.id)
     .map(p => p.id);
 
   let managedUrgentTodos: DashboardTodo[] = [];

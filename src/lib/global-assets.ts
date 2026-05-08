@@ -139,7 +139,7 @@ export function createGlobalAssetObject(seed: Partial<GlobalAssetObject> = {}): 
   );
 }
 
-function legacyObjectsFromRow(row: any): GlobalAssetObject[] {
+function legacyObjectsFromRow(row: Record<string, unknown>): GlobalAssetObject[] {
   const defaults = defaultGlobalAssetObjects();
   const companyObject = defaults.find((object) => object.key === 'company-profile')!;
   const brandObject = defaults.find((object) => object.key === 'brand-guidelines')!;
@@ -151,8 +151,8 @@ function legacyObjectsFromRow(row: any): GlobalAssetObject[] {
       name: '会社情報',
       key: 'company_profile',
       values: {
-        company_name: row?.company_name || '',
-        company_description: row?.company_description || '',
+        company_name: (row?.company_name as string) || '',
+        company_description: (row?.company_description as string) || '',
         industry: '',
         website_url: '',
       },
@@ -165,15 +165,15 @@ function legacyObjectsFromRow(row: any): GlobalAssetObject[] {
       name: 'ブランド定義',
       key: 'brand_guidelines',
       values: {
-        brand_voice: row?.brand_voice || '',
+        brand_voice: (row?.brand_voice as string) || '',
         tagline: '',
-        brand_guidelines: row?.brand_guidelines || '',
+        brand_guidelines: (row?.brand_guidelines as string) || '',
         ng_words: '',
       },
     },
   ];
 
-  const products = safeArray<any>(safeJson<any[]>(row?.products, []));
+  const products = safeArray<Record<string, string>>(safeJson<Record<string, string>[]>(row?.products as string | null | undefined, []));
   productsObject.records = products.map((product, index) => ({
     id: product?.id || `product-${index + 1}`,
     name: product?.name || `製品・サービス ${index + 1}`,
@@ -198,14 +198,14 @@ export function normalizeGlobalAssets(data: Partial<GlobalAssets> | null | undef
   };
 }
 
-export function normalizeGlobalAssetsRow(row: any): GlobalAssets {
+export function normalizeGlobalAssetsRow(row: Record<string, unknown>): GlobalAssets {
   const objects = row?.objects
-    ? normalizeGlobalAssets({ objects: safeJson<GlobalAssetObject[]>(row.objects, []), updated_at: row.updated_at }).objects
+    ? normalizeGlobalAssets({ objects: safeJson<GlobalAssetObject[]>(row.objects as string, []), updated_at: row.updated_at as string | undefined }).objects
     : legacyObjectsFromRow(row);
 
   return {
     objects,
-    updated_at: row?.updated_at || '',
+    updated_at: (row?.updated_at as string) || '',
   };
 }
 

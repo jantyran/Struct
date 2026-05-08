@@ -35,10 +35,10 @@ export function normalizeAISettings(data: Partial<AISettings> | null | undefined
   };
 }
 
-export function normalizeAISettingsRow(row: any): AISettings {
+export function normalizeAISettingsRow(row: Record<string, unknown>): AISettings {
   if (!row?.ai_settings) return defaultAISettings();
   try {
-    return normalizeAISettings(JSON.parse(row.ai_settings));
+    return normalizeAISettings(JSON.parse(row.ai_settings as string));
   } catch {
     return defaultAISettings();
   }

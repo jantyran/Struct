@@ -225,7 +225,7 @@ export function normalizeContentTemplates(data: Partial<ProjectContentTemplate>[
   return normalized.length > 0 ? normalized : defaultContentTemplates();
 }
 
-export function normalizeContentTemplatesRow(row: any): ProjectContentTemplate[] {
+export function normalizeContentTemplatesRow(row: Record<string, unknown>): ProjectContentTemplate[] {
   const parsed = safeJson<ProjectContentTemplate[]>(row?.content_templates, []);
   return normalizeContentTemplates(parsed);
 }

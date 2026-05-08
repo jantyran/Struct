@@ -8,7 +8,15 @@ function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function serializeOrganization(organization: any) {
+type OrgRow = {
+  id: string; name: string; slug: string; status: string | null;
+  address_street: string | null; address_city: string | null; address_state: string | null;
+  address_postal_code: string | null; address_country: string | null;
+  default_language: string | null; default_locale: string | null;
+  default_time_zone: string | null; currency_locale: string | null;
+};
+
+function serializeOrganization(organization: OrgRow) {
   return {
     id: organization.id,
     name: organization.name,
@@ -31,7 +39,7 @@ export async function GET() {
     const user = await requireSession();
     try {
       const db = getDb();
-      const organization = getOrganizationRow(db, user.organization_id);
+      const organization = getOrganizationRow(db, user.organization_id) as unknown as OrgRow;
       return NextResponse.json({
         organization: serializeOrganization(organization),
         can_edit: hasSystemPermission(db, user.id, 'manage_organization_settings'),
@@ -70,7 +78,7 @@ export async function PUT(request: Request) {
         };
       };
 
-      const current = getOrganizationRow(db, user.organization_id);
+      const current = getOrganizationRow(db, user.organization_id) as unknown as OrgRow;
       const next = {
         name: normalizeText(body.organization?.name) || current.name,
         slug: current.slug,
@@ -117,7 +125,7 @@ export async function PUT(request: Request) {
       );
 
       return NextResponse.json({
-        organization: serializeOrganization(getOrganizationRow(db, current.id)),
+        organization: serializeOrganization(getOrganizationRow(db, current.id) as unknown as OrgRow),
         can_edit: true,
       });
     } catch (error) {

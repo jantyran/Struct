@@ -2,15 +2,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition, ProjectContact } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, FieldLayout, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition, ProjectContact, SectionItemKind } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
 import { useDevSettings } from '@/components/DevSettingsContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
-import SectionInfoWidget from './components/SectionInfoWidget';
-import { DecorationPlacement } from './components/SectionInfoWidget';
+import { NotePickerButton } from './components/SectionInfoWidget';
 
 type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
 
@@ -3048,7 +3047,7 @@ export default function ProjectPage() {
                         {renderItems.map(item => {
                           if (item.type === 'widget') {
                             if (item.kind === 'divider' || item.kind === 'subheading' || item.kind === 'text_block') {
-                              return <DecorationPlacement key={item.key} item={{ id: item.key, field_id: '', kind: item.kind as any, layout: item.layout as any, config: item.config }} layout={item.layout as 'half' | 'full'} />;
+                              return <DecorationPlacement key={item.key} item={{ id: item.key, field_id: '', kind: item.kind as SectionItemKind, layout: item.layout as FieldLayout, config: item.config }} layout={item.layout as 'half' | 'full'} />;
                             }
                             return (
                               <SectionInfoWidget

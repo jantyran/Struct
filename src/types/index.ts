@@ -216,7 +216,7 @@ export interface Project {
   completed_at?: string | null;
   completed_by?: string | null;
   updated_at: string;
-  ownerId: string;
+  owner_id: string;
   owner?: ProjectUser;
   members?: ProjectMember[];
   contacts?: ProjectContact[];

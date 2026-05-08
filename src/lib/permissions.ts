@@ -1,5 +1,7 @@
 import type Database from 'better-sqlite3';
 
+type RoleRow = { id: string; key: string; name: string; description: string; permissions: string; is_system: number; sort_order: number };
+
 export const SYSTEM_PERMISSION_KEYS = [
   'manage_organization_settings',
   'manage_users',
@@ -216,11 +218,10 @@ export function projectRoleDefinitions(db: Database.Database) {
     SELECT id, key, name, description, permissions, is_system, sort_order
     FROM project_role_definitions
     ORDER BY sort_order ASC, created_at ASC
-  `).all().map((role: any) => ({
-    ...role,
-    permissions: parseProjectRolePermissions(role.permissions),
-    is_system: role.is_system === 1,
-  }));
+  `).all().map((role) => {
+    const r = role as RoleRow;
+    return { ...r, permissions: parseProjectRolePermissions(r.permissions), is_system: r.is_system === 1 };
+  });
 }
 
 export function projectRoleExists(db: Database.Database, roleKey: string) {
@@ -234,11 +235,10 @@ export function systemRoleDefinitions(db: Database.Database) {
     SELECT id, key, name, description, permissions, is_system, sort_order
     FROM system_role_definitions
     ORDER BY sort_order ASC, created_at ASC
-  `).all().map((role: any) => ({
-    ...role,
-    permissions: parseSystemPermissions(role.permissions),
-    is_system: role.is_system === 1,
-  }));
+  `).all().map((role) => {
+    const r = role as RoleRow;
+    return { ...r, permissions: parseSystemPermissions(r.permissions), is_system: r.is_system === 1 };
+  });
 }
 
 export function systemRoleExists(db: Database.Database, roleKey: string) {

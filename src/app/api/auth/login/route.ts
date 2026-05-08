@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as any;
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as { id: string; email: string; name: string; password_hash: string } | undefined;
 
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     return NextResponse.json({ error: "メールアドレスまたはパスワードが正しくありません" }, { status: 401 });
