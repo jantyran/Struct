@@ -629,7 +629,8 @@ export default function Dashboard() {
   const [cloneSource, setCloneSource] = useState<Project | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
-  const [showAllProjects, setShowAllProjects] = useState(false);
+  const isWideScreen = () => typeof window !== 'undefined' && window.innerWidth >= 1280;
+  const [showAllProjects, setShowAllProjects] = useState(() => isWideScreen());
   const [viewMode, setViewMode] = useState<'card' | 'table'>(() => {
     if (typeof window === 'undefined') return 'card';
     return (localStorage.getItem('dashboard_view') as 'card' | 'table') || 'card';
@@ -762,7 +763,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <div className="flex flex-wrap gap-2 flex-1">
               {filterChips.map(f => (
-                <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); setShowAllProjects(false); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
+                <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); setShowAllProjects(isWideScreen()); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
                   {f.l}
                 </button>
               ))}
@@ -784,7 +785,7 @@ export default function Dashboard() {
                           <button
                             className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
                             style={{ color: 'var(--text-muted)' }}
-                            onClick={() => { setFilter('all'); setTypeDropdownOpen(false); setShowAllProjects(false); }}
+                            onClick={() => { setFilter('all'); setTypeDropdownOpen(false); setShowAllProjects(isWideScreen()); }}
                           >
                             絞り込みを解除
                           </button>
@@ -794,7 +795,7 @@ export default function Dashboard() {
                             key={d.key}
                             className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
                             style={{ color: filter === d.key ? 'var(--accent)' : 'var(--text-primary)', fontWeight: filter === d.key ? 600 : undefined }}
-                            onClick={() => { setFilter(d.key); setTypeDropdownOpen(false); setShowAllProjects(false); }}
+                            onClick={() => { setFilter(d.key); setTypeDropdownOpen(false); setShowAllProjects(isWideScreen()); }}
                           >
                             {d.name}
                           </button>
@@ -874,9 +875,9 @@ export default function Dashboard() {
                     さらに {hiddenCount} 件のプロジェクトを表示
                   </button>
                 )}
-                {showAllProjects && filtered.length > PANEL_LIMIT && (
+                {showAllProjects && filtered.length > PANEL_LIMIT && !isWideScreen() && (
                   <button
-                    onClick={() => setShowAllProjects(false)}
+                    onClick={() => setShowAllProjects(isWideScreen())}
                     className="mt-4 w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
                     style={{
                       border: '1px dashed var(--border)',
