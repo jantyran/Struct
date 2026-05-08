@@ -167,7 +167,7 @@ export async function POST(request: Request, { params: routeParams }: Params) {
     const cloned = db.prepare('SELECT * FROM projects WHERE id = ?').get(newId);
     return NextResponse.json(cloned, { status: 201 });
   } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('POST /api/projects/[id]/clone failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

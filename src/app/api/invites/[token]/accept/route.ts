@@ -3,6 +3,17 @@ import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 
+interface Invitation {
+  id: string;
+  project_id: string;
+  email: string;
+  token: string;
+  role: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+}
+
 interface Params { params: Promise<{ token: string }> }
 
 export async function POST(request: Request, { params: routeParams }: Params) {
@@ -13,7 +24,7 @@ export async function POST(request: Request, { params: routeParams }: Params) {
     
     const invitation = db.prepare(`
       SELECT * FROM invitations WHERE token = ? AND status = 'PENDING'
-    `).get(params.token) as any;
+    `).get(params.token) as Invitation | undefined;
 
     if (!invitation) {
       return NextResponse.json({ error: "有効な招待が見つかりません" }, { status: 404 });

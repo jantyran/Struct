@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { crawlUrl } from '@/lib/crawler';
 import { requireSession } from '@/lib/auth';
 import { requireProjectPermission } from '@/lib/permissions';
+import type { CustomField } from '@/types';
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -22,7 +23,7 @@ export async function POST(request: Request, { params: routeParams }: Params) {
     }
 
     const field = db.prepare('SELECT * FROM custom_fields WHERE id = ? AND project_id = ?')
-      .get(body.field_id, params.id) as any;
+      .get(body.field_id, params.id) as CustomField | undefined;
 
     if (!field) return NextResponse.json({ error: 'Field not found' }, { status: 404 });
     if (field.type !== 'url') return NextResponse.json({ error: 'URL型フィールドのみクローリング可能です' }, { status: 400 });

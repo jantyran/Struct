@@ -230,7 +230,7 @@ export async function PUT(request: Request, { params: routeParams }: Params) {
     if ((err as Error).message === 'NO_ITEM_EDIT_PERMISSION') {
       return NextResponse.json({ error: '項目編集権限がありません' }, { status: 403 });
     }
-    console.error(err);
+    console.error('PATCH /api/projects/[id] failed', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

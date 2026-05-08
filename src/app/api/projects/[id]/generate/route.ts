@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateText } from '@/lib/ai/client';
 import { buildProjectContext, buildContentPrompt, extractWarnings, SYSTEM_PROMPT } from '@/lib/ai/prompt-builder';
 import { requireSession } from '@/lib/auth';
-import type { AssetType, ProjectWithFields, GlobalAssets } from '@/types';
+import type { AssetType, ProjectWithFields, GlobalAssets, Project, CustomField, ProjectNote, GeneratedAsset } from '@/types';
 import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 import { normalizeAISettingsRow } from '@/lib/ai/settings';
 import { normalizeContentTemplatesRow } from '@/lib/content-templates';
@@ -35,16 +35,16 @@ export async function POST(request: Request, { params: routeParams }: Params) {
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
       return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
     }
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id) as any;
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id) as Project | undefined;
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const noteIds: string[] = body.note_ids ?? [];
-    const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
-    const allNotes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];
+    const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as CustomField[];
+    const allNotes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as ProjectNote[];
     const notes = noteIds.length > 0
-      ? allNotes.filter((n: any) => noteIds.includes(n.id))
+      ? allNotes.filter((n) => noteIds.includes(n.id))
       : allNotes;
-    const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as any[];
+    const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as GeneratedAsset[];
 
     const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
 
@@ -101,7 +101,7 @@ export async function POST(request: Request, { params: routeParams }: Params) {
 
     return NextResponse.json({ results });
   } catch (err) {
-    console.error(err);
+    console.error('POST /api/projects/[id]/generate failed', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Asset generation failed' }, { status: 500 });
   }
 }

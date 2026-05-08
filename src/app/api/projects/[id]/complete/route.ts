@@ -7,7 +7,7 @@ import {
   SYSTEM_PROMPT,
 } from '@/lib/ai/prompt-builder';
 import { requireSession } from '@/lib/auth';
-import type { ProjectWithFields, GlobalAssets } from '@/types';
+import type { ProjectWithFields, GlobalAssets, Project, CustomField, ProjectNote, GeneratedAsset } from '@/types';
 import { normalizeGlobalAssetsRow } from '@/lib/global-assets';
 import { normalizeAISettingsRow } from '@/lib/ai/settings';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
@@ -39,12 +39,12 @@ export async function POST(req: Request, { params: routeParams }: Params) {
     if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) {
       return NextResponse.json({ error: '生成権限がありません' }, { status: 403 });
     }
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id) as any;
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(params.id) as Project | undefined;
     if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as any[];
-    const notes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as any[];
-    const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as any[];
+    const fields = db.prepare('SELECT * FROM custom_fields WHERE project_id = ? ORDER BY sort_order ASC').all(params.id) as CustomField[];
+    const notes = db.prepare('SELECT * FROM project_notes WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC').all(params.id) as ProjectNote[];
+    const generatedAssets = db.prepare('SELECT * FROM generated_assets WHERE project_id = ? ORDER BY datetime(created_at) DESC').all(params.id) as GeneratedAsset[];
 
     const globalAssetsRow = getOrganizationSettingsRow(db, user.organization_id);
     const projectTypes = normalizeProjectTypeDefinitionsRow(globalAssetsRow);
@@ -76,7 +76,7 @@ export async function POST(req: Request, { params: routeParams }: Params) {
     const referenceNotes = noteIds.length > 0
       ? (db.prepare(
           `SELECT * FROM project_notes WHERE project_id = ? AND id IN (${noteIds.map(() => '?').join(',')}) ORDER BY created_at ASC`
-        ).all(params.id, ...noteIds) as any[])
+        ).all(params.id, ...noteIds) as ProjectNote[])
       : [];
 
     const prompt = buildCompletionPrompt(typedProject, typedGlobal, emptyFields, additionalInstruction, referenceNotes);
@@ -93,7 +93,7 @@ export async function POST(req: Request, { params: routeParams }: Params) {
 
     return NextResponse.json({ suggestions, raw_response: raw });
   } catch (err) {
-    console.error(err);
+    console.error('POST /api/projects/[id]/complete failed', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Completion failed' }, { status: 500 });
   }
 }

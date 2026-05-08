@@ -5,10 +5,22 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/components/AuthContext';
 import { withBasePath } from '@/lib/paths';
 
+interface InvitationData {
+  id: string;
+  project_id: string;
+  email: string;
+  token: string;
+  role: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  project: { name: string };
+}
+
 export default function InviteAcceptPage() {
   const { token } = useParams<{ token: string }>();
   const { user, loading: authLoading } = useAuth();
-  const [invitation, setInvitation] = useState<any>(null);
+  const [invitation, setInvitation] = useState<InvitationData | null>(null);
   const [error, setError] = useState('');
   const [accepting, setAccepting] = useState(false);
   const router = useRouter();
@@ -52,7 +64,7 @@ export default function InviteAcceptPage() {
         
         {error ? (
           <div className="text-red-400 mb-6">{error}</div>
-        ) : (
+        ) : invitation ? (
           <>
             <p className="mb-6">
               あなたはプロジェクト <strong>{invitation.project.name}</strong> に招待されました。
@@ -78,7 +90,7 @@ export default function InviteAcceptPage() {
               </button>
             )}
           </>
-        )}
+        ) : null}
         
         <button onClick={() => router.push(withBasePath('/'))} className="mt-6 text-xs text-gray-500 hover:text-gray-300">
           ダッシュボードへ戻る

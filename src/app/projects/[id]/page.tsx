@@ -9,6 +9,8 @@ import { useAuth } from '@/components/AuthContext';
 import { useDevSettings } from '@/components/DevSettingsContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
+import SectionInfoWidget from './components/SectionInfoWidget';
+import { DecorationPlacement } from './components/SectionInfoWidget';
 
 type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
 
@@ -941,103 +943,6 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
           )}
           {field.crawled_content && (
             <p className="text-xs mt-1" style={{ color: 'var(--success)' }}>✓ URL内容取得済み ({field.crawled_content.length} 文字)</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
-// ノートピッカーボタン
-// ============================================================
-function NotePickerButton({
-  notes,
-  selectedIds,
-  onChange,
-}: {
-  notes: ProjectNote[];
-  selectedIds: Set<string>;
-  onChange: (next: Set<string>) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  const count = selectedIds.size;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-colors"
-        style={{
-          borderColor: count > 0 ? 'var(--accent)' : 'var(--border)',
-          color: count > 0 ? 'var(--accent)' : 'var(--text-secondary)',
-          backgroundColor: count > 0 ? 'rgba(15,154,177,0.06)' : 'transparent',
-        }}
-      >
-        <span>📎 参照ノート</span>
-        {count > 0 && (
-          <span className="px-1.5 py-0.5 rounded-full text-[0.625rem] font-semibold" style={{ backgroundColor: 'var(--accent)', color: 'white' }}>
-            {count}
-          </span>
-        )}
-        <span style={{ color: 'var(--text-muted)' }}>{open ? '▲' : '▼'}</span>
-      </button>
-
-      {open && (
-        <div
-          className="absolute z-50 left-0 mt-1 w-72 rounded-xl border shadow-lg overflow-hidden"
-          style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-elevated)' }}
-        >
-          <div className="px-3 py-2 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>参照するノートを選択</span>
-            {count > 0 && (
-              <button
-                type="button"
-                onClick={() => onChange(new Set())}
-                className="text-[0.625rem] transition-colors"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                すべて解除
-              </button>
-            )}
-          </div>
-          {notes.length === 0 ? (
-            <p className="px-3 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>ノートがありません</p>
-          ) : (
-            <div className="max-h-52 overflow-y-auto">
-              {notes.map((note) => (
-                <label
-                  key={note.id}
-                  className="flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-colors hover:bg-[rgba(15,154,177,0.04)]"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 shrink-0 accent-cyan-600"
-                    checked={selectedIds.has(note.id)}
-                    onChange={(e) => {
-                      const next = new Set(selectedIds);
-                      if (e.target.checked) next.add(note.id); else next.delete(note.id);
-                      onChange(next);
-                    }}
-                  />
-                  <span className="text-xs leading-tight truncate" style={{ color: 'var(--text-primary)' }}>
-                    {note.title || '（無題）'}
-                  </span>
-                </label>
-              ))}
-            </div>
           )}
         </div>
       )}

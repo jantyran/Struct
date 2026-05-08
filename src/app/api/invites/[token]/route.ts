@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 
+interface InvitationWithProject {
+  id: string;
+  project_id: string;
+  email: string;
+  token: string;
+  role: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  project_name: string;
+}
+
 interface Params { params: Promise<{ token: string }> }
 
 export async function GET(_req: Request, { params: routeParams }: Params) {
@@ -10,7 +22,7 @@ export async function GET(_req: Request, { params: routeParams }: Params) {
     SELECT i.*, p.name as project_name FROM invitations i
     JOIN projects p ON i.project_id = p.id
     WHERE i.token = ?
-  `).get(params.token) as any;
+  `).get(params.token) as InvitationWithProject | undefined;
 
   if (!invitation) return NextResponse.json({ error: 'Invalid token' }, { status: 404 });
   if (invitation.status !== 'PENDING') return NextResponse.json({ error: 'Already accepted or declined' }, { status: 400 });

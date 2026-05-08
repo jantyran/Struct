@@ -42,9 +42,8 @@ export default function SignupPage() {
       } else {
         setError(data.error || 'アカウントの作成に失敗しました。');
       }
-    } catch (err: any) {
+    } catch {
       setError('接続エラーが発生しました。');
-      console.error(err);
     } finally {
       setLoading(false);
     }
