@@ -4,6 +4,7 @@ import { attachSessionCookie, createSessionToken } from "@/lib/auth";
 import { seedSystemRoles } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { getDefaultOrganizationId } from "@/lib/organization-settings";
+import { isEmailConfigured, sendWelcomeEmail } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
@@ -55,6 +56,11 @@ export async function POST(request: Request) {
   );
 
   seedSystemRoles(db);
+
+  // ウェルカムメール（SMTP設定済みの場合のみ。失敗してもサインアップは完了とする）
+  if (isEmailConfigured()) {
+    sendWelcomeEmail(email.toLowerCase(), name || null).catch(() => {});
+  }
 
   const token = await createSessionToken(id);
   return attachSessionCookie(

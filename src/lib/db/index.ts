@@ -353,6 +353,15 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_project_sheets_project_created ON project_sheets(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_project_contacts_project_created ON project_contacts(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_invitations_project_status ON invitations(project_id, status);
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      used_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
   `);
 
   db.prepare(`

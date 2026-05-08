@@ -85,19 +85,17 @@ export default function LoginPage() {
           </button>
         </form>
         
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-3">
           <p className="text-xs text-gray-500">
             アカウントをお持ちでないですか？{' '}
             <Link href={withBasePath('/signup')} className="text-violet-400 hover:text-violet-300">
               新規登録
             </Link>
           </p>
-          <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
-            パスワードを忘れた場合は、ログイン済みなら
-            <Link href={withBasePath('/settings/password')} className="ml-1 text-violet-400 hover:text-violet-300">
-              設定のパスワード変更
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            <Link href={withBasePath('/forgot-password')} className="text-violet-400 hover:text-violet-300">
+              パスワードをお忘れですか？
             </Link>
-            から更新できます。ログインできない場合は管理者に再設定を依頼してください。
           </p>
         </div>
       </div>
