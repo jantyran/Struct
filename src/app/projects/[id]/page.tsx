@@ -1757,6 +1757,8 @@ export default function ProjectPage() {
   const [contentTemplatesLoading, setContentTemplatesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingMsg, setSavingMsg] = useState('');
+  // モバイル用ステータスドロップダウンの開閉状態
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
@@ -1784,7 +1786,7 @@ export default function ProjectPage() {
   const [secondaryTab, setSecondaryTab] = useState<ProjectDetailTabKey>('notes');
   const [splitRatio, setSplitRatio] = useState(0.5);
   const [activeSidebarTabId, setActiveSidebarTabId] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const paneTabHeaderRefs = useRef<{ primary: HTMLDivElement | null; secondary: HTMLDivElement | null }>({ primary: null, secondary: null });
   const paneTabListRefs = useRef<{ primary: HTMLDivElement | null; secondary: HTMLDivElement | null }>({ primary: null, secondary: null });
   const [compactPaneTabs, setCompactPaneTabs] = useState<{ primary: boolean; secondary: boolean }>({ primary: false, secondary: false });
@@ -3309,23 +3311,25 @@ export default function ProjectPage() {
       style={{ borderColor: 'var(--border)' }}
     >
       <div className="min-w-0 flex-1">
-        {splitView && compactPaneTabs[pane] ? (
-          <select
-            className="field-input text-sm max-w-[13rem]"
-            value={currentTab}
-            onChange={(event) => setPaneTab(pane, event.target.value as ProjectDetailTabKey)}
-            aria-label="表示タブを選択"
-          >
-            {tabOptions.map((option) => (
-              <option key={`${pane}-${option.k}`} value={option.k}>
-                {option.l}
-              </option>
-            ))}
-          </select>
-        ) : (
+        {/* モバイル（sm未満）または splitView+コンパクト時: select */}
+        <select
+          className={`field-input text-sm max-w-[13rem] ${splitView && compactPaneTabs[pane] ? '' : 'sm:hidden'}`}
+          value={currentTab}
+          onChange={(event) => setPaneTab(pane, event.target.value as ProjectDetailTabKey)}
+          aria-label="表示タブを選択"
+        >
+          {tabOptions.map((option) => (
+            <option key={`${pane}-${option.k}`} value={option.k}>
+              {option.l}
+            </option>
+          ))}
+        </select>
+        {/* sm以上 かつ splitView非コンパクト時: タブボタン */}
+        {!(splitView && compactPaneTabs[pane]) && (
           <div
             ref={(node) => { paneTabListRefs.current[pane] = node; }}
-            className="flex gap-2 flex-nowrap overflow-hidden"
+            className="hidden sm:flex gap-2 flex-nowrap overflow-x-auto"
+            style={{ scrollbarWidth: 'none' }}
           >
             {tabOptions.map((option) => (
               <button
@@ -3348,7 +3352,7 @@ export default function ProjectPage() {
               setSecondaryTab(nextSecondary);
               setSplitView(true);
             }}
-            className="btn-secondary text-xs"
+            className="hidden md:inline-flex btn-secondary text-xs"
           >
             2画面表示
           </button>
@@ -3455,19 +3459,40 @@ export default function ProjectPage() {
 
     if (!sidebarOpen) {
       return (
-        <div className="w-full xl:w-10 shrink-0 border-t xl:border-t-0 xl:border-l flex flex-row xl:flex-col items-center justify-start p-3 xl:pt-4 xl:p-0" style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}>
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="rounded-full border w-7 h-7 inline-flex items-center justify-center transition-colors"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'rgba(255,255,255,0.82)', boxShadow: '0 8px 18px rgba(44,112,134,0.08)' }}
-            aria-label="サイドバーを開く"
-            title="サイドバーを開く"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
+        <div
+          className="w-full xl:w-10 shrink-0 border-t xl:border-t-0 xl:border-l"
+          style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(241,250,252,0.9) 100%)' }}
+        >
+          {/* モバイル: 横バー中央にボタン + ラベル */}
+          <div className="xl:hidden flex justify-center py-2">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'rgba(255,255,255,0.9)', boxShadow: '0 2px 6px rgba(44,112,134,0.08)' }}
+              aria-label="補助情報を開く"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+              補助情報
+            </button>
+          </div>
+          {/* デスクトップ: 縦に細い列、ボタン上部 */}
+          <div className="hidden xl:flex flex-col items-center pt-4">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-full border w-7 h-7 inline-flex items-center justify-center transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: 'rgba(255,255,255,0.82)', boxShadow: '0 8px 18px rgba(44,112,134,0.08)' }}
+              aria-label="サイドバーを開く"
+              title="サイドバーを開く"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
         </div>
       );
     }
@@ -3617,51 +3642,120 @@ export default function ProjectPage() {
             )}
           </div>
 
-          {/* ステータス・ピルセレクター */}
-          <div className="flex max-w-full overflow-x-auto items-center rounded-xl border shrink-0" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}>
-            {([
-              { value: 'draft',    label: '下書き',   dot: '#9fb8c4' },
-              { value: 'active',   label: 'アクティブ', dot: '#1f9d72' },
-              { value: 'completed', label: '完了', dot: '#10b981' },
-              { value: 'archived', label: 'アーカイブ', dot: '#9fb8c4' },
-            ] as { value: typeof project.status; label: string; dot: string }[]).map((opt, i) => {
-              const isSelected = project.status === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={!canEditProject}
-                  onClick={() => setProject({ ...project, status: opt.value })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all"
-                  style={{
-                    borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
-                    background: isSelected
-                      ? opt.value === 'active'
-                        ? 'linear-gradient(135deg, rgba(31,157,114,0.15) 0%, rgba(183,244,216,0.4) 100%)'
-                        : opt.value === 'completed'
-                          ? 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(209,250,229,0.5) 100%)'
-                        : opt.value === 'draft'
-                          ? 'linear-gradient(135deg, rgba(15,154,177,0.1) 0%, rgba(126,215,222,0.2) 100%)'
-                          : 'rgba(159,184,196,0.12)'
-                      : 'transparent',
-                    color: isSelected
-                      ? opt.value === 'active' || opt.value === 'completed' ? 'var(--success)' : opt.value === 'draft' ? 'var(--accent)' : 'var(--text-secondary)'
-                      : 'var(--text-muted)',
-                  }}
-                >
-                  <span
-                    className="inline-block rounded-full shrink-0"
-                    style={{
-                      width: 7, height: 7,
-                      backgroundColor: isSelected ? opt.dot : 'var(--border)',
-                      boxShadow: isSelected ? `0 0 0 2px ${opt.dot}44` : 'none',
-                    }}
-                  />
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* ステータスセレクター（デスクトップ: ピル形式、モバイル: ドロップダウン） */}
+          {(() => {
+            const statusOptions = [
+              { value: 'draft',     label: '下書き',    dot: '#9fb8c4' },
+              { value: 'active',    label: 'アクティブ', dot: '#1f9d72' },
+              { value: 'completed', label: '完了',      dot: '#10b981' },
+              { value: 'archived',  label: 'アーカイブ', dot: '#9fb8c4' },
+            ] as { value: typeof project.status; label: string; dot: string }[];
+
+            const currentOpt = statusOptions.find((o) => o.value === project.status) ?? statusOptions[0];
+
+            return (
+              <div className="relative shrink-0">
+                {/* デスクトップ: 横並びピルセレクター */}
+                <div className="hidden sm:flex max-w-full overflow-x-auto items-center rounded-xl border" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}>
+                  {statusOptions.map((opt, i) => {
+                    const isSelected = project.status === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        disabled={!canEditProject}
+                        onClick={() => setProject({ ...project, status: opt.value })}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all"
+                        style={{
+                          borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
+                          background: isSelected
+                            ? opt.value === 'active'
+                              ? 'linear-gradient(135deg, rgba(31,157,114,0.15) 0%, rgba(183,244,216,0.4) 100%)'
+                              : opt.value === 'completed'
+                                ? 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(209,250,229,0.5) 100%)'
+                                : opt.value === 'draft'
+                                  ? 'linear-gradient(135deg, rgba(15,154,177,0.1) 0%, rgba(126,215,222,0.2) 100%)'
+                                  : 'rgba(159,184,196,0.12)'
+                            : 'transparent',
+                          color: isSelected
+                            ? opt.value === 'active' || opt.value === 'completed'
+                              ? 'var(--success)'
+                              : opt.value === 'draft'
+                                ? 'var(--accent)'
+                                : 'var(--text-secondary)'
+                            : 'var(--text-muted)',
+                        }}
+                      >
+                        <span
+                          className="inline-block rounded-full shrink-0"
+                          style={{
+                            width: 7, height: 7,
+                            backgroundColor: isSelected ? opt.dot : 'var(--border)',
+                            boxShadow: isSelected ? `0 0 0 2px ${opt.dot}44` : 'none',
+                          }}
+                        />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* モバイル: 現在のステータスをバッジ表示してタップでドロップダウン */}
+                <div className="sm:hidden">
+                  <button
+                    type="button"
+                    disabled={!canEditProject}
+                    onClick={() => setStatusDropdownOpen((prev) => !prev)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border transition-all"
+                    style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.7)' }}
+                  >
+                    <span
+                      className="inline-block rounded-full shrink-0"
+                      style={{ width: 7, height: 7, backgroundColor: currentOpt.dot, boxShadow: `0 0 0 2px ${currentOpt.dot}44` }}
+                    />
+                    {currentOpt.label}
+                    {/* 展開矢印 */}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+
+                  {/* ドロップダウンリスト */}
+                  {statusDropdownOpen && (
+                    <div
+                      className="absolute left-0 mt-1 z-50 rounded-xl border shadow-lg p-1"
+                      style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
+                    >
+                      {statusOptions.map((opt) => {
+                        const isSelected = project.status === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              setProject({ ...project, status: opt.value });
+                              setStatusDropdownOpen(false);
+                            }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-lg transition-colors"
+                            style={{
+                              background: isSelected ? 'rgba(15,154,177,0.08)' : 'transparent',
+                              color: isSelected ? 'var(--accent)' : 'var(--text-secondary)',
+                            }}
+                          >
+                            <span
+                              className="inline-block rounded-full shrink-0"
+                              style={{ width: 7, height: 7, backgroundColor: opt.dot }}
+                            />
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 保存・削除 */}
           {savingMsg && (

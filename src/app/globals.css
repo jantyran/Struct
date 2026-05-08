@@ -54,6 +54,7 @@ html[data-reduce-motion='true'] *::after {
 
 body {
   min-height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(126, 215, 222, 0.28), transparent 28%),
     radial-gradient(circle at top right, rgba(255, 210, 163, 0.22), transparent 24%),
@@ -310,64 +311,6 @@ html[data-compact] .space-y-4 > * + * { margin-top: 0.625rem; }
 /* ============================================================
    Responsive app shell
    ============================================================ */
-@media (max-width: 1023px) {
-  body {
-    overflow: hidden;
-  }
-
-  .app-shell {
-    flex-direction: column;
-  }
-
-  .app-sidebar {
-    width: 100%;
-    max-height: 12.5rem;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-    overflow: hidden;
-  }
-
-  .app-sidebar > div:first-child {
-    padding: 0.75rem 1rem;
-  }
-
-  .app-sidebar > div:first-child p,
-  .app-sidebar > div:last-child {
-    display: none;
-  }
-
-  .app-sidebar-nav {
-    flex: 0 0 auto;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 0.5rem 0.75rem 0.75rem;
-  }
-
-  .app-sidebar-nav ul {
-    display: flex;
-    gap: 0.5rem;
-    min-width: max-content;
-  }
-
-  .app-sidebar-nav li {
-    flex: 0 0 auto;
-  }
-
-  .app-sidebar-nav a {
-    white-space: nowrap;
-  }
-
-  .app-sidebar-search,
-  .app-sidebar-user,
-  .app-sidebar-public {
-    display: none;
-  }
-
-  .app-main {
-    min-height: 0;
-  }
-}
-
 @media (max-width: 767px) {
   .app-main > .p-6,
   .app-main > .p-8,
@@ -397,15 +340,6 @@ html[data-compact] .space-y-4 > * + * { margin-top: 0.625rem; }
 }
 
 @media (max-width: 480px) {
-  .app-sidebar {
-    max-height: 10rem;
-  }
-
-  .app-sidebar-nav {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-  }
-
   .tab-btn {
     padding-left: 0.65rem;
     padding-right: 0.65rem;

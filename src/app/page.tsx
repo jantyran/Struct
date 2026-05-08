@@ -629,6 +629,7 @@ export default function Dashboard() {
   const [cloneSource, setCloneSource] = useState<Project | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'table'>(() => {
     if (typeof window === 'undefined') return 'card';
     return (localStorage.getItem('dashboard_view') as 'card' | 'table') || 'card';
@@ -761,7 +762,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <div className="flex flex-wrap gap-2 flex-1">
               {filterChips.map(f => (
-                <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
+                <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); setShowAllProjects(false); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
                   {f.l}
                 </button>
               ))}
@@ -783,7 +784,7 @@ export default function Dashboard() {
                           <button
                             className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
                             style={{ color: 'var(--text-muted)' }}
-                            onClick={() => { setFilter('all'); setTypeDropdownOpen(false); }}
+                            onClick={() => { setFilter('all'); setTypeDropdownOpen(false); setShowAllProjects(false); }}
                           >
                             絞り込みを解除
                           </button>
@@ -793,7 +794,7 @@ export default function Dashboard() {
                             key={d.key}
                             className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
                             style={{ color: filter === d.key ? 'var(--accent)' : 'var(--text-primary)', fontWeight: filter === d.key ? 600 : undefined }}
-                            onClick={() => { setFilter(d.key); setTypeDropdownOpen(false); }}
+                            onClick={() => { setFilter(d.key); setTypeDropdownOpen(false); setShowAllProjects(false); }}
                           >
                             {d.name}
                           </button>
@@ -843,19 +844,52 @@ export default function Dashboard() {
               phaseMap={phaseMap}
               onClone={setCloneSource}
             />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filtered.map(p => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  typeLabel={typeLabelMap[p.type] || p.type}
-                  phases={phaseMap[p.type] || []}
-                  onClone={setCloneSource}
-                />
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            const PANEL_LIMIT = 4;
+            const displayedProjects = showAllProjects ? filtered : filtered.slice(0, PANEL_LIMIT);
+            const hiddenCount = filtered.length - PANEL_LIMIT;
+            return (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {displayedProjects.map(p => (
+                    <ProjectCard
+                      key={p.id}
+                      project={p}
+                      typeLabel={typeLabelMap[p.type] || p.type}
+                      phases={phaseMap[p.type] || []}
+                      onClone={setCloneSource}
+                    />
+                  ))}
+                </div>
+                {!showAllProjects && hiddenCount > 0 && (
+                  <button
+                    onClick={() => setShowAllProjects(true)}
+                    className="mt-4 w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    style={{
+                      border: '1px dashed var(--border)',
+                      color: 'var(--accent)',
+                      background: 'rgba(15,154,177,0.03)',
+                    }}
+                  >
+                    さらに {hiddenCount} 件のプロジェクトを表示
+                  </button>
+                )}
+                {showAllProjects && filtered.length > PANEL_LIMIT && (
+                  <button
+                    onClick={() => setShowAllProjects(false)}
+                    className="mt-4 w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    style={{
+                      border: '1px dashed var(--border)',
+                      color: 'var(--text-muted)',
+                      background: 'transparent',
+                    }}
+                  >
+                    折りたたむ
+                  </button>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* 右: サイドバー */}
