@@ -5,9 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3002 -H 0.0.0.0",
     "build": "bash ./build.sh",
-    "start": "next start -p 38427 -H 0.0.0.0",
-    "start:dev": "next dev -p 3002 -H 0.0.0.0",
-    "start:prod": "next start -p 38427 -H 0.0.0.0"
+    "start": "next start -p 38427 -H 0.0.0.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
