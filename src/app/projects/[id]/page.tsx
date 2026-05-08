@@ -1690,7 +1690,9 @@ export default function ProjectPage() {
   const [secondaryTab, setSecondaryTab] = useState<ProjectDetailTabKey>('notes');
   const [splitRatio, setSplitRatio] = useState(0.5);
   const [activeSidebarTabId, setActiveSidebarTabId] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1280 : false
+  );
   const paneTabHeaderRefs = useRef<{ primary: HTMLDivElement | null; secondary: HTMLDivElement | null }>({ primary: null, secondary: null });
   const paneTabListRefs = useRef<{ primary: HTMLDivElement | null; secondary: HTMLDivElement | null }>({ primary: null, secondary: null });
   const [compactPaneTabs, setCompactPaneTabs] = useState<{ primary: boolean; secondary: boolean }>({ primary: false, secondary: false });
