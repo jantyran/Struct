@@ -30,6 +30,14 @@ function ensureColumn(db: Database.Database, table: string, column: string, defi
   }
 }
 
+function runMigration(db: Database.Database, version: number, fn: () => void) {
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`);
+  const already = db.prepare(`SELECT 1 FROM schema_migrations WHERE version = ?`).get(version);
+  if (already) return;
+  fn();
+  db.prepare(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`).run(version, new Date().toISOString());
+}
+
 function initSchema(db: Database.Database) {
   db.exec(`
     -- ユーザー
@@ -361,11 +369,11 @@ function initSchema(db: Database.Database) {
   `).run();
   seedSystemRoles(db);
   seedProjectRoles(db);
-  migratePermissionKey(db, 'manage_global_assets', 'manage_master_data');
-  ensureOrganizationModel(db);
 
-  // 既存プロジェクトのコアカラム値を custom_fields に移行
-  migrateProjectCoreFields(db);
+  // 番号付きマイグレーション（追加するときは末尾に連番で追記する）
+  runMigration(db, 1, () => migratePermissionKey(db, 'manage_global_assets', 'manage_master_data'));
+  runMigration(db, 2, () => ensureOrganizationModel(db));
+  runMigration(db, 3, () => migrateProjectCoreFields(db));
 }
 
 function migratePermissionKey(db: Database.Database, oldKey: string, newKey: string) {
