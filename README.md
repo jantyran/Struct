@@ -1,7 +1,9 @@
 # Struct
 
-Struct は、`MKTキャンペーン運用デスク` として使う認証付きのキャンペーン管理アプリです。  
-キャンペーンやイベントごとの進行管理、構造化された情報管理、生成コンテンツ管理、AI 生成を 1 つの画面群で扱います。
+**プロジェクト・施策をチームで構造化して管理するセルフホスト型ツール**
+
+Struct は、SQLite 単体で動くシンプルなプロジェクト管理ツールです。  
+Docker なしで `git clone` → `npm install` → `npm run dev` の 3 ステップで起動し、チームのプロジェクト・タスク・ノート・マスターデータを一元管理します。
 
 ## 主な機能
 
@@ -74,31 +76,41 @@ Struct は、`MKTキャンペーン運用デスク` として使う認証付き�
 
 ### 推奨環境
 
-- Node.js v23 以上
+- Node.js v20 以上（LTS 推奨）
 
-### 手順
+### クイックスタート（開発）
+
+```bash
+git clone https://github.com/jantyran/Struct.git
+cd Struct
+cp .env.example .env   # JWT_SECRET だけ書き換えればすぐ動く
+npm install
+npm run dev            # → http://localhost:3002
+```
+
+起動後、`/signup` にアクセスして最初のアカウントを作成してください。  
+**初回のみ `ALLOW_PUBLIC_SIGNUP` の設定に関わらずサインアップできます**（作成したアカウントが自動的に管理者になります）。
+
+### 本番デプロイ
 
 ```bash
 cp .env.example .env
+# .env を編集（下記「環境変数」参照）
 npm install
-npm run dev
+npm run build
+npm run start          # → http://0.0.0.0:38427
 ```
 
-`.env` では以下を設定してください。
+### 環境変数
 
-```env
-JWT_SECRET=任意の長い文字列
-NEXT_PUBLIC_BASE_URL=http://133.18.123.87:38427
-NEXT_PUBLIC_BASE_PATH=
-ALLOW_PUBLIC_SIGNUP=false
-```
+| 変数 | 説明 | 必須 |
+|---|---|---|
+| `JWT_SECRET` | セッション署名用の秘密鍵（長いランダム文字列） | ✅ |
+| `NEXT_PUBLIC_BASE_URL` | 外部公開 URL（招待リンク生成に使用） | 推奨 |
+| `NEXT_PUBLIC_BASE_PATH` | サブパス配備時のみ設定（例: `/struct`） | — |
+| `ALLOW_PUBLIC_SIGNUP` | `true` にすると誰でも登録可能（デフォルト: 無効） | — |
 
-補足:
-
-- ルート配備が既定です
-- サブパス配備時のみ `NEXT_PUBLIC_BASE_PATH=/struct` のように設定してください
-- 公開ユーザー登録を許可する場合だけ `ALLOW_PUBLIC_SIGNUP=true` にしてください
-- AI API キーは `.env` ではなく、ログイン後の `設定 > AI設定` から保存する運用です
+> AI API キーは `.env` ではなく、ログイン後の **設定 > AI設定** から設定します。
 
 ## 起動ポリシー
 
@@ -124,7 +136,9 @@ ALLOW_PUBLIC_SIGNUP=false
 ## 認証
 
 - `/signup` でユーザー登録
-  - API は `ALLOW_PUBLIC_SIGNUP=true` のときだけ有効
+  - DB にユーザーが 0 人のとき（初回セットアップ）は常に登録可能
+  - 2 人目以降は `ALLOW_PUBLIC_SIGNUP=true` のときだけ有効
+  - 最初に登録したユーザーが自動的に管理者（SYSTEM_ADMIN）になる
 - `/login` でログイン
 - セッションは `session` Cookie に JWT として保存
 

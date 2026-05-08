@@ -8,7 +8,13 @@ import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: Request) {
-  if (process.env.ALLOW_PUBLIC_SIGNUP !== 'true') {
+  const db = getDb();
+
+  // ユーザーが1人もいない場合は初回セットアップとして ALLOW_PUBLIC_SIGNUP を無視して許可
+  const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
+  const isFirstSetup = userCount === 0;
+
+  if (!isFirstSetup && process.env.ALLOW_PUBLIC_SIGNUP !== 'true') {
     return NextResponse.json({ error: "新規登録は現在停止されています" }, { status: 403 });
   }
 
@@ -31,7 +37,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "メールアドレスとパスワードが必要です" }, { status: 400 });
   }
 
-  const db = getDb();
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
   if (existing) {
     return NextResponse.json({ error: "このメールアドレスは既に登録されています" }, { status: 400 });
