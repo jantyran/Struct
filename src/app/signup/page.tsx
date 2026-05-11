@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthContext';
@@ -13,8 +13,33 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialSetup, setInitialSetup] = useState<boolean | null>(null);
+  const [publicSignupEnabled, setPublicSignupEnabled] = useState(false);
   const router = useRouter();
   const { checkSession } = useAuth();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(withBasePath('/api/auth/setup-status'), { cache: 'no-store' });
+        const data = await res.json() as { env_configured?: boolean; needs_initial_setup?: boolean; public_signup_enabled?: boolean };
+        if (cancelled) return;
+        if (data.env_configured === false) {
+          router.replace(withBasePath('/setup/env'));
+          return;
+        }
+        setInitialSetup(Boolean(data.needs_initial_setup));
+        setPublicSignupEnabled(Boolean(data.public_signup_enabled));
+        if (!data.needs_initial_setup && !data.public_signup_enabled) {
+          router.replace(withBasePath('/login'));
+        }
+      } catch {
+        if (!cancelled) setInitialSetup(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [router]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +65,10 @@ export default function SignupPage() {
             : withBasePath('/');
         router.push(redirectTo);
       } else {
+        if (data.requires_env_setup) {
+          router.push(withBasePath('/setup/env'));
+          return;
+        }
         setError(data.error || 'アカウントの作成に失敗しました。');
       }
     } catch {
@@ -49,12 +78,26 @@ export default function SignupPage() {
     }
   };
 
+  if (initialSetup === null) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-black">
+        <div className="card w-full max-w-md p-8 text-sm" style={{ color: 'var(--text-secondary)' }}>
+          読み込み中...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-black">
       <div className="card w-full max-w-md p-8 shadow-2xl">
-        <h1 className="text-2xl font-bold mb-6 text-center text-violet-300">Struct アカウント作成</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center text-violet-300">
+          {initialSetup ? '管理者アカウント作成' : 'Struct アカウント作成'}
+        </h1>
         <p className="text-sm text-center mb-6 leading-6" style={{ color: 'var(--text-secondary)' }}>
-          プロジェクト・施策管理ツールとして使い始めるための組織アカウントを作成します。
+          {initialSetup
+            ? '最初のユーザーはシステム管理者として作成されます。'
+            : 'プロジェクト・施策管理ツールとして使い始めるための組織アカウントを作成します。'}
         </p>
         
         <form onSubmit={handleSignup} className="space-y-4">
@@ -110,14 +153,16 @@ export default function SignupPage() {
           </button>
         </form>
         
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            すでにアカウントをお持ちですか？{' '}
-            <Link href={withBasePath('/login')} className="text-violet-400 hover:text-violet-300">
-              ログイン
-            </Link>
-          </p>
-        </div>
+        {!initialSetup && publicSignupEnabled && (
+          <div className="mt-6 text-center">
+            <p className="text-xs text-gray-500">
+              すでにアカウントをお持ちですか？{' '}
+              <Link href={withBasePath('/login')} className="text-violet-400 hover:text-violet-300">
+                ログイン
+              </Link>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

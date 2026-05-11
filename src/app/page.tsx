@@ -641,20 +641,34 @@ export default function Dashboard() {
     localStorage.setItem('dashboard_view', mode);
   }
 
+  const redirectToAuth = useCallback(async () => {
+    try {
+      const res = await fetch(withBasePath('/api/auth/setup-status'), { cache: 'no-store' });
+      const setup = await res.json() as { env_configured?: boolean; needs_initial_setup?: boolean };
+      if (setup.env_configured === false) {
+        router.push(withBasePath('/setup/env'));
+        return;
+      }
+      router.push(withBasePath(setup.needs_initial_setup ? '/signup' : '/login'));
+    } catch {
+      router.push(withBasePath('/login'));
+    }
+  }, [router]);
+
   const load = useCallback(async () => {
     const res = await fetch(withBasePath('/api/dashboard'));
-    if (res.status === 401) { router.push(withBasePath('/login')); return; }
+    if (res.status === 401) { redirectToAuth(); return; }
     setData(await res.json() as DashboardData);
-  }, [router]);
+  }, [redirectToAuth]);
 
   useEffect(() => {
     if (authLoading) return;
     (async () => {
       const resolved = user ?? await checkSession();
-      if (!resolved) { router.push(withBasePath('/login')); return; }
+      if (!resolved) { redirectToAuth(); return; }
       load();
     })();
-  }, [authLoading, user, load, router, checkSession]);
+  }, [authLoading, user, load, redirectToAuth, checkSession]);
 
   if (authLoading || !data) {
     return (

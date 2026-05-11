@@ -25,8 +25,6 @@ function Sidebar() {
   const publicNavItems = [
     { href: '/about', label: 'Struct とは', icon: '◌' },
     { href: '/guide', label: '使い方', icon: '◎' },
-    { href: '/login', label: 'ログイン', icon: '→' },
-    { href: '/signup', label: '新規登録', icon: '+' },
   ];
 
   const navItems = user ? privateNavItems : publicNavItems;

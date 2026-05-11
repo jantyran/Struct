@@ -19,6 +19,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "新規登録は現在停止されています" }, { status: 403 });
   }
 
+  if (!process.env.JWT_SECRET) {
+    return NextResponse.json(
+      {
+        error: "JWT_SECRET 環境変数が設定されていません。.env ファイルを作成してください。",
+        requires_env_setup: true,
+      },
+      { status: 500 }
+    );
+  }
+
   // アカウント作成スパム対策: IPごとに 5回/分 まで
   const ip = getClientIp(request);
   const rl = checkRateLimit(`signup:${ip}`, 5, 60_000);
@@ -46,16 +56,18 @@ export async function POST(request: Request) {
   const id = uuidv4();
   const passwordHash = await bcrypt.hash(password, 10);
   const organizationId = getDefaultOrganizationId(db);
+  const systemRole = isFirstSetup ? 'SYSTEM_ADMIN' : 'USER';
 
-  db.prepare('INSERT INTO users (id, email, password_hash, name, organization_id) VALUES (?, ?, ?, ?, ?)').run(
+  seedSystemRoles(db);
+
+  db.prepare('INSERT INTO users (id, email, password_hash, name, organization_id, system_role) VALUES (?, ?, ?, ?, ?, ?)').run(
     id,
     email.toLowerCase(),
     passwordHash,
     name || null,
-    organizationId
+    organizationId,
+    systemRole
   );
-
-  seedSystemRoles(db);
 
   // ウェルカムメール（SMTP設定済みの場合のみ。失敗してもサインアップは完了とする）
   if (isEmailConfigured()) {
