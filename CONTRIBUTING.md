@@ -14,7 +14,7 @@ git clone https://github.com/jantyran/Struct.git
 cd Struct
 cp .env.example .env   # JWT_SECRET を設定
 npm install
-npm run dev            # → http://localhost:3002
+npm run dev            # → http://localhost:3002（使用中なら 3003, 3004...）
 ```
 
 ### 技術スタック

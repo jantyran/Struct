@@ -111,10 +111,10 @@ git clone https://github.com/jantyran/Struct.git
 cd Struct
 cp .env.example .env   # JWT_SECRET を書き換えるだけで動く
 npm install
-npm run dev            # → http://localhost:3002
+npm run dev            # → http://localhost:3002（使用中なら 3003, 3004...）
 ```
 
-起動後、`http://localhost:3002/signup` にアクセスして最初のアカウントを作成してください。  
+起動後、ターミナルに表示された URL（例: `http://localhost:3002/signup`）にアクセスして最初のアカウントを作成してください。  
 **初回のみ** `ALLOW_PUBLIC_SIGNUP` の設定に関わらずサインアップできます。最初に登録したアカウントが自動的に管理者になります。
 
 ### 本番デプロイ
