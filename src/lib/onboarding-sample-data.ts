@@ -269,10 +269,18 @@ export async function seedOnboardingSampleData(
     }
 
     const fields = [
-      [userGuideProjectId, 'learning_goal', 'このプロジェクトで学ぶこと', 'textarea', 'ダッシュボード、プロジェクト詳細、タスク、ノート、シート、マスターデータ、レポート、マイページ設定の基本操作。', '学習ガイド', 0],
-      [userGuideProjectId, 'recommended_order', 'おすすめの進め方', 'textarea', 'タスクを上から順に開き、説明を読んで実際の画面を操作してください。終わったタスクは完了にします。', '学習ガイド', 1],
-      [adminGuideProjectId, 'admin_learning_goal', '管理者が確認すること', 'textarea', '組織設定、マスターデータ、ユーザー管理、ロール権限、プロジェクト種別、生成コンテンツ設定、AI設定の場所と役割。', '管理者ガイド', 0],
-      [practiceProjectId, 'target', '目的', 'textarea', '新規プロジェクトを追加したあと、基本情報とタスクを整理する練習用。', '基本情報', 0],
+      [userGuideProjectId, 'description', '目的・背景', 'textarea', 'Struct を使い始める全ユーザーが、日常操作をタスク形式で学ぶためのプロジェクトです。タスクを上から進めることで、ダッシュボード、プロジェクト詳細、タスク、ノート、シート、マスターデータ、レポート、マイページ設定を確認できます。', '基本情報', 0],
+      [userGuideProjectId, 'target', 'ターゲット', 'textarea', 'Struct を初めて使う一般ユーザー、プロジェクトメンバー、タスク担当者。', '基本情報', 1],
+      [userGuideProjectId, 'kpi', '目標KPI・成果指標', 'textarea', '9件の学習タスクを完了し、日常操作の流れを一通り理解する。', '基本情報', 2],
+      [userGuideProjectId, 'learning_goal', 'このプロジェクトで学ぶこと', 'textarea', 'ダッシュボード、プロジェクト詳細、タスク、ノート、シート、マスターデータ、レポート、マイページ設定の基本操作。', '学習ガイド', 3],
+      [userGuideProjectId, 'recommended_order', 'おすすめの進め方', 'textarea', 'タスクを上から順に開き、説明を読んで実際の画面を操作してください。終わったタスクは完了にします。', '学習ガイド', 4],
+      [adminGuideProjectId, 'description', '目的・背景', 'textarea', 'Struct の管理者が、運用開始前に設定画面と権限管理の全体像を確認するためのプロジェクトです。組織設定、マスターデータ、ユーザー管理、ロール、プロジェクト設定、生成コンテンツ設定、AI設定を順番に確認します。', '基本情報', 0],
+      [adminGuideProjectId, 'target', 'ターゲット', 'textarea', 'Struct のシステム管理者、チーム管理者、運用設計を担当するメンバー。', '基本情報', 1],
+      [adminGuideProjectId, 'kpi', '目標KPI・成果指標', 'textarea', '管理者向けチェックタスクを完了し、本番運用前に必要な設定箇所を把握する。', '基本情報', 2],
+      [adminGuideProjectId, 'admin_learning_goal', '管理者が確認すること', 'textarea', '組織設定、マスターデータ、ユーザー管理、ロール権限、プロジェクト種別、生成コンテンツ設定、AI設定の場所と役割。', '管理者ガイド', 3],
+      [practiceProjectId, 'description', '目的・背景', 'textarea', '新規プロジェクトを追加したあと、基本情報とタスクを整理する練習用の例です。全ユーザー向け練習プロジェクトのタスク「新しいプロジェクトを追加してみる」で参照できます。', '基本情報', 0],
+      [practiceProjectId, 'target', 'ターゲット', 'textarea', '春のキャンペーンを担当するプロジェクトメンバーとレビュー担当者。', '基本情報', 1],
+      [practiceProjectId, 'kpi', '目標KPI・成果指標', 'textarea', 'プロジェクト名、目的、ターゲット、タスク、担当者が入力された状態を確認する。', '基本情報', 2],
     ];
     for (const [projectId, key, label, type, value, section, sortOrder] of fields) {
       db.prepare(`

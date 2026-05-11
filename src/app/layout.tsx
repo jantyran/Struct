@@ -1,7 +1,7 @@
 'use client';
 import './globals.css';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/components/AuthContext';
 import { DevSettingsProvider } from '@/components/DevSettingsContext';
@@ -14,6 +14,11 @@ function Sidebar() {
   const { logout, user, loading } = useAuth();
   // モバイルドロワーの開閉状態
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<{
+    env_configured?: boolean;
+    needs_initial_setup?: boolean;
+    public_signup_enabled?: boolean;
+  } | null>(null);
 
   const privateNavItems = [
     { href: '/', label: 'ダッシュボード', icon: '⬡' },
@@ -25,9 +30,29 @@ function Sidebar() {
   const publicNavItems = [
     { href: '/about', label: 'Struct とは', icon: '◌' },
     { href: '/guide', label: '使い方', icon: '◎' },
+    ...(setupStatus?.env_configured && !setupStatus.needs_initial_setup
+      ? [
+          { href: '/login', label: 'ログイン', icon: '→' },
+          { href: '/signup', label: '新規登録', icon: '+' },
+        ]
+      : []),
   ];
 
   const navItems = user ? privateNavItems : publicNavItems;
+
+  useEffect(() => {
+    if (user) return;
+    let cancelled = false;
+    fetch(withBasePath('/api/auth/setup-status'), { cache: 'no-store' })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!cancelled) setSetupStatus(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSetupStatus(null);
+      });
+    return () => { cancelled = true; };
+  }, [user]);
 
   return (
     <>

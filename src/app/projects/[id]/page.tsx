@@ -10,6 +10,9 @@ import { useDevSettings } from '@/components/DevSettingsContext';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 import { NotePickerButton } from './components/SectionInfoWidget';
+import TodoTab from '@/components/TodoTab';
+import SheetTab from '@/components/SheetTab';
+import ProjectStructureTab from '@/components/ProjectStructureTab';
 
 type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
 
@@ -18,21 +21,6 @@ const LazyPanelFallback = ({ label }: { label: string }) => (
     <p className="text-sm">{label}</p>
   </div>
 );
-
-const TodoTab = dynamic(() => import('@/components/TodoTab'), {
-  ssr: false,
-  loading: () => <LazyPanelFallback label="タスクを準備中..." />,
-});
-
-const SheetTab = dynamic(() => import('@/components/SheetTab'), {
-  ssr: false,
-  loading: () => <LazyPanelFallback label="シートを準備中..." />,
-});
-
-const ProjectStructureTab = dynamic(() => import('@/components/ProjectStructureTab'), {
-  ssr: false,
-  loading: () => <LazyPanelFallback label="構成を準備中..." />,
-});
 
 const ProjectRelationsWidget = dynamic(() => import('@/components/ProjectRelationsWidget'), {
   ssr: false,
