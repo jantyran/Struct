@@ -47,11 +47,7 @@
     "postcss": "^8.5.10"
   },
   "description": "**チームのプロジェクト・施策を構造化して管理する、セルフホスト型プロジェクト管理ツール**",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
-  "repository": {
+"repository": {
     "type": "git",
     "url": "git+https://github.com/jantyran/Struct.git"
   },
