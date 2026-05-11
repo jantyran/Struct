@@ -347,9 +347,9 @@ export async function seedOnboardingSampleData(
       '操作練習チェックリスト',
       JSON.stringify([{ id: 'step', name: '練習内容', type: 'text' }, { id: 'screen', name: '画面', type: 'text' }, { id: 'status', name: '状態', type: 'text' }]),
       JSON.stringify([
-        { id: uuidv4(), step: 'タスクの状態を変更する', screen: 'プロジェクト詳細 > タスク', status: '未着手' },
-        { id: uuidv4(), step: 'マスターデータを見る', screen: 'マスターデータ', status: '未着手' },
-        { id: uuidv4(), step: 'レポートを見る', screen: 'レポート', status: '未着手' },
+        { id: uuidv4(), cells: { step: 'タスクの状態を変更する', screen: 'プロジェクト詳細 > タスク', status: '未着手' } },
+        { id: uuidv4(), cells: { step: 'マスターデータを見る', screen: 'マスターデータ', status: '未着手' } },
+        { id: uuidv4(), cells: { step: 'レポートを見る', screen: 'レポート', status: '未着手' } },
       ]),
       adminId,
     );
@@ -363,9 +363,9 @@ export async function seedOnboardingSampleData(
       '管理者設定チェックリスト',
       JSON.stringify([{ id: 'area', name: '設定領域', type: 'text' }, { id: 'purpose', name: '確認すること', type: 'text' }, { id: 'done', name: '確認状況', type: 'text' }]),
       JSON.stringify([
-        { id: uuidv4(), area: 'マスターデータ', purpose: '共通データの項目とレコード', done: '未確認' },
-        { id: uuidv4(), area: 'ユーザー管理', purpose: 'ユーザー追加とロール変更の場所', done: '未確認' },
-        { id: uuidv4(), area: '生成コンテンツ設定', purpose: 'テンプレートとAI設定の管理', done: '未確認' },
+        { id: uuidv4(), cells: { area: 'マスターデータ', purpose: '共通データの項目とレコード', done: '未確認' } },
+        { id: uuidv4(), cells: { area: 'ユーザー管理', purpose: 'ユーザー追加とロール変更の場所', done: '未確認' } },
+        { id: uuidv4(), cells: { area: '生成コンテンツ設定', purpose: 'テンプレートとAI設定の管理', done: '未確認' } },
       ]),
       adminId,
     );
