@@ -5,6 +5,18 @@ import { NextResponse } from "next/server";
 
 const ENV_PATH = path.join(process.cwd(), ".env");
 
+function runtimeEnvKey(...parts: string[]) {
+  return parts.join("_");
+}
+
+function getRuntimeEnv(...parts: string[]) {
+  return process.env[runtimeEnvKey(...parts)];
+}
+
+function setRuntimeEnv(value: string, ...parts: string[]) {
+  process.env[runtimeEnvKey(...parts)] = value;
+}
+
 function normalizeBasePath(value: unknown) {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
@@ -51,17 +63,18 @@ function envText({
 }
 
 export async function GET() {
+  const envFileExists = existsSync(ENV_PATH);
   return NextResponse.json({
-    env_file_exists: existsSync(ENV_PATH),
-    env_configured: Boolean(process.env.JWT_SECRET),
+    env_file_exists: envFileExists,
+    env_configured: envFileExists && Boolean(getRuntimeEnv("JWT", "SECRET")),
     suggested_jwt_secret: randomBytes(32).toString("hex"),
-    suggested_base_url: process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3002",
-    suggested_base_path: process.env.NEXT_PUBLIC_BASE_PATH || "",
+    suggested_base_url: getRuntimeEnv("NEXT", "PUBLIC", "BASE", "URL") || "http://localhost:3002",
+    suggested_base_path: getRuntimeEnv("NEXT", "PUBLIC", "BASE", "PATH") || "",
   });
 }
 
 export async function POST(request: Request) {
-  if (process.env.JWT_SECRET) {
+  if (existsSync(ENV_PATH) && getRuntimeEnv("JWT", "SECRET")) {
     return NextResponse.json({ error: ".env はすでに設定されています" }, { status: 409 });
   }
 
@@ -87,10 +100,10 @@ export async function POST(request: Request) {
 
   writeFileSync(ENV_PATH, envText({ jwtSecret, baseUrl, basePath }), { encoding: "utf8", flag: "wx" });
 
-  process.env.JWT_SECRET = jwtSecret;
-  process.env.NEXT_PUBLIC_BASE_URL = baseUrl;
-  process.env.NEXT_PUBLIC_BASE_PATH = basePath;
-  process.env.ALLOW_PUBLIC_SIGNUP = "false";
+  setRuntimeEnv(jwtSecret, "JWT", "SECRET");
+  setRuntimeEnv(baseUrl, "NEXT", "PUBLIC", "BASE", "URL");
+  setRuntimeEnv(basePath, "NEXT", "PUBLIC", "BASE", "PATH");
+  setRuntimeEnv("false", "ALLOW", "PUBLIC", "SIGNUP");
 
   return NextResponse.json({ success: true });
 }

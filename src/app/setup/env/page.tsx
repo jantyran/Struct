@@ -25,19 +25,33 @@ export default function EnvSetupPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch(withBasePath('/api/setup/env'), { cache: 'no-store' });
-      const data = await res.json() as EnvSetupStatus;
+      const setupRes = await fetch(withBasePath('/api/auth/setup-status'), { cache: 'no-store' });
+      const setup = await setupRes.json() as { env_configured?: boolean; needs_initial_setup?: boolean };
       if (cancelled) return;
-      if (data.env_configured) {
-        router.replace(withBasePath('/signup'));
+      if (setup.env_configured) {
+        router.replace(withBasePath(setup.needs_initial_setup ? '/signup' : '/login'));
         return;
       }
+
+      const res = await fetch(withBasePath('/api/setup/env'), { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to load env setup status');
+      const data = await res.json() as EnvSetupStatus;
+      if (cancelled) return;
       setStatus(data);
       setJwtSecret(data.suggested_jwt_secret);
       setBaseUrl(data.suggested_base_url);
       setBasePath(data.suggested_base_path);
     })().catch(() => {
-      if (!cancelled) setError('環境設定の状態を取得できませんでした。');
+      if (!cancelled) {
+        setError('環境設定の状態を取得できませんでした。ページを再読み込みしてください。');
+        setStatus({
+          env_file_exists: false,
+          env_configured: false,
+          suggested_jwt_secret: '',
+          suggested_base_url: 'http://localhost:3002',
+          suggested_base_path: '',
+        });
+      }
     });
     return () => { cancelled = true; };
   }, [router]);

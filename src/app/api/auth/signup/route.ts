@@ -5,15 +5,16 @@ import { seedSystemRoles } from "@/lib/permissions";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { getDefaultOrganizationId } from "@/lib/organization-settings";
 import { isEmailConfigured, sendWelcomeEmail } from "@/lib/email";
+import { seedOnboardingSampleData } from "@/lib/onboarding-sample-data";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: Request) {
   const db = getDb();
 
-  // ユーザーが1人もいない場合は初回セットアップとして ALLOW_PUBLIC_SIGNUP を無視して許可
-  const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
-  const isFirstSetup = userCount === 0;
+  // 管理者が1人もいない場合は初回セットアップとして ALLOW_PUBLIC_SIGNUP を無視して許可
+  const adminCount = (db.prepare("SELECT COUNT(*) as count FROM users WHERE system_role = 'SYSTEM_ADMIN'").get() as { count: number }).count;
+  const isFirstSetup = adminCount === 0;
 
   if (!isFirstSetup && process.env.ALLOW_PUBLIC_SIGNUP !== 'true') {
     return NextResponse.json({ error: "新規登録は現在停止されています" }, { status: 403 });
@@ -48,35 +49,48 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "メールアドレスとパスワードが必要です" }, { status: 400 });
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
-  if (existing) {
+  const normalizedEmail = email.toLowerCase();
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail) as { id: string } | undefined;
+  if (existing && !isFirstSetup) {
     return NextResponse.json({ error: "このメールアドレスは既に登録されています" }, { status: 400 });
   }
 
-  const id = uuidv4();
+  const id = existing?.id || uuidv4();
   const passwordHash = await bcrypt.hash(password, 10);
   const organizationId = getDefaultOrganizationId(db);
   const systemRole = isFirstSetup ? 'SYSTEM_ADMIN' : 'USER';
 
   seedSystemRoles(db);
 
-  db.prepare('INSERT INTO users (id, email, password_hash, name, organization_id, system_role) VALUES (?, ?, ?, ?, ?, ?)').run(
-    id,
-    email.toLowerCase(),
-    passwordHash,
-    name || null,
-    organizationId,
-    systemRole
-  );
+  if (existing && isFirstSetup) {
+    db.prepare(`
+      UPDATE users
+      SET password_hash = ?, name = ?, organization_id = COALESCE(organization_id, ?), system_role = 'SYSTEM_ADMIN'
+      WHERE id = ?
+    `).run(passwordHash, name || null, organizationId, id);
+  } else {
+    db.prepare('INSERT INTO users (id, email, password_hash, name, organization_id, system_role) VALUES (?, ?, ?, ?, ?, ?)').run(
+      id,
+      normalizedEmail,
+      passwordHash,
+      name || null,
+      organizationId,
+      systemRole
+    );
+  }
 
   // ウェルカムメール（SMTP設定済みの場合のみ。失敗してもサインアップは完了とする）
   if (isEmailConfigured()) {
     sendWelcomeEmail(email.toLowerCase(), name || null).catch(() => {});
   }
 
+  if (isFirstSetup) {
+    await seedOnboardingSampleData(db, { adminId: id, organizationId });
+  }
+
   const token = await createSessionToken(id);
   return attachSessionCookie(
-    NextResponse.json({ success: true, user: { id, email, name } }),
+    NextResponse.json({ success: true, user: { id, email: normalizedEmail, name } }),
     token
   );
 }
