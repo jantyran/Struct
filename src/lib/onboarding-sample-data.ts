@@ -183,9 +183,9 @@ export async function seedOnboardingSampleData(
     db.prepare(`
       INSERT INTO projects (
         id, name, type, phase_key, status, organization_id, owner_id, primary_assignee_id,
-        target, start_date, end_date, budget, channels, description, updated_at
+        target, start_date, end_date, budget, channels, description, updated_at, is_onboarding
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       userGuideProjectId,
       'はじめてのStruct: 全ユーザー向け練習プロジェクト',
@@ -202,14 +202,15 @@ export async function seedOnboardingSampleData(
       JSON.stringify(['ダッシュボード', 'プロジェクト詳細', 'タスク', 'マスターデータ', 'レポート', 'マイページ']),
       'Struct を使い始める全ユーザー向けの練習プロジェクトです。タスクを上から進めると、基本操作を順番に試せます。',
       createdAt,
+      1,
     );
 
     db.prepare(`
       INSERT INTO projects (
         id, name, type, phase_key, status, organization_id, owner_id, primary_assignee_id,
-        target, start_date, end_date, budget, channels, description, updated_at
+        target, start_date, end_date, budget, channels, description, updated_at, is_onboarding
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       adminGuideProjectId,
       '管理者向け: Struct設定と権限管理トレーニング',
@@ -226,6 +227,7 @@ export async function seedOnboardingSampleData(
       JSON.stringify(['設定', 'マスターデータ', 'ユーザー管理', 'ロール', 'AI設定', 'テンプレート']),
       '管理者だけが触る設定画面を安全に確認するための練習プロジェクトです。実運用前の確認チェックリストとして使えます。',
       createdAt,
+      1,
     );
 
     db.prepare(`
@@ -290,53 +292,148 @@ export async function seedOnboardingSampleData(
       `).run(uuidv4(), projectId, key, label, type, value, sortOrder, section);
     }
 
+    // ──── ユーザー向け練習タスク（タスク管理の使い心地を体感する順序）────
     const userTodos: SampleTodo[] = [
-      { projectId: userGuideProjectId, title: '1. ダッシュボードでプロジェクト一覧と自分のタスクを見る', description: '左メニューの「ダッシュボード」を開き、プロジェクト数、未完了タスク、期限が近いタスクがどこに出るか確認します。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 1, sortOrder: 0 },
-      { projectId: userGuideProjectId, title: '2. プロジェクト詳細画面で概要・項目・メンバーを確認する', description: 'このプロジェクトを開き、概要、カスタム項目、メンバー、関係者がどこに表示されるか確認します。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 2, sortOrder: 1 },
-      { projectId: userGuideProjectId, title: '3. タスクの担当者・期限・状態を変更する', description: 'タスク画面でこのタスクを開き、状態を進行中に変えます。担当者や期限の表示も確認します。', status: 'todo', priority: 'medium', assigneeId: memberId, dueInDays: 3, sortOrder: 2 },
-      { projectId: userGuideProjectId, title: '4. 新しいプロジェクトを追加してみる', description: 'ダッシュボードの新規作成から、練習用のプロジェクトを1件作成します。作成後は名前、種別、フェーズを確認します。', status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 4, sortOrder: 3 },
-      { projectId: userGuideProjectId, title: '5. ノートに打ち合わせメモを残す', description: 'プロジェクト詳細のノートで、短いメモを作成します。後から見返す情報を置く場所として使います。', status: 'todo', priority: 'medium', assigneeId: memberId, dueInDays: 5, sortOrder: 4 },
-      { projectId: userGuideProjectId, title: '6. シートでチェックリストを編集する', description: 'シートを開き、行を追加または状態を書き換えます。表形式で管理したい情報の置き場を確認します。', status: 'todo', priority: 'low', assigneeId: memberId, dueInDays: 6, sortOrder: 5 },
-      { projectId: userGuideProjectId, title: '7. マスターデータで取引先・商品サンプルを見る', description: '左メニューの「マスターデータ」を開き、取引先と商品・サービスのサンプルレコードを確認します。プロジェクト外で共通利用する情報の置き場です。', status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 7, sortOrder: 6 },
-      { projectId: userGuideProjectId, title: '8. レポート画面で自分の状況を見る', description: '左メニューの「レポート」を開き、担当タスクやプロジェクトの状況がどのように見えるか確認します。', status: 'todo', priority: 'low', assigneeId: adminId, dueInDays: 8, sortOrder: 7 },
-      { projectId: userGuideProjectId, title: '9. マイページでタスク表示設定を変更する', description: 'マイページまたは個人設定を開き、タスク表示や文字サイズなど自分向け設定を確認します。', status: 'todo', priority: 'low', assigneeId: adminId, dueInDays: 9, sortOrder: 8 },
+      {
+        projectId: userGuideProjectId,
+        title: '1. ダッシュボードで全体を把握する',
+        description: 'ダッシュボードを開き、プロジェクト一覧・自分のタスク数・今週の期限タスクを確認します。\n\n右サイドバーの「自分のタスク」にこのプロジェクトのタスクが並んでいます。タスク名をクリックすると直接そのタスクに飛べます。',
+        status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 1, sortOrder: 0,
+      },
+      {
+        projectId: userGuideProjectId,
+        title: '2. リストビューでタスクを確認・ステータスを変更する',
+        description: '「タスク」タブを開くとリストビューが表示されます。\n\n① このタスクをクリックして右側の詳細パネルを開いてください。\n② ステータスを「進行中」→「完了」に変えてみましょう。ステータスバッジを直接クリックしても変更できます。\n③ 担当者・期限・優先度フィールドも確認してください。\n\n※「練習で作るプロジェクト例」を開くと、より多くのサンプルタスクがリストに並んでいます。',
+        status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 2, sortOrder: 1,
+      },
+      {
+        projectId: userGuideProjectId,
+        title: '3. カンバンビューでタスクをドラッグ移動する',
+        description: 'タスクタブ右上のビュー切り替えボタンで「カンバン」を選択します。\n\n「未着手」「進行中」「完了」の3列にタスクが並びます。\n\n① カードをつかんで別の列にドラッグ&ドロップしてみてください。ステータスが自動で変わります。\n② 「練習で作るプロジェクト例」を開くと、各列にサンプルが入ったカンバンを確認できます。',
+        status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 3, sortOrder: 2,
+      },
+      {
+        projectId: userGuideProjectId,
+        title: '4. ガントビューで期間と進捗を確認する',
+        description: 'ビュー切り替えで「ガント」を選択します。\n\n① 期限が設定されたタスクが時系列バーとして表示されます。\n② バーの右端をドラッグして期限を伸ばしたり縮めたりできます。\n③ 期限未設定のタスクは左側の「未スケジュール」欄に表示されます。ガントにドラッグすると日程を設定できます。\n\n「練習で作るプロジェクト例」を開くと、本番に近いガントの見え方を確認できます。',
+        status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 4, sortOrder: 3,
+      },
+      {
+        projectId: userGuideProjectId,
+        title: '5. 新しいタスクを作成する',
+        description: 'リストビューに切り替えて「+ タスクを追加」ボタンからタスクを1件作成します。\n\n① タイトルを入力して Enter で確定します。\n② 作成されたタスクをクリックして詳細パネルを開き、担当者・期限・優先度を設定します。\n③ カンバンビューに切り替えて、作成したタスクが「未着手」列に追加されていることを確認します。',
+        status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 5, sortOrder: 4,
+      },
+      {
+        projectId: userGuideProjectId,
+        title: '6. 新しいプロジェクトを作成する',
+        description: 'ダッシュボード右上の「+ 新規プロジェクト」ボタンを押します。\n\n① 名前と種別を入力して作成します。\n② 作成後、プロジェクト詳細に遷移するので「項目」タブを確認します。種別に紐づいた入力項目が最初から並んでいます。\n\n「練習で作るプロジェクト例: 春のキャンペーン」が完成イメージとして参考になります。',
+        status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 6, sortOrder: 5,
+      },
+      {
+        projectId: userGuideProjectId,
+        title: '7. ノートで情報を記録する',
+        description: '「ノート」タブを開き、「+ 新しいノートを作成」からメモを1件作成します。\n\nノートはタスクとは別に、議事録・調査メモ・共有情報を置く場所です。Markdown で書けるので見出しや箇条書きも使えます。\n\n① タイトルと本文を入力して保存してください。\n② 固定ノートとしてピン留めすると、一覧の先頭に表示されます。',
+        status: 'todo', priority: 'low', assigneeId: adminId, dueInDays: 7, sortOrder: 6,
+      },
+      {
+        projectId: userGuideProjectId,
+        title: '8. シートでチェックリストを使う',
+        description: '「シート」タブを開き、「操作練習チェックリスト」を確認します。\n\n① 「状態」列はドロップダウンになっています。クリックして「確認中」「完了」に変えてみましょう。\n② 行末の「+」ボタンで新しい行を追加できます。自由に行を追加してみてください。\n\nシートはタスクでは管理しにくい表形式の情報（チェックリスト・スケジュール表など）に向いています。',
+        status: 'todo', priority: 'low', assigneeId: adminId, dueInDays: 8, sortOrder: 7,
+      },
     ];
 
+    // ──── 管理者向け練習タスク（プロジェクト内の項目カスタマイズに集中）────
     const adminTodos: SampleTodo[] = [
-      { projectId: adminGuideProjectId, title: '1. 組織設定で会社情報と基本設定を確認する', description: '設定画面から組織設定を開き、会社名、説明、ロケールなどの管理場所を確認します。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 1, sortOrder: 0 },
-      { projectId: adminGuideProjectId, title: '2. マスターデータで共通情報を管理する', description: 'マスターデータを開き、取引先や商品・サービスの項目とレコードを確認します。必要に応じてレコード追加も試します。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 2, sortOrder: 1 },
-      { projectId: adminGuideProjectId, title: '3. ユーザー管理でサンプルユーザーを確認する', description: '設定のユーザー管理で、サンプル一般ユーザーとレビュアーが存在することを確認します。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 3, sortOrder: 2 },
-      { projectId: adminGuideProjectId, title: '4. ロール権限管理で管理者と一般ユーザーの違いを見る', description: 'ロール設定を開き、SYSTEM_ADMIN、MANAGER、USER が持つ権限の違いを確認します。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 4, sortOrder: 3 },
-      { projectId: adminGuideProjectId, title: '5. プロジェクト設定で種別・フェーズ・項目を確認する', description: 'プロジェクト種別設定を開き、プロジェクトの入力項目やフェーズがどのように定義されるか確認します。', status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 5, sortOrder: 4 },
-      { projectId: adminGuideProjectId, title: '6. 生成コンテンツ設定でテンプレートを確認する', description: 'コンテンツテンプレート設定を開き、AI生成時に使う指示や形式をどこで管理するか確認します。', status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 6, sortOrder: 5 },
-      { projectId: adminGuideProjectId, title: '7. AI設定の登録場所を確認する', description: 'AI設定画面を開き、APIキーやモデル設定を登録する場所を確認します。実キーは必要になってから登録します。', status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 7, sortOrder: 6 },
-      { projectId: adminGuideProjectId, title: '8. 運用前チェック: 不要なサンプルデータの扱いを決める', description: '本番運用前に、このサンプルプロジェクトを残すか、完了・アーカイブ・削除するか決めます。', status: 'todo', priority: 'low', assigneeId: adminId, dueInDays: 8, sortOrder: 7 },
+      {
+        projectId: adminGuideProjectId,
+        title: '1. プロジェクト種別設定で項目テンプレートを確認する',
+        description: '左メニュー下部の「設定」→「プロジェクト種別設定」を開きます。\n\n種別（campaign / event など）を選択すると、その種別に紐づく「フェーズ」と「項目テンプレート」が表示されます。ここで定義した項目が、プロジェクト作成時に自動で入力欄として追加されます。\n\n「campaign」種別を開いて、デフォルトの項目一覧を確認してください。',
+        status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 1, sortOrder: 0,
+      },
+      {
+        projectId: adminGuideProjectId,
+        title: '2. 新しい項目を追加してみる',
+        description: 'プロジェクト種別設定の「campaign」を開き、「項目テンプレート」欄で「+ 項目を追加」を押します。\n\n① 種別を選びます（テキスト / テキストエリア / 選択肢 / 日付 / 数値など）。\n② ラベル（表示名）とキー（識別子）を入力します。\n③ 保存して、「基本情報」などのセクションに配置してみましょう。\n\nその後「練習で作るプロジェクト例」の「項目」タブを開き、追加した項目が反映されているか確認します。',
+        status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 2, sortOrder: 1,
+      },
+      {
+        projectId: adminGuideProjectId,
+        title: '3. 項目の順序とセクションを変更する',
+        description: 'プロジェクト種別設定で、項目をドラッグ&ドロップして並び替えます。\n\n① 項目の左端のハンドルをつかんで、上下に移動してみてください。\n② セクション間をまたいだ移動もできます（「基本情報」→「詳細情報」など）。\n\nセクションで情報をグループ化すると、プロジェクト詳細の「項目」タブが見やすくなります。変更後は保存を忘れずに。',
+        status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 3, sortOrder: 2,
+      },
+      {
+        projectId: adminGuideProjectId,
+        title: '4. 不要な項目を削除・整理する',
+        description: 'プロジェクト種別設定で、追加した練習用の項目を削除します。\n\n① 項目の右端にある削除ボタン（ゴミ箱アイコン）を押します。\n② 「目的・背景」「ターゲット」などの組み込み項目は削除できません（ロックアイコンが表示されます）。\n\n本番運用では、チームで使う項目だけに絞り込むと、プロジェクト作成時の入力負荷が下がります。',
+        status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 4, sortOrder: 3,
+      },
+      {
+        projectId: adminGuideProjectId,
+        title: '5. 新規プロジェクトで項目設定の反映を確認する',
+        description: 'ダッシュボードから「+ 新規プロジェクト」で campaign 種別のプロジェクトを新しく作成します。\n\n作成後に「項目」タブを開き、種別設定で定義した項目テンプレートが正しく反映されているか確認します。これで管理者が「プロジェクトの入力フォーム」をカスタマイズする仕組みの全体像が把握できます。\n\n確認が終わったら、このサンプルプロジェクト自体をアーカイブか削除して、本番運用を始めましょう。',
+        status: 'todo', priority: 'medium', assigneeId: adminId, dueInDays: 5, sortOrder: 4,
+      },
     ];
 
-    for (const todo of [...userTodos, ...adminTodos]) insertTodo(db, adminId, todo);
+    // ──── 練習プロジェクト（春のキャンペーン）のサンプルタスク ────
+    // カンバン・ガントが映える混在ステータス・多様な期限
+    const practiceTodos: SampleTodo[] = [
+      { projectId: practiceProjectId, title: 'キャンペーン目標とKPIを設定する', description: '達成目標・対象ユーザー・主要KPIを定義する。', status: 'done', priority: 'high', assigneeId: adminId, dueInDays: -10, sortOrder: 0 },
+      { projectId: practiceProjectId, title: 'ターゲットペルソナを作成する', description: 'メインターゲットのペルソナ（年齢・課題・行動パターン）をまとめる。', status: 'done', priority: 'high', assigneeId: memberId, dueInDays: -7, sortOrder: 1 },
+      { projectId: practiceProjectId, title: '競合調査をまとめる', description: '主要競合3社のキャンペーン施策を調査してシートにまとめる。', status: 'done', priority: 'medium', assigneeId: memberId, dueInDays: -5, sortOrder: 2 },
+      { projectId: practiceProjectId, title: 'LP構成案を作成する', description: 'ヒーローセクション・特徴・CTA の構成を決める。', status: 'in_progress', priority: 'high', assigneeId: adminId, dueInDays: 2, sortOrder: 3 },
+      { projectId: practiceProjectId, title: 'コピーライティングを担当者に依頼する', description: 'キャッチコピー・本文テキストをライターに依頼する。', status: 'in_progress', priority: 'high', assigneeId: memberId, dueInDays: 3, sortOrder: 4 },
+      { projectId: practiceProjectId, title: 'バナー素材をデザインする', description: 'Web・SNS・メール用バナーを各サイズで制作する。', status: 'in_progress', priority: 'medium', assigneeId: memberId, dueInDays: 5, sortOrder: 5 },
+      { projectId: practiceProjectId, title: 'LP を実装・テストする', description: 'HTML/CSSコーディング・レスポンシブ確認・リンクチェック。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 8, sortOrder: 6 },
+      { projectId: practiceProjectId, title: 'メール配信シナリオを設定する', description: '配信リスト・配信日時・A/Bテスト条件を設定する。', status: 'todo', priority: 'medium', assigneeId: memberId, dueInDays: 10, sortOrder: 7 },
+      { projectId: practiceProjectId, title: '公開前レビューと最終承認', description: 'ステークホルダー確認・最終修正・公開承認フロー。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 12, sortOrder: 8 },
+      { projectId: practiceProjectId, title: '公開・施策スタート', description: 'LP 公開・メール配信・SNS 投稿を実行する。', status: 'todo', priority: 'high', assigneeId: adminId, dueInDays: 14, sortOrder: 9 },
+    ];
+
+    for (const todo of [...userTodos, ...adminTodos, ...practiceTodos]) insertTodo(db, adminId, todo);
 
     db.prepare(`
       INSERT INTO project_notes (id, project_id, title, body, pinned, created_by)
       VALUES (?, ?, ?, ?, 1, ?)
     `).run(uuidv4(), userGuideProjectId, 'このプロジェクトの使い方', [
-      'このプロジェクトは、Struct の基本操作をタスク形式で学ぶためのものです。',
-      'タスクを上から順に進め、実際に画面を操作したらタスクを完了にしてください。',
-      'サンプル一般ユーザーのログイン情報: sample.member@example.invalid / sample1234',
+      '# Struct の使い方を体験する',
+      '',
+      'このプロジェクトは、タスク管理ツールとして Struct を使いこなすための練習プロジェクトです。',
+      'タスクを上から順に進め、実際に操作したら完了にしてください。',
+      '',
+      '## ポイント',
+      '- タスクはリスト / カンバン / ガント の3つのビューで確認できます',
+      '- 「練習で作るプロジェクト例: 春のキャンペーン」を開くと、実際のプロジェクトに近いサンプルデータで各ビューを試せます',
+      '- 各タスクの説明に具体的な操作手順が書かれています',
     ].join('\n'), adminId);
 
     db.prepare(`
       INSERT INTO project_notes (id, project_id, title, body, pinned, created_by)
       VALUES (?, ?, ?, ?, 1, ?)
     `).run(uuidv4(), adminGuideProjectId, '管理者向けトレーニングの使い方', [
-      'このプロジェクトは、管理者が設定画面でできることを確認するためのものです。',
-      '権限や設定を変更する前に、何を変える設定なのかをタスク説明で確認してください。',
-      '本番運用前に不要なサンプルユーザー、マスターデータ、プロジェクトを整理してください。',
+      '# プロジェクトの入力項目をカスタマイズする',
+      '',
+      'このプロジェクトは、管理者が「プロジェクト種別設定」でフィールドをカスタマイズする方法を学ぶためのものです。',
+      '',
+      '## 学べること',
+      '- プロジェクト種別ごとに入力項目のテンプレートを定義する方法',
+      '- 項目の追加・削除・並び替え・セクション整理',
+      '- 設定がプロジェクト詳細画面にどう反映されるかの確認方法',
+      '',
+      '## 操作場所',
+      '左メニュー → 設定 → プロジェクト種別設定',
     ].join('\n'), adminId);
 
     db.prepare(`
       INSERT INTO project_contacts (id, project_id, name, email, phone, company_name)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(uuidv4(), userGuideProjectId, '練習用 外部担当者', 'partner@example.invalid', '03-0000-0000', 'サンプルパートナー株式会社');
+
+    const statusChoices = ['未着手', '確認中', '完了'];
+    const doneChoices = ['未確認', '確認中', '確認済み'];
 
     db.prepare(`
       INSERT INTO project_sheets (id, project_id, name, columns_def, rows_data, created_by)
@@ -345,11 +442,20 @@ export async function seedOnboardingSampleData(
       uuidv4(),
       userGuideProjectId,
       '操作練習チェックリスト',
-      JSON.stringify([{ id: 'step', name: '練習内容', type: 'text' }, { id: 'screen', name: '画面', type: 'text' }, { id: 'status', name: '状態', type: 'text' }]),
       JSON.stringify([
-        { id: uuidv4(), cells: { step: 'タスクの状態を変更する', screen: 'プロジェクト詳細 > タスク', status: '未着手' } },
-        { id: uuidv4(), cells: { step: 'マスターデータを見る', screen: 'マスターデータ', status: '未着手' } },
-        { id: uuidv4(), cells: { step: 'レポートを見る', screen: 'レポート', status: '未着手' } },
+        { id: 'step', name: '練習内容', type: 'text' },
+        { id: 'screen', name: '画面・操作場所', type: 'text' },
+        { id: 'status', name: '状態', type: 'select', options: JSON.stringify(statusChoices) },
+      ]),
+      JSON.stringify([
+        { id: uuidv4(), cells: { step: 'ダッシュボードを確認する', screen: 'ダッシュボード > サイドバー', status: '未着手' } },
+        { id: uuidv4(), cells: { step: 'リストビューでタスクを操作する', screen: 'タスクタブ > リスト', status: '未着手' } },
+        { id: uuidv4(), cells: { step: 'カンバンでドラッグ移動する', screen: 'タスクタブ > カンバン', status: '未着手' } },
+        { id: uuidv4(), cells: { step: 'ガントで期間を確認する', screen: 'タスクタブ > ガント', status: '未着手' } },
+        { id: uuidv4(), cells: { step: '新しいタスクを作成する', screen: 'タスクタブ > + タスクを追加', status: '未着手' } },
+        { id: uuidv4(), cells: { step: '新しいプロジェクトを作成する', screen: 'ダッシュボード > + 新規プロジェクト', status: '未着手' } },
+        { id: uuidv4(), cells: { step: 'ノートでメモを作成する', screen: 'ノートタブ > + 新しいノートを作成', status: '未着手' } },
+        { id: uuidv4(), cells: { step: 'シートの行を操作する', screen: 'シートタブ > 行の編集・追加', status: '未着手' } },
       ]),
       adminId,
     );
@@ -360,12 +466,19 @@ export async function seedOnboardingSampleData(
     `).run(
       uuidv4(),
       adminGuideProjectId,
-      '管理者設定チェックリスト',
-      JSON.stringify([{ id: 'area', name: '設定領域', type: 'text' }, { id: 'purpose', name: '確認すること', type: 'text' }, { id: 'done', name: '確認状況', type: 'text' }]),
+      '項目カスタマイズ チェックリスト',
       JSON.stringify([
-        { id: uuidv4(), cells: { area: 'マスターデータ', purpose: '共通データの項目とレコード', done: '未確認' } },
-        { id: uuidv4(), cells: { area: 'ユーザー管理', purpose: 'ユーザー追加とロール変更の場所', done: '未確認' } },
-        { id: uuidv4(), cells: { area: '生成コンテンツ設定', purpose: 'テンプレートとAI設定の管理', done: '未確認' } },
+        { id: 'task', name: '操作内容', type: 'text' },
+        { id: 'where', name: '操作場所', type: 'text' },
+        { id: 'done', name: '確認状況', type: 'select', options: JSON.stringify(doneChoices) },
+      ]),
+      JSON.stringify([
+        { id: uuidv4(), cells: { task: 'campaign 種別の項目テンプレートを開く', where: '設定 > プロジェクト種別設定 > campaign', done: '未確認' } },
+        { id: uuidv4(), cells: { task: '新しいテキスト項目を追加する', where: '項目テンプレート > + 項目を追加', done: '未確認' } },
+        { id: uuidv4(), cells: { task: '選択肢型の項目を追加して選択肢を設定する', where: '項目テンプレート > 種別: 選択肢', done: '未確認' } },
+        { id: uuidv4(), cells: { task: 'セクション間で項目をドラッグ移動する', where: '種別設定 > ドラッグ&ドロップ', done: '未確認' } },
+        { id: uuidv4(), cells: { task: '練習で追加した項目を削除して整理する', where: '項目 > 削除ボタン', done: '未確認' } },
+        { id: uuidv4(), cells: { task: '新規プロジェクトで項目設定の反映を確認する', where: 'ダッシュボード > + 新規プロジェクト > 項目タブ', done: '未確認' } },
       ]),
       adminId,
     );

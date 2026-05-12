@@ -327,6 +327,7 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'todos', 'completed_at', `TEXT`);
   ensureColumn(db, 'todos', 'completed_by', `TEXT`);
   ensureColumn(db, 'todos', 'tags', `TEXT DEFAULT '[]'`);
+  ensureColumn(db, 'projects', 'is_onboarding', `INTEGER DEFAULT 0`);
   ensureColumn(db, 'project_contacts', 'email', `TEXT DEFAULT ''`);
   ensureColumn(db, 'project_contacts', 'phone', `TEXT DEFAULT ''`);
   ensureColumn(db, 'project_contacts', 'company_name', `TEXT DEFAULT ''`);

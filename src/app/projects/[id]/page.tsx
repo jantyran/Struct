@@ -3759,7 +3759,19 @@ export default function ProjectPage() {
           </div>
         )}
       </div>
-      
+
+      {/* オンボーディングプロジェクトバナー */}
+      {project.is_onboarding === 1 && (
+        <div className="px-4 md:px-6 py-2.5 flex items-center gap-2 border-b text-xs"
+          style={{ borderColor: 'rgba(15,154,177,0.25)', background: 'rgba(15,154,177,0.06)', color: 'var(--accent)' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span className="font-semibold">練習プロジェクト</span>
+          <span style={{ color: 'var(--text-secondary)' }}>— このプロジェクトは Struct の操作を学ぶためのサンプルです。自由に編集・操作して構いません。</span>
+        </div>
+      )}
+
       {/* 完了プロジェクト振り返りバナー */}
       {project.status === 'completed' && retro && (
         <div className="px-4 md:px-6 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(241,250,252,0.8) 100%)' }}>

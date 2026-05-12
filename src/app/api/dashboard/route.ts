@@ -163,6 +163,25 @@ export async function GET() {
     my_todo_urgent: myUrgentCount,
   };
 
+  // オンボーディングプロジェクトの進捗
+  // ユーザーが自力で完了できるプロジェクト（アサイン先が自分のタスクが存在するもの）を優先表示する
+  const onboardingProjects = projectsWithTodos.filter(p => p.is_onboarding === 1);
+  const userOnboarding = onboardingProjects.find(p => {
+    const myTodoCount = (db.prepare(
+      `SELECT COUNT(*) as cnt FROM todos WHERE project_id = ? AND assignee_id = ?`
+    ).get(p.id, user.id) as { cnt: number }).cnt;
+    return myTodoCount > 0;
+  }) ?? onboardingProjects[0];
+  const onboarding = onboardingProjects.length > 0 && userOnboarding
+    ? {
+        projects: onboardingProjects.map(p => ({ id: p.id, name: p.name, todo_total: p.todo_total, todo_done: p.todo_done })),
+        primary_project_id: userOnboarding.id,
+        total: userOnboarding.todo_total,
+        done: userOnboarding.todo_done,
+        all_complete: userOnboarding.todo_total > 0 && userOnboarding.todo_done >= userOnboarding.todo_total,
+      }
+    : null;
+
   return NextResponse.json({
     projects: projectsWithTodos,
     my_open_todos: myOpenTodos,
@@ -171,5 +190,6 @@ export async function GET() {
     stale_projects: staleProjects,
     project_type_definitions: projectTypeDefinitions,
     stats,
+    onboarding,
   });
 }

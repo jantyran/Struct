@@ -217,6 +217,7 @@ export interface Project {
   completed_by?: string | null;
   updated_at: string;
   owner_id: string;
+  is_onboarding?: number;
   owner?: ProjectUser;
   members?: ProjectMember[];
   contacts?: ProjectContact[];

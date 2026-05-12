@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from '@/components/AuthContext';
 import { DevSettingsProvider } from '@/components/DevSettingsContext';
 import { ShortcutProvider } from '@/components/ShortcutProvider';
 import GlobalSearch from '@/components/GlobalSearch';
+import WelcomeModal from '@/components/WelcomeModal';
 import { withBasePath } from '@/lib/paths';
 
 function Sidebar() {
@@ -26,6 +27,7 @@ function Sidebar() {
     { href: '/my-todos', label: '自分のタスク', icon: '✓' },
     { href: '/my-report', label: 'レポート', icon: '▧' },
     { href: '/master-data', label: 'マスターデータ', icon: '◈' },
+    { href: '/guide', label: '使い方ガイド', icon: '◎' },
   ];
   const publicNavItems = [
     { href: '/about', label: 'Struct とは', icon: '◌' },
@@ -321,6 +323,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 >
                   {children}
                 </main>
+                <WelcomeModal />
               </div>
             </DevSettingsProvider>
           </ShortcutProvider>

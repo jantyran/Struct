@@ -29,6 +29,14 @@ interface DashboardTodo {
   assignee_email: string | null;
 }
 
+interface OnboardingProgress {
+  projects: Array<{ id: string; name: string; todo_total: number; todo_done: number }>;
+  primary_project_id: string;
+  total: number;
+  done: number;
+  all_complete: boolean;
+}
+
 interface DashboardData {
   projects: ProjectWithTodos[];
   my_open_todos: DashboardTodo[];
@@ -44,6 +52,73 @@ interface DashboardData {
     my_todo_open: number;
     my_todo_urgent: number;
   };
+  onboarding: OnboardingProgress | null;
+}
+
+// ──────────────────────────────────────────
+// オンボーディングバナー
+// ──────────────────────────────────────────
+function OnboardingBanner({ onboarding }: { onboarding: OnboardingProgress }) {
+  const router = useRouter();
+  const pct = onboarding.total > 0 ? Math.round((onboarding.done / onboarding.total) * 100) : 0;
+
+  if (onboarding.all_complete) {
+    return (
+      <div className="rounded-xl border px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 mb-5"
+        style={{ borderColor: 'rgba(16,185,129,0.35)', background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(209,250,229,0.3) 100%)' }}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🎉</span>
+            <p className="text-sm font-semibold text-emerald-800">練習タスク完了！</p>
+          </div>
+          <p className="text-xs mt-1 text-emerald-700">
+            全 {onboarding.total} 件の練習タスクを完了しました。本番プロジェクトを作成して使い始めましょう。
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => router.push(withBasePath(`/projects/${onboarding.primary_project_id}`))}
+            className="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors"
+            style={{ borderColor: 'rgba(16,185,129,0.4)', color: '#047857', background: 'rgba(16,185,129,0.08)' }}>
+            練習PJを見る
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 mb-5"
+      style={{ borderColor: 'rgba(15,154,177,0.35)', background: 'linear-gradient(135deg, rgba(15,154,177,0.07) 0%, rgba(241,250,252,0.8) 100%)' }}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-bold tracking-wide uppercase" style={{ color: 'var(--accent)' }}>はじめましょう</span>
+          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(15,154,177,0.12)', color: 'var(--accent)' }}>
+            {onboarding.done} / {onboarding.total} 完了
+          </span>
+        </div>
+        <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          練習プロジェクトでタスク管理の操作を体験しましょう
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(15,154,177,0.15)' }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
+          </div>
+          <span className="text-[0.6875rem] font-medium shrink-0" style={{ color: 'var(--accent)' }}>{pct}%</span>
+        </div>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <button onClick={() => router.push(withBasePath(`/projects/${onboarding.primary_project_id}?tab=tasks`))}
+          className="btn-primary text-xs px-4 py-2">
+          練習を始める →
+        </button>
+        <a href={withBasePath('/guide')}
+          className="text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.8)' }}>
+          使い方ガイド
+        </a>
+      </div>
+    </div>
+  );
 }
 
 // ──────────────────────────────────────────
@@ -246,11 +321,12 @@ function PhaseProgressBar({ phaseKey, phases }: { phaseKey: string; phases: { ke
 // ──────────────────────────────────────────
 // プロジェクトカード
 // ──────────────────────────────────────────
-function ProjectCard({ project, typeLabel, phases, onClone }: {
+function ProjectCard({ project, typeLabel, phases, onClone, isOnboarding }: {
   project: ProjectWithTodos;
   typeLabel: string;
   phases: { key: string; name: string }[];
   onClone: (p: Project) => void;
+  isOnboarding?: boolean;
 }) {
   const router = useRouter();
   const detailHref = withBasePath(`/projects/${project.id}`);
@@ -267,7 +343,16 @@ function ProjectCard({ project, typeLabel, phases, onClone }: {
       onMouseEnter={() => router.prefetch(detailHref)}
       onFocus={() => router.prefetch(detailHref)}
       className="card card-link flex flex-col"
+      style={isOnboarding ? { borderColor: 'rgba(15,154,177,0.3)', boxShadow: '0 0 0 1px rgba(15,154,177,0.15)' } : undefined}
     >
+      {isOnboarding && (
+        <div className="px-5 pt-3 pb-0 flex items-center gap-1.5">
+          <span className="text-[0.625rem] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full"
+            style={{ background: 'rgba(15,154,177,0.12)', color: 'var(--accent)', border: '1px solid rgba(15,154,177,0.25)' }}>
+            練習プロジェクト
+          </span>
+        </div>
+      )}
       <div className="p-5 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">
           <span className={`text-[0.6875rem] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>{typeLabel}</span>
@@ -678,7 +763,8 @@ export default function Dashboard() {
     );
   }
 
-  const { projects, my_open_todos, managed_urgent_todos, this_week_todos, stale_projects, project_type_definitions, stats } = data;
+  const { projects, my_open_todos, managed_urgent_todos, this_week_todos, stale_projects, project_type_definitions, stats, onboarding } = data;
+  const onboardingProjectIds = new Set((onboarding?.projects ?? []).map(p => p.id));
   const filtered = filter === 'archived'
     ? projects.filter(p => p.status === 'archived')
     : filter === 'all'
@@ -768,6 +854,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* オンボーディングバナー */}
+      {onboarding && <OnboardingBanner onboarding={onboarding} />}
 
       {/* メインコンテンツ: プロジェクト一覧 + サイドバー */}
       <div className="flex flex-col lg:flex-row gap-5 items-stretch lg:items-start">
@@ -873,6 +962,7 @@ export default function Dashboard() {
                       typeLabel={typeLabelMap[p.type] || p.type}
                       phases={phaseMap[p.type] || []}
                       onClone={setCloneSource}
+                      isOnboarding={onboardingProjectIds.has(p.id)}
                     />
                   ))}
                 </div>
