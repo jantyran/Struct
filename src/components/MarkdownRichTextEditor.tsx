@@ -1,5 +1,6 @@
 'use client';
 
+import DOMPurify from 'dompurify';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useRegisterShortcutScope, useShortcutSettings } from '@/components/ShortcutProvider';
 import { formatShortcutCombo } from '@/lib/shortcut-settings';
@@ -278,7 +279,7 @@ export function MarkdownRichTextEditor({
   minHeight?: number;
 }) {
   const [mode, setMode] = useState<EditorMode>('richtext');
-  const [richTextHtml, setRichTextHtml] = useState(() => markdownToRichTextHtml(body));
+  const [richTextHtml, setRichTextHtml] = useState(() => DOMPurify.sanitize(markdownToRichTextHtml(body)));
   const editorRef = useRef<HTMLDivElement | null>(null);
   const lastBodyRef = useRef(body);
   const shortcutScopeId = useId();
@@ -287,7 +288,7 @@ export function MarkdownRichTextEditor({
   useEffect(() => {
     if (body === lastBodyRef.current) return;
     lastBodyRef.current = body;
-    const nextHtml = markdownToRichTextHtml(body);
+    const nextHtml = DOMPurify.sanitize(markdownToRichTextHtml(body));
     setRichTextHtml(nextHtml);
     if (editorRef.current && editorRef.current.innerHTML !== nextHtml) {
       editorRef.current.innerHTML = nextHtml;
@@ -296,7 +297,7 @@ export function MarkdownRichTextEditor({
 
   useEffect(() => {
     if (mode === 'richtext' && editorRef.current && editorRef.current.innerHTML !== richTextHtml) {
-      editorRef.current.innerHTML = richTextHtml;
+      editorRef.current.innerHTML = DOMPurify.sanitize(richTextHtml);
     }
   }, [mode, richTextHtml]);
 

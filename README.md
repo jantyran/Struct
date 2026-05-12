@@ -117,6 +117,8 @@ npm run dev            # → http://localhost:3002（使用中なら 3003, 3004.
 起動後、ターミナルに表示された URL（例: `http://localhost:3002/signup`）にアクセスして最初のアカウントを作成してください。  
 **初回のみ** `ALLOW_PUBLIC_SIGNUP` の設定に関わらずサインアップできます。最初に登録したアカウントが自動的に管理者になります。
 
+> **セキュリティ:** 初期セットアップ用エンドポイント `/api/setup/env` は `JWT_SECRET` が未設定の場合（初回起動時）のみ書き込みを受け付けます。`.env` に `JWT_SECRET` を設定した後は自動的に無効化されます。
+
 ### 本番デプロイ
 
 ```bash
@@ -137,6 +139,30 @@ npm run start          # → http://0.0.0.0:38427
 | `ALLOW_PUBLIC_SIGNUP` | `true` にすると誰でも `/signup` から登録可能 | — |
 
 > AI の API キーは `.env` ではなく、ログイン後の **設定 › AI設定** から登録します。
+
+---
+
+## セキュリティ
+
+### リバースプロキシの推奨
+
+ブルートフォース対策のレートリミットはクライアントIPを `X-Forwarded-For` ヘッダーから識別します。**Nginx や Caddy などのリバースプロキシ経由での運用を強く推奨します。** プロキシを経由しない場合、IPヘッダーのスプーフィングによってレートリミットが回避される可能性があります。
+
+Nginx の設定例：
+
+```nginx
+location / {
+    proxy_pass http://localhost:38427;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+### `.env` の管理
+
+`.env` は `.gitignore` に含まれており、リポジトリには含まれません。`JWT_SECRET` には十分に長いランダム文字列（64文字以上推奨）を設定し、外部に漏れないよう管理してください。
 
 ---
 
