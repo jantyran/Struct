@@ -224,6 +224,191 @@ function TaskViewTabs({ isLoggedIn }: { isLoggedIn: boolean | null }) {
 }
 
 // ──────────────────────────────────────────
+// AI生成コンテンツ モックアップ
+// ──────────────────────────────────────────
+function AiGenerateMockup({ isLoggedIn }: { isLoggedIn: boolean | null }) {
+  const [selected, setSelected] = useState<string[]>(['sns_post', 'email']);
+  const [addText, setAddText] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+
+  const templates = [
+    { id: 'sns_post', label: 'SNS投稿' },
+    { id: 'email',    label: 'メール本文' },
+    { id: 'lp',       label: 'LPコピー' },
+    { id: 'ad_copy',  label: '広告コピー' },
+    { id: 'report',   label: 'ステータスレポート' },
+  ];
+
+  const contextFields = [
+    { label: '目的・背景',     value: '新規顧客への認知を拡大し、トライアル申込みを促進する。' },
+    { label: 'ターゲット',     value: '25〜40代・中小企業のマーケター・事業責任者。' },
+    { label: '訴求メッセージ', value: 'チームの施策管理を、もっとシンプルに。' },
+    { label: 'CTA',           value: '14日間無料で試す' },
+  ];
+
+  function toggle(id: string) {
+    setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+    setShowResult(false);
+  }
+
+  function generate() {
+    setGenerating(true);
+    setShowResult(false);
+    setTimeout(() => { setGenerating(false); setShowResult(true); }, 1400);
+  }
+
+  return (
+    <section className="space-y-5">
+      <div>
+        <div className="inline-flex items-center gap-1.5 text-xs font-bold tracking-wider uppercase mb-2" style={{ color: 'var(--accent)' }}>
+          <span>✦</span> AI生成コンテンツ
+        </div>
+        <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
+          プロジェクト情報をもとにコンテンツをワンクリックで生成
+        </h2>
+        <p className="text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>
+          プロジェクトに入力した情報（目的・ターゲット・訴求メッセージなど）をAIが読み取り、SNS投稿・メール・LPコピーなどを一括生成します。
+          追加の指示やノートを補足情報として渡すことで、より精度の高い文章が得られます。
+          生成されたコンテンツはプロジェクト内の「生成コンテンツ」タブに保存されます。
+        </p>
+      </div>
+
+      <SampleWrapper>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_28px_260px] gap-4 items-start">
+          {/* コンテキスト情報 */}
+          <div>
+            <p className="section-title mb-2">プロジェクト情報（AIへの参照データ）</p>
+            <div className="space-y-2">
+              {contextFields.map(f => (
+                <div key={f.label} className="rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-elevated)' }}>
+                  <span className="block text-[10px] font-semibold mb-0.5" style={{ color: 'var(--text-muted)' }}>{f.label}</span>
+                  <span className="text-xs leading-relaxed" style={{ color: 'var(--text-primary)' }}>{f.value}</span>
+                </div>
+              ))}
+              <div className="rounded-xl border px-3 py-2 flex items-center gap-1.5"
+                style={{ borderColor: 'rgba(15,154,177,0.3)', background: 'rgba(15,154,177,0.04)' }}>
+                <span className="text-xs" style={{ color: 'var(--accent)' }}>📎</span>
+                <span className="text-[11px] font-medium" style={{ color: 'var(--accent)' }}>参照ノート: ブランドガイドライン.md</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 矢印 */}
+          <div className="hidden md:flex items-center justify-center pt-10">
+            <span className="text-xl" style={{ color: 'rgba(15,154,177,0.35)' }}>→</span>
+          </div>
+
+          {/* AI生成パネル */}
+          <div>
+            <p className="section-title mb-2">AI生成パネル（サイドバー）</p>
+            <div className="card overflow-hidden">
+              <div className="px-3 py-2 border-b flex gap-1"
+                style={{ borderColor: 'var(--border)', background: 'linear-gradient(180deg,#fff 0%,rgba(241,250,252,0.9) 100%)' }}>
+                {['サポート', 'サマリー'].map((t, i) => (
+                  <span key={t} className="text-[10px] px-2 py-0.5 rounded-xl font-medium"
+                    style={i === 0
+                      ? { background: 'rgba(15,154,177,0.1)', color: 'var(--accent)', boxShadow: 'inset 0 0 0 1px rgba(15,154,177,0.18)' }
+                      : { color: 'var(--text-muted)' }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <div className="p-3 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>AI生成</p>
+                <div className="space-y-1">
+                  {templates.map(t => (
+                    <label key={t.id} className="flex items-center gap-2 cursor-pointer py-0.5 px-1 rounded transition-colors hover:bg-[rgba(15,154,177,0.04)]">
+                      <input type="checkbox" checked={selected.includes(t.id)} onChange={() => toggle(t.id)}
+                        style={{ accentColor: 'var(--accent)' }} className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-[10px] mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>追加指示（任意）</p>
+                  <textarea
+                    value={addText}
+                    onChange={e => setAddText(e.target.value)}
+                    placeholder="例：カジュアルなトーンで、絵文字を多めに..."
+                    className="w-full text-[10px] rounded-lg border resize-none p-2 leading-relaxed"
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', height: '48px', outline: 'none' }}
+                  />
+                </div>
+                <button
+                  onClick={generate}
+                  disabled={selected.length === 0 || generating}
+                  className="btn-primary w-full text-xs py-2"
+                  style={{ opacity: selected.length === 0 ? 0.5 : 1 }}>
+                  {generating ? '⏳ 生成中...' : `選択中の ${selected.length} 件を生成`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 生成結果 */}
+        {showResult && (
+          <div className="mt-5 pt-5 border-t" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>生成結果</span>
+              {selected.map((s, i) => (
+                <span key={s} className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                  style={i === 0
+                    ? { background: 'rgba(31,157,114,0.1)', color: 'var(--success)' }
+                    : { background: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
+                  {templates.find(t => t.id === s)?.label}
+                </span>
+              ))}
+            </div>
+            <div className="card p-4 space-y-3">
+              <pre className="text-xs leading-relaxed whitespace-pre-line font-sans" style={{ color: 'var(--text-primary)' }}>{`【春の新生活キャンペーン開幕🌸】
+
+チームの施策管理、もっとシンプルにできます。
+
+✅ プロジェクト・タスク・ノートをひとつの場所に
+✅ リスト/カンバン/ガントを瞬時に切り替え
+✅ AIがコンテンツ生成までサポート
+
+まずは14日間、無料でお試しください。
+👉 [申し込みリンク]
+
+#プロジェクト管理 #マーケティング #施策管理`}</pre>
+              <div className="pt-2 border-t flex items-start gap-1.5" style={{ borderColor: 'var(--border)' }}>
+                <span className="text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>⚠️</span>
+                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  整合性チェック: 目的・背景、訴求メッセージ、CTAを参照しました
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </SampleWrapper>
+
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        {isLoggedIn === true ? (
+          <>
+            <Link href={withBasePath('/settings/ai')} className="btn-primary text-sm">
+              AI設定を開く →
+            </Link>
+            <Link href={withBasePath('/settings/content-templates')} className="btn-secondary text-sm">
+              生成テンプレートを管理する →
+            </Link>
+          </>
+        ) : (
+          <Link href={withBasePath('/signup')} className="btn-primary text-sm">
+            無料で始める →
+          </Link>
+        )}
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          AIプロバイダー（Claude / OpenAI / Gemini）の設定は管理者が行います
+        </span>
+      </div>
+    </section>
+  );
+}
+
+// ──────────────────────────────────────────
 // 管理者向けカスタマイズ モックアップ
 // ──────────────────────────────────────────
 function AdminCustomizeMockup({ isLoggedIn }: { isLoggedIn: boolean | null }) {
@@ -591,8 +776,9 @@ function FeatureCard({ icon, title, desc, tags }: { icon:string; title:string; d
 // ──────────────────────────────────────────
 export default function GuidePage() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean|null>(null);
-  const viewRef   = useRef<HTMLDivElement>(null);
-  const adminRef  = useRef<HTMLDivElement>(null);
+  const viewRef  = useRef<HTMLDivElement>(null);
+  const aiRef    = useRef<HTMLDivElement>(null);
+  const adminRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch(withBasePath('/api/auth/me'), { cache:'no-store' })
@@ -627,6 +813,8 @@ export default function GuidePage() {
           )}
           <button onClick={() => viewRef.current?.scrollIntoView({ behavior:'smooth' })}
             className="btn-secondary px-6 py-2.5">タスク管理を見る ↓</button>
+          <button onClick={() => aiRef.current?.scrollIntoView({ behavior:'smooth' })}
+            className="btn-secondary px-6 py-2.5">AI生成を見る ↓</button>
           <button onClick={() => adminRef.current?.scrollIntoView({ behavior:'smooth' })}
             className="btn-secondary px-6 py-2.5">管理者向け機能を見る ↓</button>
         </div>
@@ -647,6 +835,11 @@ export default function GuidePage() {
         </div>
         <TaskViewTabs isLoggedIn={isLoggedIn} />
       </section>
+
+      {/* ──── AI生成コンテンツ ──── */}
+      <div ref={aiRef}>
+        <AiGenerateMockup isLoggedIn={isLoggedIn} />
+      </div>
 
       {/* ──── 機能カード ──── */}
       <section>
@@ -674,9 +867,9 @@ export default function GuidePage() {
           <FeatureCard icon="👥" title="チーム・メンバー管理"
             desc="プロジェクトごとにメンバーを招待し、役割（マネージャー/メンバー/ゲスト）を設定。閲覧・編集権限をコントロールできます。"
             tags={['招待','ロール管理','権限制御']} />
-          <FeatureCard icon="⚙" title="プロジェクト項目のカスタマイズ"
-            desc="管理者がプロジェクト種別ごとに入力項目を定義。テキスト・選択肢・日付・URL など多様な型の項目を自由に追加できます。"
-            tags={['項目テンプレート','セクション整理','種別設定']} />
+          <FeatureCard icon="✦" title="AIコンテンツ生成"
+            desc="プロジェクトの目的・ターゲット・訴求メッセージをもとにAIがSNS投稿・メール・LPコピーなどを一括生成。追加指示やノートで精度を調整できます。"
+            tags={['SNS投稿','メール','LPコピー','広告コピー','レポート']} />
         </div>
       </section>
 
