@@ -836,11 +836,6 @@ export default function GuidePage() {
         <TaskViewTabs isLoggedIn={isLoggedIn} />
       </section>
 
-      {/* ──── AI生成コンテンツ ──── */}
-      <div ref={aiRef}>
-        <AiGenerateMockup isLoggedIn={isLoggedIn} />
-      </div>
-
       {/* ──── 機能カード ──── */}
       <section>
         <div className="mb-6">
@@ -914,6 +909,11 @@ export default function GuidePage() {
           )}
         </div>
       </section>
+
+      {/* ──── AI生成コンテンツ ──── */}
+      <div ref={aiRef}>
+        <AiGenerateMockup isLoggedIn={isLoggedIn} />
+      </div>
 
       {/* ──── 管理者向けカスタマイズ ──── */}
       <div ref={adminRef}>
