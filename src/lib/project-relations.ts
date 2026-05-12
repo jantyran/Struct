@@ -153,7 +153,7 @@ export function getProjectRelations(db: Database.Database, projectId: string, us
   const availableRows = db.prepare(`
     SELECT id, name, type, status, phase_key, parent_project_id
     FROM projects
-    WHERE organization_id = ? AND id <> ?
+    WHERE organization_id = ? AND id <> ? AND status <> 'archived'
     ORDER BY datetime(updated_at) DESC, name ASC
   `).all(current.organization_id, projectId) as Array<Pick<ProjectRelationSummary, 'id' | 'name' | 'type' | 'status' | 'phase_key' | 'parent_project_id'>>;
   const availableProjects = availableRows
@@ -189,9 +189,12 @@ export function validateParentChange(db: Database.Database, projectId: string, p
   if (!parentProjectId) return { ok: true as const };
   if (parentProjectId === projectId) return { ok: false as const, status: 400, error: '自分自身を親プロジェクトにはできません' };
 
-  const parent = db.prepare('SELECT id, organization_id, parent_project_id FROM projects WHERE id = ?').get(parentProjectId) as { id: string; organization_id: string | null; parent_project_id: string | null } | undefined;
+  const parent = db.prepare('SELECT id, organization_id, parent_project_id, status FROM projects WHERE id = ?').get(parentProjectId) as { id: string; organization_id: string | null; parent_project_id: string | null; status: string } | undefined;
   if (!parent || parent.organization_id !== project.organization_id) {
     return { ok: false as const, status: 400, error: '親プロジェクトが見つかりません' };
+  }
+  if (parent.status === 'archived') {
+    return { ok: false as const, status: 400, error: 'アーカイブ済みプロジェクトは親プロジェクトにできません' };
   }
   if (!requireProjectPermission(db, parentProjectId, userId, 'view_project')) {
     return { ok: false as const, status: 400, error: '親プロジェクトが見つかりません' };

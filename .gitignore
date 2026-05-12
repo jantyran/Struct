@@ -42,6 +42,7 @@ next-env.d.ts
 /struct.db
 /struct.db-shm
 /struct.db-wal
+/data/
 /data/struct.json
 /data/struct.db
 /data/struct.db-shm
@@ -49,6 +50,7 @@ next-env.d.ts
 
 # プライベートドキュメント（ローカル開発メモ・内部設計資料）
 CLAUDE.md
+.claude/
 /docs/implementation-notes/
 /docs/refactors/security-and-code-quality-*.md
 /docs/refactors/performance-optimization-*.md
