@@ -920,6 +920,30 @@ export default function GuidePage() {
         <AdminCustomizeMockup isLoggedIn={isLoggedIn} />
       </div>
 
+      {/* ──── フッターCTA ──── */}
+      <section className="text-center py-8 space-y-5">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          さっそく使い始めましょう
+        </h2>
+        <p className="text-sm leading-7 max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
+          練習プロジェクトがあらかじめ用意されているので、登録したその日からすぐに操作を試せます。
+        </p>
+        <div className="flex flex-wrap gap-3 justify-center">
+          {isLoggedIn === true ? (
+            <>
+              <Link href={withBasePath('/')} className="btn-primary px-6 py-2.5">ダッシュボードへ →</Link>
+              <button onClick={() => viewRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="btn-secondary px-6 py-2.5">ガイドの先頭へ戻る ↑</button>
+            </>
+          ) : (
+            <>
+              <Link href={withBasePath('/signup')} className="btn-primary px-6 py-2.5">無料で始める →</Link>
+              <Link href={withBasePath('/login')} className="btn-secondary px-6 py-2.5">ログイン</Link>
+            </>
+          )}
+        </div>
+      </section>
+
     </div>
   );
 }
