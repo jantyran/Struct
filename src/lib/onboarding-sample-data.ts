@@ -336,12 +336,6 @@ export async function seedOnboardingSampleData(
         description: '「ノート」タブを開き、「+ 新しいノートを作成」からメモを1件作成します。\n\nノートはタスクとは別に、議事録・調査メモ・共有情報を置く場所です。Markdown で書けるので見出しや箇条書きも使えます。\n\n① タイトルと本文を入力して保存してください。\n② 固定ノートとしてピン留めすると、一覧の先頭に表示されます。',
         status: 'todo', priority: 'low', assigneeId: adminId, dueInDays: 7, sortOrder: 6,
       },
-      {
-        projectId: userGuideProjectId,
-        title: '8. シートでチェックリストを使う',
-        description: '「シート」タブを開き、「操作練習チェックリスト」を確認します。\n\n① 「状態」列はドロップダウンになっています。クリックして「確認中」「完了」に変えてみましょう。\n② 行末の「+」ボタンで新しい行を追加できます。自由に行を追加してみてください。\n\nシートはタスクでは管理しにくい表形式の情報（チェックリスト・スケジュール表など）に向いています。',
-        status: 'todo', priority: 'low', assigneeId: adminId, dueInDays: 8, sortOrder: 7,
-      },
     ];
 
     // ──── 管理者向け練習タスク（プロジェクト内の項目カスタマイズに集中）────
@@ -432,56 +426,6 @@ export async function seedOnboardingSampleData(
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(uuidv4(), userGuideProjectId, '練習用 外部担当者', 'partner@example.invalid', '03-0000-0000', 'サンプルパートナー株式会社');
 
-    const statusChoices = ['未着手', '確認中', '完了'];
-    const doneChoices = ['未確認', '確認中', '確認済み'];
-
-    db.prepare(`
-      INSERT INTO project_sheets (id, project_id, name, columns_def, rows_data, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      uuidv4(),
-      userGuideProjectId,
-      '操作練習チェックリスト',
-      JSON.stringify([
-        { id: 'step', name: '練習内容', type: 'text' },
-        { id: 'screen', name: '画面・操作場所', type: 'text' },
-        { id: 'status', name: '状態', type: 'select', options: JSON.stringify(statusChoices) },
-      ]),
-      JSON.stringify([
-        { id: uuidv4(), cells: { step: 'ダッシュボードを確認する', screen: 'ダッシュボード > サイドバー', status: '未着手' } },
-        { id: uuidv4(), cells: { step: 'リストビューでタスクを操作する', screen: 'タスクタブ > リスト', status: '未着手' } },
-        { id: uuidv4(), cells: { step: 'カンバンでドラッグ移動する', screen: 'タスクタブ > カンバン', status: '未着手' } },
-        { id: uuidv4(), cells: { step: 'ガントで期間を確認する', screen: 'タスクタブ > ガント', status: '未着手' } },
-        { id: uuidv4(), cells: { step: '新しいタスクを作成する', screen: 'タスクタブ > + タスクを追加', status: '未着手' } },
-        { id: uuidv4(), cells: { step: '新しいプロジェクトを作成する', screen: 'ダッシュボード > + 新規プロジェクト', status: '未着手' } },
-        { id: uuidv4(), cells: { step: 'ノートでメモを作成する', screen: 'ノートタブ > + 新しいノートを作成', status: '未着手' } },
-        { id: uuidv4(), cells: { step: 'シートの行を操作する', screen: 'シートタブ > 行の編集・追加', status: '未着手' } },
-      ]),
-      adminId,
-    );
-
-    db.prepare(`
-      INSERT INTO project_sheets (id, project_id, name, columns_def, rows_data, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      uuidv4(),
-      adminGuideProjectId,
-      '項目カスタマイズ チェックリスト',
-      JSON.stringify([
-        { id: 'task', name: '操作内容', type: 'text' },
-        { id: 'where', name: '操作場所', type: 'text' },
-        { id: 'done', name: '確認状況', type: 'select', options: JSON.stringify(doneChoices) },
-      ]),
-      JSON.stringify([
-        { id: uuidv4(), cells: { task: 'campaign 種別の項目テンプレートを開く', where: '設定 > プロジェクト種別設定 > campaign', done: '未確認' } },
-        { id: uuidv4(), cells: { task: '新しいテキスト項目を追加する', where: '項目テンプレート > + 項目を追加', done: '未確認' } },
-        { id: uuidv4(), cells: { task: '選択肢型の項目を追加して選択肢を設定する', where: '項目テンプレート > 種別: 選択肢', done: '未確認' } },
-        { id: uuidv4(), cells: { task: 'セクション間で項目をドラッグ移動する', where: '種別設定 > ドラッグ&ドロップ', done: '未確認' } },
-        { id: uuidv4(), cells: { task: '練習で追加した項目を削除して整理する', where: '項目 > 削除ボタン', done: '未確認' } },
-        { id: uuidv4(), cells: { task: '新規プロジェクトで項目設定の反映を確認する', where: 'ダッシュボード > + 新規プロジェクト > 項目タブ', done: '未確認' } },
-      ]),
-      adminId,
-    );
   });
 
   tx();
