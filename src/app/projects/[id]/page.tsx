@@ -2232,11 +2232,11 @@ export default function ProjectPage() {
   }
 
   async function generate() {
-    if (!project || selectedContentKeys.length === 0) return;
+    if (generating || !project || selectedContentKeys.length === 0) return;
     setAiError('');
-    await save(project);
     setGenerating(true);
     try {
+      await save(project);
       const res = await fetch(withBasePath(`/api/projects/${id}/generate`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
