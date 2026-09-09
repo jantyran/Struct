@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import { requireSession } from '@/lib/auth';
 import { requireProjectPermission } from '@/lib/permissions';
 
-type SearchResultType = 'project' | 'todo' | 'note' | 'asset' | 'field';
+type SearchResultType = 'project' | 'todo' | 'note' | 'asset' | 'field' | 'master_data';
 
 interface SearchResult {
   id: string;
@@ -168,6 +168,63 @@ export async function GET(request: Request) {
         href: `/projects/${field.project_id}?tab=fields`,
         updated_at: field.updated_at,
       });
+    }
+
+    // マスターデータ（共通定義・レコード）の検索
+    const orgSettings = db.prepare('SELECT objects, updated_at FROM organization_settings WHERE organization_id = ?').get(user.organization_id) as { objects?: string; updated_at?: string } | undefined;
+    if (orgSettings?.objects) {
+      try {
+        const objects = JSON.parse(orgSettings.objects) as Array<{
+          id: string;
+          name: string;
+          description?: string;
+          records?: Array<{ id: string; name: string; values?: Record<string, unknown> }>;
+        }>;
+        const qLower = q.toLowerCase();
+        for (const obj of objects) {
+          const objNameMatch = (obj.name || '').toLowerCase().includes(qLower);
+          const objDescMatch = (obj.description || '').toLowerCase().includes(qLower);
+          if (objNameMatch || objDescMatch) {
+            results.push({
+              id: obj.id,
+              type: 'master_data',
+              title: `マスターデータ: ${obj.name}`,
+              excerpt: excerpt(obj.description),
+              project_id: '',
+              project_name: 'マスターデータ',
+              href: `/master-data/${obj.id}`,
+              updated_at: orgSettings.updated_at || new Date().toISOString(),
+            });
+          }
+
+          for (const rec of obj.records || []) {
+            const recNameMatch = (rec.name || '').toLowerCase().includes(qLower);
+            let matchedValue = '';
+            if (rec.values) {
+              for (const val of Object.values(rec.values)) {
+                if (typeof val === 'string' && val.toLowerCase().includes(qLower)) {
+                  matchedValue = val;
+                  break;
+                }
+              }
+            }
+            if (recNameMatch || matchedValue) {
+              results.push({
+                id: `${obj.id}:${rec.id}`,
+                type: 'master_data',
+                title: `${obj.name} › ${rec.name || 'レコード'}`,
+                excerpt: excerpt(matchedValue || rec.name),
+                project_id: '',
+                project_name: 'マスターデータ',
+                href: `/master-data/${obj.id}`,
+                updated_at: orgSettings.updated_at || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse objects for search', err);
+      }
     }
 
     results.sort((a, b) => Date.parse(b.updated_at || '') - Date.parse(a.updated_at || ''));

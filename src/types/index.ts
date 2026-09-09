@@ -28,7 +28,8 @@ export interface ShortcutBinding {
 export type ShortcutSettings = Record<ShortcutActionKey, ShortcutBinding>;
 
 export type UserTextSize = 'xsmall' | 'small' | 'medium' | 'large' | 'xlarge';
-export type UserDefaultProjectTab = 'fields' | 'structure' | 'tasks' | 'members' | 'notes' | 'sheets' | 'assets';
+export type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
+export type UserDefaultProjectTab = ProjectDetailTabKey;
 export type UserDefaultTaskView = 'list' | 'kanban' | 'gantt';
 export type UserDefaultTaskAssigneeFilter = '' | 'me' | 'unassigned';
 

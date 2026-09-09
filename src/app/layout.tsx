@@ -215,7 +215,7 @@ function Sidebar() {
         </div>
 
         {user && (
-          <div className="app-sidebar-search px-3 pt-3">
+          <div className="app-sidebar-search px-3 pt-3" data-tour="global-search">
             <GlobalSearch />
           </div>
         )}
@@ -224,7 +224,7 @@ function Sidebar() {
         <nav className="app-sidebar-nav p-3 flex-1">
           <ul className="space-y-1">
             {navItems.map((item) => (
-              <li key={item.href}>
+              <li key={item.href} data-tour={item.href === '/teams' ? 'team-nav' : item.href === '/guide' ? 'guide-nav' : undefined}>
                 <Link
                   href={item.href}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${

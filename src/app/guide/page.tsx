@@ -772,13 +772,252 @@ function FeatureCard({ icon, title, desc, tags }: { icon:string; title:string; d
 }
 
 // ──────────────────────────────────────────
+// 横断検索 モックアップ
+// ──────────────────────────────────────────
+function GlobalSearchMockup() {
+  const [filter, setFilter] = useState<string>('all');
+  const items = [
+    { type: 'project', label: '春の新生活キャンペーン2026', meta: 'アクティブ · キャンペーン', badge: 'プロジェクト', badgeColor: 'bg-blue-50 text-blue-700' },
+    { type: 'todo', label: 'バナー素材のデザイン提出', meta: '春の新生活キャンペーン2026 · 期限 3/15', badge: 'タスク', badgeColor: 'bg-emerald-50 text-emerald-700' },
+    { type: 'master_data', label: '顧客区分マスタ: 法人プレミアム', meta: 'マスターデータ · レコード定義', badge: 'マスターデータ', badgeColor: 'bg-teal-50 text-teal-700' },
+    { type: 'note', label: 'キックオフ議事録と決定事項', meta: '春の新生活キャンペーン2026', badge: 'ノート', badgeColor: 'bg-purple-50 text-purple-700' },
+    { type: 'asset', label: 'SNS告知投稿用ショートコピー', meta: '春の新生活キャンペーン2026 · AI生成', badge: '生成コンテンツ', badgeColor: 'bg-amber-50 text-amber-700' },
+  ];
+
+  const filteredItems = filter === 'all' ? items : items.filter(it => it.type === filter);
+
+  return (
+    <div className="rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
+      {/* 検索バー風ヘッダー */}
+      <div className="px-4 py-3 border-b flex items-center gap-3 bg-white" style={{ borderColor: 'var(--border)' }}>
+        <span className="text-gray-400 text-sm">🔍</span>
+        <div className="flex-1 text-xs text-gray-700 font-medium">
+          キャンペーン <span className="animate-pulse">|</span>
+        </div>
+        <div className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-mono">
+          <span>⌘</span><span>K</span>
+        </div>
+      </div>
+      {/* フィルターチップ */}
+      <div className="px-4 py-2 border-b flex gap-1.5 overflow-x-auto bg-gray-50/50" style={{ borderColor: 'var(--border)' }}>
+        {[
+          { k: 'all', l: 'すべて' },
+          { k: 'project', l: 'プロジェクト' },
+          { k: 'todo', l: 'タスク' },
+          { k: 'master_data', l: 'マスターデータ' },
+          { k: 'note', l: 'ノート' },
+          { k: 'asset', l: '生成コンテンツ' },
+        ].map(chip => (
+          <button
+            key={chip.k}
+            onClick={() => setFilter(chip.k)}
+            className={`text-[10px] px-2.5 py-1 rounded-full font-medium transition-colors ${
+              filter === chip.k
+                ? 'bg-cyan-600 text-white shadow-xs'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200/60'
+            }`}
+          >
+            {chip.l}
+          </button>
+        ))}
+      </div>
+      {/* 検索結果リスト */}
+      <div className="divide-y divide-gray-100 max-h-60 overflow-y-auto">
+        {filteredItems.map((item, idx) => (
+          <div key={idx} className="p-3 hover:bg-cyan-50/40 transition-colors flex items-center justify-between gap-3 cursor-pointer">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] px-2 py-0.2 rounded-full font-medium shrink-0 ${item.badgeColor}`}>
+                  {item.badge}
+                </span>
+                <span className="text-xs font-semibold text-gray-800 truncate">{item.label}</span>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5 ml-0.5 truncate">{item.meta}</p>
+            </div>
+            <span className="text-xs text-gray-300">→</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+// コメント機能 モックアップ
+// ──────────────────────────────────────────
+function CommentMockup() {
+  const [comments, setComments] = useState([
+    { id: '1', author: '田中 健太', role: 'PM', text: 'ターゲット層向けのバナー文言、A案で確定して問題ないでしょうか？', time: '10分前', resolved: false },
+    { id: '2', author: '佐藤 美咲', role: 'Designer', text: '承知しました！訴求メッセージと統一感をもたせた配色で納品します。', time: 'Just now', resolved: false },
+  ]);
+  const [input, setInput] = useState('');
+
+  const addComment = () => {
+    if (!input.trim()) return;
+    setComments([...comments, { id: String(Date.now()), author: 'あなた', role: 'Member', text: input, time: 'たった今', resolved: false }]);
+    setInput('');
+  };
+
+  return (
+    <div className="rounded-2xl border overflow-hidden shadow-sm p-4 bg-white space-y-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-gray-800">💬 コメント・ディスカッション</span>
+          <span className="text-[10px] bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded-full font-medium">{comments.length} 件</span>
+        </div>
+        <span className="text-[10px] text-gray-400">タスク / ノート / 生成コンテンツ / 各フィールド対応</span>
+      </div>
+
+      <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+        {comments.map(c => (
+          <div key={c.id} className="p-2.5 rounded-xl border border-gray-100 bg-gray-50/60 text-xs space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-cyan-600 text-white font-bold flex items-center justify-center text-[10px]">
+                  {c.author[0]}
+                </span>
+                <span className="font-semibold text-gray-800">{c.author}</span>
+                <span className="text-[9px] bg-gray-200 text-gray-600 px-1 rounded">{c.role}</span>
+              </div>
+              <span className="text-[10px] text-gray-400">{c.time}</span>
+            </div>
+            <p className="text-gray-700 pl-6 leading-relaxed">{c.text}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+        <input
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addComment()}
+          placeholder="コメントやフィードバックを入力..."
+          className="flex-1 text-xs rounded-xl border px-3 py-1.5 outline-none focus:border-cyan-500"
+          style={{ borderColor: 'var(--border)' }}
+        />
+        <button onClick={addComment} className="btn-primary text-xs py-1.5 px-3">送信</button>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+// チーム制 & 公開範囲 モックアップ
+// ──────────────────────────────────────────
+function TeamsMockup() {
+  const teams = [
+    { name: 'マーケティング推進室', members: 6, projects: 8, donePct: 75 },
+    { name: 'デザイン＆ブランディング', members: 4, projects: 5, donePct: 88 },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {teams.map(t => (
+        <div key={t.name} className="card p-4 space-y-3 bg-white border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">👥</span>
+              <div>
+                <h4 className="text-xs font-bold text-gray-900">{t.name}</h4>
+                <p className="text-[10px] text-gray-400">{t.members} 名のメンバー · {t.projects} プロジェクト</p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
+              進捗率 {t.donePct}%
+            </span>
+          </div>
+
+          <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-full bg-cyan-600 rounded-full" style={{ width: `${t.donePct}%` }} />
+          </div>
+
+          <div className="pt-2 border-t flex items-center justify-between text-[11px]" style={{ borderColor: 'var(--border)' }}>
+            <span className="text-gray-500">公開範囲設定</span>
+            <div className="flex gap-1">
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">全体公開</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium">チーム限定</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">非公開</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+// タブカスタマイズ モックアップ
+// ──────────────────────────────────────────
+function TabCustomizationMockup() {
+  const [tabs, setTabs] = useState([
+    { key: 'fields', label: 'プロジェクト情報', visible: true },
+    { key: 'tasks', label: 'タスク', visible: true },
+    { key: 'notes', label: 'ノート', visible: true },
+    { key: 'sheets', label: 'シート', visible: true },
+    { key: 'assets', label: '生成コンテンツ', visible: true },
+    { key: 'members', label: 'メンバー', visible: false },
+    { key: 'structure', label: '構成', visible: false },
+  ]);
+
+  const toggle = (k: string) => {
+    setTabs(tabs.map(t => t.key === k ? { ...t, visible: !t.visible } : t));
+  };
+
+  return (
+    <div className="rounded-2xl border p-4 bg-white space-y-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
+        <div>
+          <span className="text-xs font-bold text-gray-800">⚙ タブの並び替え・表示設定</span>
+          <p className="text-[10px] text-gray-400">プロジェクト詳細画面で、よく使うタブを前へ並べたり不要なタブを隠せます</p>
+        </div>
+        <span className="text-[10px] bg-cyan-100 text-cyan-800 px-2 py-0.5 rounded font-bold">新機能</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => toggle(tab.key)}
+            className={`p-2 rounded-xl border text-left flex items-center justify-between transition-all ${
+              tab.visible
+                ? 'bg-cyan-50/50 border-cyan-300 text-cyan-900 shadow-xs'
+                : 'bg-gray-50 border-gray-200 text-gray-400 opacity-60 line-through'
+            }`}
+          >
+            <span className="text-[11px] font-semibold">{tab.label}</span>
+            <span className="text-[10px]">{tab.visible ? '✓' : '✕'}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 pt-2 border-t text-[11px] text-gray-500" style={{ borderColor: 'var(--border)' }}>
+        <span>プレビュー:</span>
+        <div className="flex gap-1 overflow-x-auto">
+          {tabs.filter(t => t.visible).map(t => (
+            <span key={t.key} className="px-2 py-0.5 rounded-lg bg-gray-100 text-[10px] font-medium text-gray-700">
+              {t.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
 // メインページ
 // ──────────────────────────────────────────
 export default function GuidePage() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean|null>(null);
-  const viewRef  = useRef<HTMLDivElement>(null);
-  const aiRef    = useRef<HTMLDivElement>(null);
-  const adminRef = useRef<HTMLDivElement>(null);
+  const viewRef   = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const collabRef = useRef<HTMLDivElement>(null);
+  const teamsRef  = useRef<HTMLDivElement>(null);
+  const tabsRef   = useRef<HTMLDivElement>(null);
+  const aiRef     = useRef<HTMLDivElement>(null);
+  const adminRef  = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch(withBasePath('/api/auth/me'), { cache:'no-store' })
@@ -790,7 +1029,7 @@ export default function GuidePage() {
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-16">
 
       {/* ──── ヒーロー ──── */}
-      <section className="text-center py-8">
+      <section className="text-center py-6">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-5"
           style={{ background:'var(--accent-soft)', color:'var(--accent)', border:'1px solid rgba(15,154,177,0.2)' }}>
           <span>⬡</span> 使い方ガイド
@@ -798,25 +1037,56 @@ export default function GuidePage() {
         <h1 className="text-3xl md:text-4xl font-bold mb-4" style={{ color:'var(--text-primary)' }}>
           プロジェクトとタスクを<br className="sm:hidden" />ひとつの場所で
         </h1>
-        <p className="text-base leading-8 max-w-xl mx-auto mb-8" style={{ color:'var(--text-secondary)' }}>
-          Struct は、プロジェクト単位で情報・タスク・ノートをまとめて管理するツールです。
-          チームで進捗を共有しながら、施策を確実に実行できます。
+        <p className="text-base leading-8 max-w-xl mx-auto mb-6" style={{ color:'var(--text-secondary)' }}>
+          Struct は、プロジェクト単位で情報・タスク・ノート・チームをまとめて管理するツールです。
+          施策の計画から実行、AI生成やディスカッションまでシームレスに行えます。
         </p>
-        <div className="flex flex-wrap gap-3 justify-center">
+        <div className="flex flex-wrap gap-2 justify-center">
           {isLoggedIn===true ? (
-            <Link href={withBasePath('/')} className="btn-primary px-6 py-2.5">ダッシュボードへ →</Link>
+            <Link href={withBasePath('/')} className="btn-primary px-5 py-2 text-sm">ダッシュボードへ →</Link>
           ) : (
             <>
-              <Link href={withBasePath('/signup')} className="btn-primary px-6 py-2.5">無料で始める</Link>
-              <Link href={withBasePath('/login')} className="btn-secondary px-6 py-2.5">ログイン</Link>
+              <Link href={withBasePath('/signup')} className="btn-primary px-5 py-2 text-sm">無料で始める</Link>
+              <Link href={withBasePath('/login')} className="btn-secondary px-5 py-2 text-sm">ログイン</Link>
             </>
           )}
           <button onClick={() => viewRef.current?.scrollIntoView({ behavior:'smooth' })}
-            className="btn-secondary px-6 py-2.5">タスク管理を見る ↓</button>
+            className="btn-secondary px-3.5 py-2 text-xs">タスク管理 ↓</button>
+          <button onClick={() => searchRef.current?.scrollIntoView({ behavior:'smooth' })}
+            className="btn-secondary px-3.5 py-2 text-xs">横断検索 ↓</button>
+          <button onClick={() => collabRef.current?.scrollIntoView({ behavior:'smooth' })}
+            className="btn-secondary px-3.5 py-2 text-xs">コメント ↓</button>
+          <button onClick={() => teamsRef.current?.scrollIntoView({ behavior:'smooth' })}
+            className="btn-secondary px-3.5 py-2 text-xs">チーム・公開範囲 ↓</button>
+          <button onClick={() => tabsRef.current?.scrollIntoView({ behavior:'smooth' })}
+            className="btn-secondary px-3.5 py-2 text-xs">タブ設定 ↓</button>
           <button onClick={() => aiRef.current?.scrollIntoView({ behavior:'smooth' })}
-            className="btn-secondary px-6 py-2.5">AI生成を見る ↓</button>
+            className="btn-secondary px-3.5 py-2 text-xs">AI生成 ↓</button>
           <button onClick={() => adminRef.current?.scrollIntoView({ behavior:'smooth' })}
-            className="btn-secondary px-6 py-2.5">管理者向け機能を見る ↓</button>
+            className="btn-secondary px-3.5 py-2 text-xs">種別設定 ↓</button>
+        </div>
+      </section>
+
+      {/* ──── 体験型ナビゲーションツアー バナー ──── */}
+      <section className="card p-6 border-2 border-cyan-300/80 bg-gradient-to-r from-cyan-50 via-teal-50/30 to-white shadow-md rounded-2xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🚀</span>
+              <h2 className="text-base font-bold text-gray-900">画面を見ながら覚える体験型ナビゲーション</h2>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-600 text-white font-bold uppercase tracking-wider">約1分</span>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed max-w-xl">
+              初めてご利用の方におすすめ！実際のダッシュボード画面上で、横断検索やタスク切り替え、プロジェクト作成、チーム管理などの使い方をスポットライト形式でステップバイステップで体験できます。
+            </p>
+          </div>
+          <Link
+            href={withBasePath('/?tour=start')}
+            className="btn-primary shrink-0 text-xs px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-teal-500 font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+          >
+            <span>体験型ツアーを開始する</span>
+            <span>→</span>
+          </Link>
         </div>
       </section>
 
@@ -853,19 +1123,111 @@ export default function GuidePage() {
           <FeatureCard icon="✓" title="タスク管理"
             desc="タスクの担当者・期限・優先度を設定して追跡。リスト・カンバン・ガントの3ビューで状況に応じた見方ができます。"
             tags={['リスト','カンバン','ガント','サブタスク']} />
+          <FeatureCard icon="🔍" title="全体横断検索"
+            desc="プロジェクト、タスク、ノート、AI生成コンテンツ、マスターデータまで、ワークスペース内のあらゆる情報をCmd+Kで一発検索。"
+            tags={['Cmd+K / Ctrl+K','横断検索','マスターデータ対応']} />
+          <FeatureCard icon="💬" title="コメント・ディスカッション"
+            desc="タスクやノート、生成コンテンツ、フィールド情報ごとにコメントを投稿。文脈を持ったままチームで合意形成できます。"
+            tags={['タスクコメント','ノートコメント','ディスカッション']} />
+          <FeatureCard icon="👥" title="チーム制 & 公開範囲設定"
+            desc="部署やグループごとのチーム作成に対応。プロジェクトの公開範囲（全体公開 / チーム限定 / 非公開）を柔軟に制御できます。"
+            tags={['チーム制','公開範囲制御','進捗ダッシュボード']} />
+          <FeatureCard icon="⚙" title="タブの並び替え & 表示設定"
+            desc="プロジェクト画面のタブ（タスク、ノート、シート等）の表示順や表示/非表示を自由にカスタマイズ可能。"
+            tags={['並び替え','表示/非表示','ワークフロー最適化']} />
           <FeatureCard icon="📝" title="プロジェクトノート"
             desc="打ち合わせ議事録・調査メモ・決定事項をプロジェクト内に保存。Markdownで書け、ピン留めで重要ノートを先頭に固定できます。"
             tags={['Markdown','ピン留め','全文検索']} />
           <FeatureCard icon="🗂" title="シート（表形式データ）"
             desc="チェックリスト・スケジュール表・費用管理など、タスクでは管理しにくい表形式データをプロジェクト内に保存できます。"
             tags={['カスタム列','ドロップダウン','行の追加']} />
-          <FeatureCard icon="👥" title="チーム・メンバー管理"
-            desc="プロジェクトごとにメンバーを招待し、役割（マネージャー/メンバー/ゲスト）を設定。閲覧・編集権限をコントロールできます。"
-            tags={['招待','ロール管理','権限制御']} />
           <FeatureCard icon="✦" title="AIコンテンツ生成"
             desc="プロジェクトの目的・ターゲット・訴求メッセージをもとにAIがSNS投稿・メール・LPコピーなどを一括生成。追加指示やノートで精度を調整できます。"
             tags={['SNS投稿','メール','LPコピー','広告コピー','レポート']} />
         </div>
+      </section>
+
+      {/* ──── 横断検索 ──── */}
+      <section ref={searchRef} className="space-y-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold tracking-wider uppercase mb-2" style={{ color:'var(--accent)' }}>
+            <span>🔍</span> 全体横断検索
+          </div>
+          <h2 className="text-2xl font-bold mb-2" style={{ color:'var(--text-primary)' }}>
+            あらゆる情報を一瞬で横断検索
+          </h2>
+          <p className="text-sm leading-7" style={{ color:'var(--text-secondary)' }}>
+            プロジェクト名だけでなく、Todoタスク、ノート、AI生成コンテンツ、マスターデータのレコードまで全方位で検索できます。<br className="hidden sm:inline" />
+            サイドバーの検索バー、またはショートカット <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 rounded border border-gray-300 font-mono">Cmd + K</kbd>（Windows/Linuxは <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 rounded border border-gray-300 font-mono">Ctrl + K</kbd>）でどこからでも瞬時にアクセスできます。
+          </p>
+        </div>
+        <SampleWrapper>
+          <GlobalSearchMockup />
+        </SampleWrapper>
+      </section>
+
+      {/* ──── コメント・ディスカッション ──── */}
+      <section ref={collabRef} className="space-y-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold tracking-wider uppercase mb-2" style={{ color:'var(--accent)' }}>
+            <span>💬</span> チームコミュニケーション
+          </div>
+          <h2 className="text-2xl font-bold mb-2" style={{ color:'var(--text-primary)' }}>
+            プロジェクト各所でリアルタイムディスカッション
+          </h2>
+          <p className="text-sm leading-7" style={{ color:'var(--text-secondary)' }}>
+            タスク、ノート、AI生成コンテンツ、プロジェクト情報フィールドのそれぞれに直接コメントを残せます。<br className="hidden sm:inline" />
+            外部チャットツールで文脈が流れてしまうのを防ぎ、「なぜその決定になったのか」の履歴が自然にプロジェクトに残ります。
+          </p>
+        </div>
+        <SampleWrapper>
+          <CommentMockup />
+        </SampleWrapper>
+      </section>
+
+      {/* ──── チーム制 & 公開範囲 ──── */}
+      <section ref={teamsRef} className="space-y-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold tracking-wider uppercase mb-2" style={{ color:'var(--accent)' }}>
+            <span>👥</span> チーム制 & 公開範囲
+          </div>
+          <h2 className="text-2xl font-bold mb-2" style={{ color:'var(--text-primary)' }}>
+            組織全体の透明性と、チーム・個人のプライベート管理を両立
+          </h2>
+          <p className="text-sm leading-7" style={{ color:'var(--text-secondary)' }}>
+            組織全体とは別に、部署やユニットごとの「チーム」を作成可能。チームメンバーのタスク状況やプロジェクト進捗を「チーム」ページで一目で確認できます。<br className="hidden sm:inline" />
+            プロジェクトの公開範囲は「全体公開」「チーム限定」「非公開（プライベート）」の3段階で設定でき、機密情報もしっかり守られます。
+          </p>
+        </div>
+        <SampleWrapper>
+          <TeamsMockup />
+        </SampleWrapper>
+        {isLoggedIn === true && (
+          <div className="flex gap-2 pt-1">
+            <Link href={withBasePath('/teams')} className="btn-primary text-sm">
+              チーム進捗ダッシュボードを開く →
+            </Link>
+          </div>
+        )}
+      </section>
+
+      {/* ──── タブの並び替え・表示設定 ──── */}
+      <section ref={tabsRef} className="space-y-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold tracking-wider uppercase mb-2" style={{ color:'var(--accent)' }}>
+            <span>⚙</span> プロジェクト画面のカスタマイズ
+          </div>
+          <h2 className="text-2xl font-bold mb-2" style={{ color:'var(--text-primary)' }}>
+            タブの並び替えと表示/非表示を自由にカスタマイズ
+          </h2>
+          <p className="text-sm leading-7" style={{ color:'var(--text-secondary)' }}>
+            プロジェクト詳細画面の右上にある「⚙ タブ設定」ボタンから、よく使うタブ（タスク、ノート、シート等）を前に移動したり、使わないタブを非表示にできます。<br className="hidden sm:inline" />
+            自分の作業スタイルやチームの運用に合わせて、無駄のない最適な画面配置に調整しましょう。
+          </p>
+        </div>
+        <SampleWrapper>
+          <TabCustomizationMockup />
+        </SampleWrapper>
       </section>
 
       {/* ──── 始め方ステップ ──── */}

@@ -7,6 +7,7 @@ import type { Project, ProjectType, CloneOptions, ProjectTypeDefinition, CustomF
 import { TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS, TODO_STATUS_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import { InteractiveTour } from '@/components/InteractiveTour';
 
 // ──────────────────────────────────────────
 // 型
@@ -770,6 +771,7 @@ export default function Dashboard() {
     if (typeof window === 'undefined') return 'card';
     return (localStorage.getItem('dashboard_view') as 'card' | 'table') || 'card';
   });
+  const [tourOpen, setTourOpen] = useState(false);
 
   function switchView(mode: 'card' | 'table') {
     setViewMode(mode);
@@ -804,6 +806,20 @@ export default function Dashboard() {
       load();
     })();
   }, [authLoading, user, load, redirectToAuth, checkSession]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tour') === 'start' || urlParams.get('tour') === 'true') {
+      setTourOpen(true);
+      return;
+    }
+    const seen = localStorage.getItem('struct_tour_seen');
+    if (!seen && data) {
+      setTourOpen(true);
+      localStorage.setItem('struct_tour_seen', 'true');
+    }
+  }, [data]);
 
   if (authLoading || !data) {
     return (
@@ -848,7 +864,24 @@ export default function Dashboard() {
             <h1 className="text-xl font-bold tracking-tight">ダッシュボード</h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>プロジェクトと施策の情報を構造化して管理する</p>
           </div>
-          <button onClick={() => setShowNew(true)} className="btn-primary w-full sm:w-auto">+ 新規プロジェクト</button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setTourOpen(true)}
+              className="btn-secondary text-xs flex items-center gap-1.5"
+              title="Structの使い方を体験型ツアーで確認"
+            >
+              <span>🚀</span>
+              <span>使い方ツアー</span>
+            </button>
+            <button
+              onClick={() => setShowNew(true)}
+              className="btn-primary flex-1 sm:flex-none"
+              data-tour="new-project-btn"
+            >
+              + 新規プロジェクト
+            </button>
+          </div>
         </div>
 
         {/* サマリー統計 — 4列1行 */}
@@ -906,7 +939,11 @@ export default function Dashboard() {
       </div>
 
       {/* オンボーディングバナー */}
-      {onboarding && <OnboardingBanner onboarding={onboarding} />}
+      {onboarding && (
+        <div data-tour="onboarding-section">
+          <OnboardingBanner onboarding={onboarding} />
+        </div>
+      )}
 
       {/* メインコンテンツ: プロジェクト一覧 + サイドバー */}
       <div className="flex flex-col lg:flex-row gap-5 items-stretch lg:items-start">
@@ -914,7 +951,7 @@ export default function Dashboard() {
         <div className="flex-1 min-w-0">
           {/* フィルター + ビュー切り替え */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <div className="flex flex-wrap gap-2 flex-1">
+            <div className="flex flex-wrap gap-2 flex-1" data-tour="status-tabs">
               {filterChips.map(f => (
                 <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); setShowAllProjects(isWideScreen()); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
                   {f.l}
@@ -1072,6 +1109,18 @@ export default function Dashboard() {
           onCloned={id => { setCloneSource(null); router.push(withBasePath(`/projects/${id}`)); }}
         />
       )}
+
+      <InteractiveTour
+        isOpen={tourOpen}
+        onClose={() => {
+          setTourOpen(false);
+          try { localStorage.setItem('struct_tour_seen', 'true'); } catch {}
+        }}
+        onComplete={() => {
+          try { localStorage.setItem('struct_tour_seen', 'true'); } catch {}
+        }}
+        primaryProjectId={onboarding?.primary_project_id}
+      />
     </div>
   );
 }

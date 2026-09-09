@@ -14,6 +14,7 @@ import TodoTab from '@/components/TodoTab';
 import SheetTab from '@/components/SheetTab';
 import ProjectStructureTab from '@/components/ProjectStructureTab';
 import { CommentSection } from '@/components/CommentSection';
+import { TabSettingsModal } from '@/components/TabSettingsModal';
 
 type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
 
@@ -2523,7 +2524,45 @@ export default function ProjectPage() {
   const canDeleteProject = Boolean(currentPermissions?.can_delete);
   const canViewProject = Boolean(currentPermissions?.can_view);
   const projectRoleDefinitions = project?.project_role_definitions ?? [];
-  const tabOptions = useMemo(() => ([
+  const [tabOrder, setTabOrder] = useState<ProjectDetailTabKey[]>([]);
+  const [hiddenTabs, setHiddenTabs] = useState<ProjectDetailTabKey[]>([]);
+  const [tabSettingsOpen, setTabSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const savedOrder = localStorage.getItem(`struct_project_tabs_order_${id}`);
+      if (savedOrder) {
+        setTabOrder(JSON.parse(savedOrder));
+      }
+      const savedHidden = localStorage.getItem(`struct_project_tabs_hidden_${id}`);
+      if (savedHidden) {
+        setHiddenTabs(JSON.parse(savedHidden));
+      }
+    } catch {}
+  }, [id]);
+
+  const handleSaveTabSettings = useCallback((newOrder: ProjectDetailTabKey[], newHidden: ProjectDetailTabKey[]) => {
+    setTabOrder(newOrder);
+    setHiddenTabs(newHidden);
+    if (!id) return;
+    try {
+      localStorage.setItem(`struct_project_tabs_order_${id}`, JSON.stringify(newOrder));
+      localStorage.setItem(`struct_project_tabs_hidden_${id}`, JSON.stringify(newHidden));
+    } catch {}
+  }, [id]);
+
+  const handleResetTabSettings = useCallback(() => {
+    setTabOrder([]);
+    setHiddenTabs([]);
+    if (!id) return;
+    try {
+      localStorage.removeItem(`struct_project_tabs_order_${id}`);
+      localStorage.removeItem(`struct_project_tabs_hidden_${id}`);
+    } catch {}
+  }, [id]);
+
+  const allTabOptions = useMemo(() => ([
     ...(canViewItems ? [{ k: 'fields' as const, l: 'プロジェクト情報' }] : []),
     ...(canViewItems ? [{ k: 'tasks' as const, l: 'タスク' }] : []),
     ...(canViewItems ? [{ k: 'members' as const, l: 'メンバー' }] : []),
@@ -2532,6 +2571,36 @@ export default function ProjectPage() {
     ...(canViewProject ? [{ k: 'structure' as const, l: '構成' }] : []),
     ...(canViewContent ? [{ k: 'assets' as const, l: '生成コンテンツ' }] : []),
   ]), [canViewContent, canViewItems, canViewNotes, canViewProject]);
+
+  const tabOptions = useMemo(() => {
+    const availableKeys = allTabOptions.map((t) => t.k);
+    const orderedKeys: ProjectDetailTabKey[] = [];
+    for (const k of tabOrder) {
+      if (availableKeys.includes(k) && !orderedKeys.includes(k)) {
+        orderedKeys.push(k);
+      }
+    }
+    for (const k of availableKeys) {
+      if (!orderedKeys.includes(k)) {
+        orderedKeys.push(k);
+      }
+    }
+
+    const filtered = orderedKeys.filter((k) => !hiddenTabs.includes(k));
+    const finalKeys = filtered.length > 0 ? filtered : orderedKeys;
+
+    return finalKeys
+      .map((k) => allTabOptions.find((t) => t.k === k))
+      .filter((t): t is NonNullable<typeof t> => Boolean(t));
+  }, [allTabOptions, tabOrder, hiddenTabs]);
+
+  const availableTabsForConfig = useMemo(() => {
+    return allTabOptions.map((t) => ({
+      key: t.k,
+      label: t.l,
+      available: true,
+    }));
+  }, [allTabOptions]);
 
   const findAlternateTab = useCallback((current: ProjectDetailTabKey) => {
     return tabOptions.find((option) => option.k !== current)?.k ?? current;
@@ -3373,6 +3442,18 @@ export default function ProjectPage() {
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => setTabSettingsOpen(true)}
+          className="btn-secondary text-xs flex items-center gap-1.5"
+          title="タブの並び替え・表示設定"
+        >
+          <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span className="hidden sm:inline">タブ設定</span>
+        </button>
         {!splitView && tabOptions.length > 1 && (
           <button
             type="button"
@@ -3985,6 +4066,16 @@ export default function ProjectPage() {
 
         {currentSidebarTabs.length > 0 && renderSidebarContent()}
       </div>
+
+      <TabSettingsModal
+        open={tabSettingsOpen}
+        onClose={() => setTabSettingsOpen(false)}
+        availableTabs={availableTabsForConfig}
+        currentOrder={tabOrder.length > 0 ? tabOrder : allTabOptions.map((t) => t.k)}
+        currentHidden={hiddenTabs}
+        onSave={handleSaveTabSettings}
+        onReset={handleResetTabSettings}
+      />
     </div>
   );
 }
