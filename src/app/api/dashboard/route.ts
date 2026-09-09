@@ -40,9 +40,15 @@ export async function GET() {
     : (db.prepare(`
         SELECT DISTINCT p.* FROM projects p
         LEFT JOIN project_members m ON p.id = m.project_id
-        WHERE p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+        LEFT JOIN team_members tm ON p.team_id = tm.team_id AND tm.user_id = ?
+        WHERE p.organization_id = ? AND (
+          p.owner_id = ? OR
+          m.user_id = ? OR
+          (p.visibility = 'team' AND tm.user_id IS NOT NULL) OR
+          (p.visibility = 'public' OR p.visibility IS NULL OR p.visibility = '')
+        )
         ORDER BY p.updated_at DESC
-      `).all(user.organization_id, user.id, user.id) as Project[]);
+      `).all(user.id, user.organization_id, user.id, user.id) as Project[]);
 
   // Todo 集計（プロジェクトごと）
   const projectIds = projects.map(p => p.id);

@@ -25,6 +25,7 @@ function Sidebar() {
     { href: '/', label: 'ダッシュボード', icon: '⬡' },
     { href: '/my', label: 'マイページ', icon: '◍' },
     { href: '/my-todos', label: '自分のタスク', icon: '✓' },
+    { href: '/teams', label: 'チーム', icon: '👥' },
     { href: '/my-report', label: 'レポート', icon: '▧' },
     { href: '/master-data', label: 'マスターデータ', icon: '◈' },
     { href: '/guide', label: '使い方ガイド', icon: '◎' },

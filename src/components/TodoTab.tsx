@@ -6,6 +6,7 @@ import { withBasePath } from '@/lib/paths';
 import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 import { useRegisterShortcutScope } from '@/components/ShortcutProvider';
 import { useAuth } from '@/components/AuthContext';
+import { CommentSection } from '@/components/CommentSection';
 
 // ──────────────────────────────────────────
 // 定数
@@ -323,6 +324,17 @@ function TodoDetailModal({ todo, assignableUsers, phases, canEdit, onSave, onSub
               </div>
             </div>
           )}
+
+          {/* コメントセクション */}
+          <div className="pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-[0.6875rem] font-medium mb-2" style={{ color: 'var(--text-muted)' }}>コメント</p>
+            <CommentSection
+              projectId={todo.project_id}
+              targetType="todo"
+              targetId={todo.id}
+              compact={true}
+            />
+          </div>
         </div>
 
         {/* フッター */}

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, FieldLayout, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition, ProjectContact, SectionItemKind } from '@/types';
+import type { ProjectWithFields, CustomField, GeneratedAsset, AssetType, FieldType, FieldLayout, CompletionSuggestion, ProjectTypeDefinition, GlobalAssetObject, ProjectType, ProjectContentTemplate, ProjectFieldTemplate, ProjectPhase, ProjectNote, Todo, SidebarTabDefinition, ProjectContact, SectionItemKind, Team, ProjectVisibility } from '@/types';
 import { FIELD_TYPE_LABELS, PROJECT_TYPE_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
@@ -13,6 +13,7 @@ import { NotePickerButton } from './components/SectionInfoWidget';
 import TodoTab from '@/components/TodoTab';
 import SheetTab from '@/components/SheetTab';
 import ProjectStructureTab from '@/components/ProjectStructureTab';
+import { CommentSection } from '@/components/CommentSection';
 
 type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
 
@@ -607,6 +608,7 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
   const groupListValue = parseGroupListValue(field.value);
   const [viewingRecord, setViewingRecord] = useState<GlobalAssetObject['records'][number] | null>(null);
   const [editingListItemKey, setEditingListItemKey] = useState<string | null>(null);
+  const [showComments, setShowComments] = useState(false);
 
   function addRepeatingItem() {
     if (field.type === 'list') {
@@ -669,6 +671,18 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
           {(field.type === 'list' || field.type === 'group_list') && (
             <button type="button" className="btn-secondary text-xs py-0.5 px-2.5" onClick={addRepeatingItem}>+ 追加</button>
           )}
+          <button
+            type="button"
+            onClick={() => setShowComments((v) => !v)}
+            className={`text-xs px-2 py-0.5 rounded transition-colors flex items-center gap-1 font-medium ${
+              showComments
+                ? 'bg-cyan-100 text-cyan-800'
+                : 'text-gray-500 hover:text-cyan-700 hover:bg-gray-100'
+            }`}
+            title="コメントを表示/非表示"
+          >
+            💬 コメント
+          </button>
         </div>
       </div>
 
@@ -933,6 +947,18 @@ function CustomFieldRow({ field, globalAssetObjects, onChange, onCrawl, crawling
           )}
         </div>
       )}
+
+      {showComments && (
+        <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+          <CommentSection
+            projectId={field.project_id}
+            targetType="custom_field"
+            targetId={field.id}
+            targetTitle={`フィールド: ${field.label}`}
+            compact={true}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -954,6 +980,7 @@ function AssetCard({
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [draftTitle, setDraftTitle] = useState(asset.title);
   const [draftContent, setDraftContent] = useState(asset.content);
   const [saving, setSaving] = useState(false);
@@ -1039,11 +1066,38 @@ function AssetCard({
             <MarkdownViewer content={asset.content} className="text-sm" />
           )}
           {!editing && (
-            <div className="flex gap-2 mt-4">
-              <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
-              <button onClick={() => setEditing(true)} className="btn-secondary text-xs">編集</button>
-              <button onClick={onDelete} className="btn-danger">削除</button>
-            </div>
+            <>
+              <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex gap-2">
+                  <button onClick={copy} className="btn-secondary text-xs">{copied ? '✓ コピー済み' : 'コピー'}</button>
+                  <button onClick={() => setEditing(true)} className="btn-secondary text-xs">編集</button>
+                  <button onClick={onDelete} className="btn-danger">削除</button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowComments((v) => !v)}
+                  className={`text-xs px-2.5 py-1 rounded transition-colors flex items-center gap-1 font-medium ${
+                    showComments
+                      ? 'bg-cyan-100 text-cyan-800'
+                      : 'text-gray-600 hover:text-cyan-700 hover:bg-gray-100'
+                  }`}
+                >
+                  💬 コメント {showComments ? 'を閉じる' : ''}
+                </button>
+              </div>
+
+              {showComments && (
+                <div className="mt-3 p-3 bg-gray-50/70 rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                  <CommentSection
+                    projectId={asset.project_id}
+                    targetType="generated_asset"
+                    targetId={asset.id}
+                    targetTitle={`生成コンテンツ: ${asset.title}`}
+                    compact={true}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1699,6 +1753,8 @@ export default function ProjectPage() {
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ title: string; body: string }>({ title: '', body: '' });
   const [noteCreating, setNoteCreating] = useState(false);
+  const [openNoteCommentId, setOpenNoteCommentId] = useState<string | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [pendingNoteScrollTarget, setPendingNoteScrollTarget] = useState<string | null>(null);
   const [assetDirtyMap, setAssetDirtyMap] = useState<Record<string, boolean>>({});
   const [memberUserId, setMemberUserId] = useState('');
@@ -1756,6 +1812,13 @@ export default function ProjectPage() {
     setProjectTypesLoaded(false);
     setGlobalAssetObjects(Array.isArray(payload.global_asset_objects) ? payload.global_asset_objects : []);
   }, [id, router]);
+
+  useEffect(() => {
+    fetch(withBasePath('/api/teams'))
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setTeams(data))
+      .catch(() => {});
+  }, []);
 
   const loadProjectTypes = useCallback(async () => {
     if (projectTypesLoaded || projectTypesLoading) return;
@@ -2754,9 +2817,33 @@ export default function ProjectPage() {
                       {note.body && (
                         <MarkdownViewer content={note.body} className="text-sm" />
                       )}
-                      <p className="text-xs mt-3" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                        更新: {new Date(note.updated_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                      <div className="mt-3 pt-2 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          更新: {new Date(note.updated_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setOpenNoteCommentId(openNoteCommentId === note.id ? null : note.id)}
+                          className={`text-xs px-2 py-0.5 rounded transition-colors flex items-center gap-1 font-medium ${
+                            openNoteCommentId === note.id
+                              ? 'bg-cyan-100 text-cyan-800'
+                              : 'text-gray-500 hover:text-cyan-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          💬 コメント {openNoteCommentId === note.id ? 'を閉じる' : ''}
+                        </button>
+                      </div>
+                      {openNoteCommentId === note.id && project && (
+                        <div className="mt-2.5 p-3 bg-gray-50/70 rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                          <CommentSection
+                            projectId={project.id}
+                            targetType="note"
+                            targetId={note.id}
+                            targetTitle={`ノート: ${note.title || '（無題）'}`}
+                            compact={true}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2810,6 +2897,54 @@ export default function ProjectPage() {
                 <p className="text-sm font-medium truncate">{primaryAssignee ? userDisplayName(primaryAssignee) : '未設定'}</p>
                 <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{primaryAssignee?.email ?? '主担当が設定されていません'}</p>
               </div>
+            </div>
+          </div>
+
+          {/* 公開範囲・チーム設定 */}
+          <div className="card p-5 space-y-4">
+            <div>
+              <h2 className="section-title">公開範囲・チーム</h2>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                プロジェクトの閲覧・アクセス範囲と担当チームを設定します。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="field-label">公開設定</label>
+                <select
+                  className="field-input"
+                  value={project.visibility || 'public'}
+                  disabled={!canEditProject}
+                  onChange={(e) => setProject({ ...project, visibility: e.target.value as ProjectVisibility })}
+                >
+                  <option value="public">🌐 組織全体に公開（すべての組織メンバーが閲覧可能）</option>
+                  <option value="team">👥 チーム限定（指定チームと個別参加メンバーのみ）</option>
+                  <option value="private">🔒 プライベート（プロジェクト参加メンバーのみ）</option>
+                </select>
+              </div>
+              <div>
+                <label className="field-label">担当チーム</label>
+                <select
+                  className="field-input"
+                  value={project.team_id || ''}
+                  disabled={!canEditProject}
+                  onChange={(e) => setProject({ ...project, team_id: e.target.value || null })}
+                >
+                  <option value="">（未所属）</option>
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => save(project)}
+                disabled={saving || !canEditProject}
+                className="btn-primary text-sm"
+              >
+                公開設定を保存
+              </button>
             </div>
           </div>
 

@@ -288,6 +288,43 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY (parent_id) REFERENCES todos(id) ON DELETE CASCADE
     );
+
+    -- コメント（Todo、ノート、生成コンテンツ、フィールドに対応）
+    CREATE TABLE IF NOT EXISTS comments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- チーム（グループ）
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+    );
+
+    -- チームメンバー
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT DEFAULT 'MEMBER',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(team_id, user_id)
+    );
   `);
 
   ensureColumn(db, 'global_assets', 'objects', `TEXT DEFAULT '[]'`);
@@ -336,6 +373,8 @@ function initSchema(db: Database.Database) {
   ensureColumn(db, 'custom_fields', 'layout', `TEXT DEFAULT 'half'`);
   ensureColumn(db, 'custom_fields', 'is_builtin', `INTEGER DEFAULT 0`);
   ensureColumn(db, 'custom_fields', 'section', `TEXT DEFAULT ''`);
+  ensureColumn(db, 'projects', 'visibility', `TEXT DEFAULT 'public'`);
+  ensureColumn(db, 'projects', 'team_id', `TEXT`);
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_projects_organization_updated ON projects(organization_id, updated_at);
@@ -354,6 +393,13 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_project_sheets_project_created ON project_sheets(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_project_contacts_project_created ON project_contacts(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_invitations_project_status ON invitations(project_id, status);
+    CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_type, target_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_comments_project ON comments(project_id);
+    CREATE INDEX IF NOT EXISTS idx_teams_organization ON teams(organization_id);
+    CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
+    CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_team ON projects(team_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_visibility ON projects(visibility);
 
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id TEXT PRIMARY KEY,
