@@ -30,6 +30,8 @@ export function TabSettingsModal({
 }: TabSettingsModalProps) {
   const [order, setOrder] = useState<ProjectDetailTabKey[]>([]);
   const [hidden, setHidden] = useState<Set<ProjectDetailTabKey>>(new Set());
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -54,6 +56,14 @@ export function TabSettingsModal({
     const next = [...order];
     const [moved] = next.splice(index, 1);
     next.splice(targetIndex, 0, moved);
+    setOrder(next);
+  };
+
+  const handleDropItem = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= order.length || toIdx >= order.length) return;
+    const next = [...order];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
     setOrder(next);
   };
 
@@ -92,7 +102,7 @@ export function TabSettingsModal({
           <div>
             <h2 className="text-base font-bold text-gray-900">タブの並び替え・表示設定</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              タブの表示順と表示/非表示をカスタマイズできます。
+              ドラッグ＆ドロップまたはボタンで並び順を変更できます。
             </p>
           </div>
           <button onClick={onClose} className="text-xl leading-none text-gray-400 hover:text-gray-600">×</button>
@@ -103,38 +113,79 @@ export function TabSettingsModal({
           {order.map((key, index) => {
             const isHidden = hidden.has(key);
             const label = labelMap[key] || key;
+            const isDragging = dragIndex === index;
+            const isDragOver = dragOverIndex === index;
 
             return (
               <div
                 key={key}
-                className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                  isHidden
-                    ? 'bg-gray-50/60 border-dashed border-gray-300 opacity-60'
-                    : 'bg-white border-gray-200/80 shadow-xs'
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', String(index));
+                  setDragIndex(index);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverIndex !== index) {
+                    setDragOverIndex(index);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverIndex === index) {
+                    setDragOverIndex(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIndex !== null) {
+                    handleDropItem(dragIndex, index);
+                  }
+                  setDragIndex(null);
+                  setDragOverIndex(null);
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setDragOverIndex(null);
+                }}
+                className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-grab active:cursor-grabbing select-none ${
+                  isDragging
+                    ? 'opacity-30 scale-95 border-cyan-400 bg-cyan-50'
+                    : isDragOver
+                      ? 'border-cyan-500 bg-cyan-50/50 shadow-md ring-2 ring-cyan-200'
+                      : isHidden
+                        ? 'bg-gray-50/60 border-dashed border-gray-300 opacity-60'
+                        : 'bg-white border-gray-200/80 shadow-xs hover:border-gray-300'
                 }`}
               >
-                {/* チェックボックス + ラベル */}
-                <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 select-none">
-                  <input
-                    type="checkbox"
-                    checked={!isHidden}
-                    onChange={() => toggleHidden(key)}
-                    className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500"
-                  />
-                  <div className="min-w-0">
-                    <span className={`text-sm font-semibold truncate ${isHidden ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                      {label}
-                    </span>
-                    {isHidden && (
-                      <span className="ml-2 text-[10px] px-1.5 py-0.2 rounded bg-gray-200 text-gray-600">
-                        非表示
+                {/* ドラッグハンドル + チェックボックス + ラベル */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="text-gray-400 hover:text-gray-600 shrink-0 text-xs px-0.5 tracking-tighter" title="ドラッグして並び替え">
+                    ⋮⋮
+                  </span>
+                  <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={!isHidden}
+                      onChange={() => toggleHidden(key)}
+                      className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500"
+                    />
+                    <div className="min-w-0">
+                      <span className={`text-sm font-semibold truncate ${isHidden ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                        {label}
                       </span>
-                    )}
-                  </div>
-                </label>
+                      {isHidden && (
+                        <span className="ml-2 text-[10px] px-1.5 py-0.2 rounded bg-gray-200 text-gray-600">
+                          非表示
+                        </span>
+                      )}
+                    </div>
+                  </label>
+                </div>
 
                 {/* 移動ボタン */}
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     onClick={() => moveItem(index, 'up')}

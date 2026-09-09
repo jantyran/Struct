@@ -1884,6 +1884,28 @@ export default function ProjectPage() {
       .filter((t): t is NonNullable<typeof t> => Boolean(t));
   }, [allTabOptions, tabOrder, hiddenTabs]);
 
+  const [draggedTabKey, setDraggedTabKey] = useState<ProjectDetailTabKey | null>(null);
+  const [dragOverTabKey, setDragOverTabKey] = useState<ProjectDetailTabKey | null>(null);
+
+  const handleTabReorder = useCallback((fromKey: ProjectDetailTabKey, toKey: ProjectDetailTabKey) => {
+    if (fromKey === toKey) return;
+    const currentKeys = tabOptions.map((t) => t.k);
+    const fromIdx = currentKeys.indexOf(fromKey);
+    const toIdx = currentKeys.indexOf(toKey);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const nextVisible = [...currentKeys];
+    const [moved] = nextVisible.splice(fromIdx, 1);
+    nextVisible.splice(toIdx, 0, moved);
+
+    // 全ての利用可能タブ順序を構築（非表示タブも末尾に保持）
+    const allKeys = allTabOptions.map((t) => t.k);
+    const remaining = allKeys.filter((k) => !nextVisible.includes(k));
+    const fullNewOrder = [...nextVisible, ...remaining];
+
+    handleSaveTabSettings(fullNewOrder, hiddenTabs);
+  }, [tabOptions, allTabOptions, handleSaveTabSettings, hiddenTabs]);
+
   const availableTabsForConfig = useMemo(() => {
     return allTabOptions.map((t) => ({
       key: t.k,
@@ -2719,15 +2741,54 @@ export default function ProjectPage() {
             className="hidden sm:flex gap-2 flex-nowrap overflow-x-auto"
             style={{ scrollbarWidth: 'none' }}
           >
-            {tabOptions.map((option) => (
-              <button
-                key={`${pane}-${option.k}`}
-                onClick={() => setPaneTab(pane, option.k)}
-                className={`tab-btn shrink-0${currentTab === option.k ? ' active' : ''}`}
-              >
-                {option.l}
-              </button>
-            ))}
+            {tabOptions.map((option) => {
+              const isDragging = draggedTabKey === option.k;
+              const isDragOver = dragOverTabKey === option.k;
+              return (
+                <button
+                  key={`${pane}-${option.k}`}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', option.k);
+                    setDraggedTabKey(option.k);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverTabKey !== option.k) {
+                      setDragOverTabKey(option.k);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverTabKey === option.k) {
+                      setDragOverTabKey(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedTabKey && draggedTabKey !== option.k) {
+                      handleTabReorder(draggedTabKey, option.k);
+                    }
+                    setDraggedTabKey(null);
+                    setDragOverTabKey(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedTabKey(null);
+                    setDragOverTabKey(null);
+                  }}
+                  onClick={() => setPaneTab(pane, option.k)}
+                  className={`tab-btn shrink-0 cursor-grab active:cursor-grabbing transition-all select-none${
+                    currentTab === option.k ? ' active' : ''
+                  }${isDragging ? ' opacity-40 scale-95' : ''}${
+                    isDragOver ? ' ring-2 ring-cyan-400 bg-cyan-50/20 scale-105' : ''
+                  }`}
+                  title="ドラッグして並び替え"
+                >
+                  {option.l}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
