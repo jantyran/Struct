@@ -38,10 +38,19 @@ export default function TeamsSettingsPage() {
   const [addUserId, setAddUserId] = useState('');
   const [addRole, setAddRole] = useState<'LEADER' | 'MEMBER'>('MEMBER');
 
-  const canManage =
+  const isAdmin = Boolean(
     user?.system_permissions?.manage_users ||
+    user?.system_permissions?.manage_organization_settings ||
     user?.system_role === 'SYSTEM_ADMIN' ||
-    user?.system_role === 'MANAGER';
+    user?.system_role === 'MANAGER'
+  );
+
+  const isTeamLeader = Boolean(
+    teamDetail?.members?.some((m) => m.user_id === user?.id && m.role === 'LEADER')
+  );
+
+  const canCreate = Boolean(user);
+  const canEditTeam = isAdmin || isTeamLeader;
 
   const loadTeams = useCallback(async () => {
     try {
@@ -77,7 +86,8 @@ export default function TeamsSettingsPage() {
       const res = await fetch(withBasePath('/api/users'));
       if (res.ok) {
         const data = await res.json();
-        setOrgUsers(data);
+        const userList = Array.isArray(data) ? data : (data.users || []);
+        setOrgUsers(userList);
       }
     } catch (err) {
       console.error(err);
@@ -259,7 +269,7 @@ export default function TeamsSettingsPage() {
             組織内全体とは別にグループでのチーム制をとり、担当プロジェクトやメンバー進捗をまとめます。
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <button onClick={() => setShowCreateModal(true)} className="btn-primary shrink-0 text-xs sm:text-sm">
             + 新規チーム作成
           </button>
@@ -280,7 +290,7 @@ export default function TeamsSettingsPage() {
         <div className="card p-12 text-center" style={{ color: 'var(--text-muted)' }}>
           <p className="text-base font-semibold">チームはまだ作成されていません</p>
           <p className="text-xs mt-1">「+ 新規チーム作成」から最初のチームを登録してください。</p>
-          {canManage && (
+          {canCreate && (
             <button onClick={() => setShowCreateModal(true)} className="btn-primary mt-4">
               最初のチームを作成
             </button>
@@ -342,7 +352,7 @@ export default function TeamsSettingsPage() {
                         className="field-input"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        disabled={!canManage}
+                        disabled={!canEditTeam}
                       />
                     </div>
                     <div>
@@ -353,12 +363,12 @@ export default function TeamsSettingsPage() {
                         value={editDesc}
                         onChange={(e) => setEditDesc(e.target.value)}
                         placeholder="チームの役割や担当領域など"
-                        disabled={!canManage}
+                        disabled={!canEditTeam}
                       />
                     </div>
                   </div>
 
-                  {canManage && (
+                  {canEditTeam && (
                     <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
                       <button
                         onClick={handleDeleteTeam}
@@ -389,7 +399,7 @@ export default function TeamsSettingsPage() {
                   </div>
 
                   {/* メンバー追加フォーム */}
-                  {canManage && availableUsers.length > 0 && (
+                  {canEditTeam && availableUsers.length > 0 && (
                     <form onSubmit={handleAddMember} className="p-3 rounded-xl border bg-gray-50/50 flex flex-wrap sm:flex-nowrap gap-2 items-center" style={{ borderColor: 'var(--border)' }}>
                       <select
                         className="field-input text-xs flex-1 min-w-[160px]"
@@ -449,7 +459,7 @@ export default function TeamsSettingsPage() {
                             </div>
                           </div>
 
-                          {canManage && (
+                          {canEditTeam && (
                             <div className="flex items-center gap-2 shrink-0">
                               <button
                                 onClick={() => handleToggleMemberRole(m.user_id, m.role)}

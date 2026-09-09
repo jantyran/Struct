@@ -167,11 +167,18 @@ export async function DELETE(_req: Request, { params: routeParams }: Params) {
   if (errorResponse) return errorResponse;
 
   const db = getDb();
+  const isLeader = Boolean(
+    db.prepare(`
+      SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ? AND role = 'LEADER'
+    `).get(params.teamId, user.id)
+  );
   const isAdmin =
     user.system_permissions.manage_users ||
-    user.system_role === 'SYSTEM_ADMIN';
+    user.system_permissions.manage_organization_settings ||
+    user.system_role === 'SYSTEM_ADMIN' ||
+    user.system_role === 'MANAGER';
 
-  if (!isAdmin) {
+  if (!isLeader && !isAdmin) {
     return NextResponse.json({ error: 'チーム削除権限がありません' }, { status: 403 });
   }
 

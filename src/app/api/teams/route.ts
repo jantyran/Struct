@@ -31,15 +31,8 @@ export async function POST(req: Request) {
   const { user, errorResponse } = await getAuthSession();
   if (errorResponse) return errorResponse;
 
-  // 組織管理者またはマネージャー権限が必要
-  const canManage =
-    user.system_permissions.manage_users ||
-    user.system_permissions.manage_organization_settings ||
-    user.system_role === 'SYSTEM_ADMIN' ||
-    user.system_role === 'MANAGER';
-
-  if (!canManage) {
-    return NextResponse.json({ error: 'チーム作成権限がありません' }, { status: 403 });
+  if (!user.organization_id) {
+    return NextResponse.json({ error: '組織に所属していません' }, { status: 400 });
   }
 
   let body: { name?: string; description?: string };
