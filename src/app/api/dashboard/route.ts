@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requireSession } from '@/lib/auth';
-import { hasSystemPermission } from '@/lib/permissions';
+import { getAuthSession } from '@/lib/auth';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
 import { normalizeProjectTypeDefinitionsRow } from '@/lib/project-types';
 import type { Project } from '@/types';
@@ -25,20 +24,16 @@ interface DashboardTodo {
 }
 
 export async function GET() {
-  let user;
-  try {
-    user = await requireSession();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
 
   const db = getDb();
   const today = new Date().toISOString().slice(0, 10);
 
   // プロジェクト取得（権限に応じて全件 or 自分関係のみ）
   const canViewAll =
-    hasSystemPermission(db, user.id, 'view_all_projects') ||
-    hasSystemPermission(db, user.id, 'edit_all_projects');
+    user.system_permissions.view_all_projects ||
+    user.system_permissions.edit_all_projects;
 
   const projects: Project[] = canViewAll
     ? (db.prepare('SELECT * FROM projects WHERE organization_id = ? ORDER BY updated_at DESC').all(user.organization_id) as Project[])

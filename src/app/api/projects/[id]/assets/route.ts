@@ -1,38 +1,41 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requireSession } from '@/lib/auth';
+import { getAuthSession } from '@/lib/auth';
 import { requireProjectPermission } from '@/lib/permissions';
 
 interface Params { params: Promise<{ id: string }> }
 
 export async function GET(_req: Request, { params: routeParams }: Params) {
   const params = await routeParams;
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
+
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user, 'view_content')) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   try {
-    const user = await requireSession();
-    const db = getDb();
-
-    if (!requireProjectPermission(db, params.id, user.id, 'view_content')) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
     const assets = db.prepare(`
       SELECT * FROM generated_assets WHERE project_id = ? ORDER BY created_at DESC
     `).all(params.id);
-    
     return NextResponse.json(assets);
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('GET /api/projects/[id]/assets failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request, { params: routeParams }: Params) {
   const params = await routeParams;
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
+
+  const db = getDb();
+  const { searchParams } = new URL(request.url);
+  const assetId = searchParams.get('assetId');
+
+  if (!requireProjectPermission(db, params.id, user, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
+
   try {
-    const user = await requireSession();
-    const db = getDb();
-    const { searchParams } = new URL(request.url);
-    const assetId = searchParams.get('assetId');
-
-    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
-
     if (!assetId) {
       db.prepare('DELETE FROM generated_assets WHERE project_id = ?').run(params.id);
     } else {
@@ -41,20 +44,29 @@ export async function DELETE(request: Request, { params: routeParams }: Params) 
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('DELETE /api/projects/[id]/assets failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request, { params: routeParams }: Params) {
   const params = await routeParams;
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
+
+  const db = getDb();
+  if (!requireProjectPermission(db, params.id, user, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
+
+  let body: { assetId?: string; title?: string; content?: string };
   try {
-    const user = await requireSession();
-    const db = getDb();
-    const body = await request.json() as { assetId?: string; title?: string; content?: string };
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
 
-    if (!requireProjectPermission(db, params.id, user.id, 'generate_content')) return NextResponse.json({ error: 'コンテンツ編集権限がありません' }, { status: 403 });
-    if (!body.assetId) return NextResponse.json({ error: 'assetId is required' }, { status: 400 });
+  if (!body.assetId) return NextResponse.json({ error: 'assetId is required' }, { status: 400 });
 
+  try {
     const existing = db.prepare(`
       SELECT * FROM generated_assets WHERE id = ? AND project_id = ?
     `).get(body.assetId, params.id) as { id: string; title: string; content: string } | undefined;
@@ -76,6 +88,7 @@ export async function PATCH(request: Request, { params: routeParams }: Params) {
     const updated = db.prepare('SELECT * FROM generated_assets WHERE id = ?').get(body.assetId);
     return NextResponse.json(updated);
   } catch (err) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('PATCH /api/projects/[id]/assets failed', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

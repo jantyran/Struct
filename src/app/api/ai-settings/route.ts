@@ -1,23 +1,19 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requireSession } from '@/lib/auth';
+import { getAuthSession } from '@/lib/auth';
 import { maskAISettings, normalizeAISettings, normalizeAISettingsRow, serializeAISettings } from '@/lib/ai/settings';
 import { getOrganizationSettingsRow } from '@/lib/organization-settings';
-import { hasSystemPermission } from '@/lib/permissions';
 
 export async function GET() {
-  let user;
-  try {
-    user = await requireSession();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
+
+  if (!user.system_permissions.manage_ai_settings) {
+    return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
   }
 
   try {
     const db = getDb();
-    if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
-      return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
-    }
     const row = getOrganizationSettingsRow(db, user.organization_id);
     const settings = normalizeAISettingsRow(row);
     return NextResponse.json({
@@ -31,18 +27,15 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  let user;
-  try {
-    user = await requireSession();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
+
+  if (!user.system_permissions.manage_ai_settings) {
+    return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
   }
 
   try {
     const db = getDb();
-    if (!hasSystemPermission(db, user.id, 'manage_ai_settings')) {
-      return NextResponse.json({ error: 'AI設定管理権限がありません' }, { status: 403 });
-    }
     const body = await request.json() as { settings?: unknown };
     const settings = normalizeAISettings((body.settings as Partial<import('@/types').AISettings>) || {});
     getOrganizationSettingsRow(db, user.organization_id);

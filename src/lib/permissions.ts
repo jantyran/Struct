@@ -212,8 +212,16 @@ export function seedProjectRoles(db: Database.Database) {
   });
 }
 
-export function projectRoleDefinitions(db: Database.Database) {
+let rolesSeeded = false;
+export function ensureRolesSeeded(db: Database.Database) {
+  if (rolesSeeded) return;
+  seedSystemRoles(db);
   seedProjectRoles(db);
+  rolesSeeded = true;
+}
+
+export function projectRoleDefinitions(db: Database.Database) {
+  ensureRolesSeeded(db);
   return db.prepare(`
     SELECT id, key, name, description, permissions, is_system, sort_order
     FROM project_role_definitions
@@ -225,12 +233,12 @@ export function projectRoleDefinitions(db: Database.Database) {
 }
 
 export function projectRoleExists(db: Database.Database, roleKey: string) {
-  seedProjectRoles(db);
+  ensureRolesSeeded(db);
   return Boolean(db.prepare('SELECT 1 FROM project_role_definitions WHERE key = ?').get(roleKey));
 }
 
 export function systemRoleDefinitions(db: Database.Database) {
-  seedSystemRoles(db);
+  ensureRolesSeeded(db);
   return db.prepare(`
     SELECT id, key, name, description, permissions, is_system, sort_order
     FROM system_role_definitions
@@ -242,12 +250,11 @@ export function systemRoleDefinitions(db: Database.Database) {
 }
 
 export function systemRoleExists(db: Database.Database, roleKey: string) {
-  seedSystemRoles(db);
+  ensureRolesSeeded(db);
   return Boolean(db.prepare('SELECT 1 FROM system_role_definitions WHERE key = ?').get(roleKey));
 }
 
 export function systemPermissionsForUser(db: Database.Database, userId: string): SystemPermissions {
-  seedSystemRoles(db);
   const row = db.prepare(`
     SELECT rd.permissions
     FROM users u
@@ -257,7 +264,21 @@ export function systemPermissionsForUser(db: Database.Database, userId: string):
   return parseSystemPermissions(row?.permissions);
 }
 
-export function hasSystemPermission(db: Database.Database, userId: string, permission: SystemPermissionKey) {
+export type UserContext = string | {
+  id: string;
+  organization_id?: string | null;
+  system_permissions?: SystemPermissions;
+};
+
+export function hasSystemPermission(
+  db: Database.Database,
+  userOrId: UserContext,
+  permission: SystemPermissionKey
+) {
+  if (typeof userOrId === 'object' && userOrId.system_permissions) {
+    return Boolean(userOrId.system_permissions[permission]);
+  }
+  const userId = typeof userOrId === 'string' ? userOrId : userOrId.id;
   return Boolean(systemPermissionsForUser(db, userId)[permission]);
 }
 
@@ -266,9 +287,25 @@ export function normalizeProjectMemberRole(role: unknown) {
   return value || 'MEMBER';
 }
 
-export function projectAccessForUser(db: Database.Database, projectId: string, userId: string) {
-  const systemPermissions = systemPermissionsForUser(db, userId);
-  const userRow = db.prepare('SELECT organization_id FROM users WHERE id = ?').get(userId) as { organization_id?: string | null } | undefined;
+export function projectAccessForUser(db: Database.Database, projectId: string, userOrId: UserContext) {
+  const userId = typeof userOrId === 'string' ? userOrId : userOrId.id;
+  let systemPermissions: SystemPermissions;
+  let userOrgId: string | null | undefined;
+
+  if (typeof userOrId === 'object' && userOrId.system_permissions) {
+    systemPermissions = userOrId.system_permissions;
+    userOrgId = userOrId.organization_id;
+  } else {
+    const userRow = db.prepare(`
+      SELECT u.organization_id, rd.permissions
+      FROM users u
+      LEFT JOIN system_role_definitions rd ON rd.key = u.system_role
+      WHERE u.id = ?
+    `).get(userId) as { organization_id?: string | null; permissions?: string | null } | undefined;
+    userOrgId = userRow?.organization_id;
+    systemPermissions = parseSystemPermissions(userRow?.permissions);
+  }
+
   const row = db.prepare(`
     SELECT p.owner_id, p.organization_id, m.role, pr.permissions AS project_role_permissions
     FROM projects p
@@ -278,7 +315,7 @@ export function projectAccessForUser(db: Database.Database, projectId: string, u
   `).get(userId, projectId) as { owner_id: string; organization_id?: string | null; role?: string | null; project_role_permissions?: string | null } | undefined;
 
   if (!row) return null;
-  if (userRow?.organization_id && row.organization_id && row.organization_id !== userRow.organization_id) return null;
+  if (userOrgId && row.organization_id && row.organization_id !== userOrgId) return null;
   const isOwner = row.owner_id === userId;
   const isMember = Boolean(row.role);
   const projectPermissions = parseProjectRolePermissions(row.project_role_permissions);
@@ -316,8 +353,8 @@ type ProjectPermissionKey =
   | 'manage_members'
   | 'delete_project';
 
-export function requireProjectPermission(db: Database.Database, projectId: string, userId: string, permission: ProjectPermissionKey) {
-  const access = projectAccessForUser(db, projectId, userId);
+export function requireProjectPermission(db: Database.Database, projectId: string, userOrId: UserContext, permission: ProjectPermissionKey) {
+  const access = projectAccessForUser(db, projectId, userOrId);
   if (!access) return false;
   switch (permission) {
     case 'view_project': return access.can_view;
