@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { requireSession } from '@/lib/auth';
+import { getAuthSession } from '@/lib/auth';
 import { requireProjectPermission } from '@/lib/permissions';
 import type { ProjectNote } from '@/types';
 
@@ -9,15 +9,11 @@ interface Params { params: Promise<{ id: string; noteId: string }> }
 /** ノート更新（title / body / pinned） */
 export async function PATCH(req: Request, { params: routeParams }: Params) {
   const params = await routeParams;
-  let user;
-  try {
-    user = await requireSession();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
 
   const db = getDb();
-  if (!requireProjectPermission(db, params.id, user.id, 'edit_notes')) {
+  if (!requireProjectPermission(db, params.id, user, 'edit_notes')) {
     return NextResponse.json({ error: 'ノート編集権限がありません' }, { status: 403 });
   }
 
@@ -55,15 +51,11 @@ export async function PATCH(req: Request, { params: routeParams }: Params) {
 /** ノート削除 */
 export async function DELETE(_req: Request, { params: routeParams }: Params) {
   const params = await routeParams;
-  let user;
-  try {
-    user = await requireSession();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { user, errorResponse } = await getAuthSession();
+  if (errorResponse) return errorResponse;
 
   const db = getDb();
-  if (!requireProjectPermission(db, params.id, user.id, 'edit_notes')) {
+  if (!requireProjectPermission(db, params.id, user, 'edit_notes')) {
     return NextResponse.json({ error: 'ノート編集権限がありません' }, { status: 403 });
   }
 

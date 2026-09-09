@@ -83,6 +83,20 @@ export async function getSession() {
   }
 }
 
+export type AuthUser = NonNullable<Awaited<ReturnType<typeof getSession>>>;
+
+export type AuthSessionResult =
+  | { user: AuthUser; errorResponse: null }
+  | { user: null; errorResponse: NextResponse };
+
+export async function getAuthSession(): Promise<AuthSessionResult> {
+  const user = await getSession();
+  if (!user) {
+    return { user: null, errorResponse: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  }
+  return { user, errorResponse: null };
+}
+
 export async function requireSession() {
   const user = await getSession();
   if (!user) throw new Error("Unauthorized");

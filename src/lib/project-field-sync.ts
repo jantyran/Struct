@@ -141,28 +141,33 @@ export function syncCustomFieldsWithDefinition(projectId: string, existingFields
 }
 
 export function persistProjectCustomFields(db: Database.Database, projectId: string, fields: CustomField[]) {
-  db.prepare('DELETE FROM custom_fields WHERE project_id = ?').run(projectId);
+  const insert = db.prepare(`
+    INSERT INTO custom_fields (id, project_id, template_id, key, label, type, value, options, layout, inherited, inherited_from, crawled_content, sort_order, is_builtin, section)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
-  for (const field of fields) {
-    db.prepare(`
-      INSERT INTO custom_fields (id, project_id, template_id, key, label, type, value, options, layout, inherited, inherited_from, crawled_content, sort_order, is_builtin, section)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      field.id,
-      projectId,
-      field.template_id ?? null,
-      field.key,
-      field.label,
-      field.type,
-      field.value ?? '',
-      field.options ?? '{}',
-      normalizeLayout(field.layout),
-      field.inherited ?? 0,
-      field.inherited_from ?? null,
-      field.crawled_content ?? null,
-      field.sort_order ?? 0,
-      field.is_builtin ?? 0,
-      field.section ?? ''
-    );
-  }
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM custom_fields WHERE project_id = ?').run(projectId);
+    for (const field of fields) {
+      insert.run(
+        field.id,
+        projectId,
+        field.template_id ?? null,
+        field.key,
+        field.label,
+        field.type,
+        field.value ?? '',
+        field.options ?? '{}',
+        normalizeLayout(field.layout),
+        field.inherited ?? 0,
+        field.inherited_from ?? null,
+        field.crawled_content ?? null,
+        field.sort_order ?? 0,
+        field.is_builtin ?? 0,
+        field.section ?? ''
+      );
+    }
+  });
+
+  tx();
 }

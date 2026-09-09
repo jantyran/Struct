@@ -48,28 +48,14 @@ interface ProjectRow {
   primary_assignee_email?: string | null;
   primary_assignee_avatar_url?: string | null;
   relation_id?: string;
+  todo_total?: number;
+  todo_done?: number;
+  todo_overdue?: number;
 }
 
-function todoSummary(db: Database.Database, projectId: string) {
-  const row = db.prepare(`
-    SELECT
-      COUNT(*) AS todo_total,
-      SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS todo_done,
-      SUM(CASE WHEN status <> 'done' AND due_date <> '' AND date(due_date) < date('now') THEN 1 ELSE 0 END) AS todo_overdue
-    FROM todos
-    WHERE project_id = ?
-  `).get(projectId) as { todo_total: number; todo_done: number | null; todo_overdue: number | null };
+function toSummary(row: ProjectRow): ProjectRelationSummary {
   const total = Number(row.todo_total ?? 0);
   const done = Number(row.todo_done ?? 0);
-  return {
-    todo_total: total,
-    todo_done: done,
-    todo_overdue: Number(row.todo_overdue ?? 0),
-    completion_rate: total > 0 ? Math.round((done / total) * 100) : 0,
-  };
-}
-
-function toSummary(db: Database.Database, row: ProjectRow): ProjectRelationSummary {
   return {
     id: row.id,
     relation_id: row.relation_id,
@@ -87,7 +73,10 @@ function toSummary(db: Database.Database, row: ProjectRow): ProjectRelationSumma
           avatar_url: row.primary_assignee_avatar_url ?? '',
         }
       : null,
-    ...todoSummary(db, row.id),
+    todo_total: total,
+    todo_done: done,
+    todo_overdue: Number(row.todo_overdue ?? 0),
+    completion_rate: total > 0 ? Math.round((done / total) * 100) : 0,
   };
 }
 
@@ -98,7 +87,10 @@ function projectSelectSql(whereClause: string, extraSelect = '') {
       p.created_at, p.updated_at,
       lead.name AS primary_assignee_name,
       lead.email AS primary_assignee_email,
-      lead.avatar_url AS primary_assignee_avatar_url
+      lead.avatar_url AS primary_assignee_avatar_url,
+      (SELECT COUNT(*) FROM todos t WHERE t.project_id = p.id) AS todo_total,
+      (SELECT COUNT(*) FROM todos t WHERE t.project_id = p.id AND t.status = 'done') AS todo_done,
+      (SELECT COUNT(*) FROM todos t WHERE t.project_id = p.id AND t.status <> 'done' AND t.due_date <> '' AND date(t.due_date) < date('now')) AS todo_overdue
       ${extraSelect}
     FROM projects p
     LEFT JOIN users lead ON p.primary_assignee_id = lead.id
@@ -126,7 +118,7 @@ export function getProjectRelations(db: Database.Database, projectId: string, us
     ? db.prepare(projectSelectSql('WHERE p.id = ?')).get(current.parent_project_id) as ProjectRow | undefined
     : undefined;
   const parent = parentRow && requireProjectPermission(db, parentRow.id, userId, 'view_project')
-    ? toSummary(db, parentRow)
+    ? toSummary(parentRow)
     : null;
 
   const childRows = db.prepare(`
@@ -135,7 +127,7 @@ export function getProjectRelations(db: Database.Database, projectId: string, us
   `).all(projectId) as ProjectRow[];
   const children = childRows
     .filter((row) => requireProjectPermission(db, row.id, userId, 'view_project'))
-    .map((row) => toSummary(db, row));
+    .map((row) => toSummary(row));
 
   const relatedRows = db.prepare(`
     ${projectSelectSql(`
@@ -148,7 +140,7 @@ export function getProjectRelations(db: Database.Database, projectId: string, us
   `).all(projectId, projectId, current.organization_id) as ProjectRow[];
   const related = relatedRows
     .filter((row) => requireProjectPermission(db, row.id, userId, 'view_project'))
-    .map((row) => toSummary(db, row));
+    .map((row) => toSummary(row));
 
   const availableRows = db.prepare(`
     SELECT id, name, type, status, phase_key, parent_project_id
