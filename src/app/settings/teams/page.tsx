@@ -392,57 +392,67 @@ export default function TeamsSettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="section-title">チームメンバー ({currentMembers.length})</h2>
-                      <p className="text-xs mt-0.5 text-gray-500">
-                        リーダーは進捗確認やチーム管理権限を持ちます。
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        リーダーは進捗確認やチーム情報・メンバー編成の管理権限を持ちます。
                       </p>
                     </div>
                   </div>
 
                   {/* メンバー追加フォーム */}
-                  {canEditTeam && availableUsers.length > 0 && (
-                    <form onSubmit={handleAddMember} className="p-3 rounded-xl border bg-gray-50/50 flex flex-wrap sm:flex-nowrap gap-2 items-center" style={{ borderColor: 'var(--border)' }}>
-                      <select
-                        className="field-input text-xs flex-1 min-w-[160px]"
-                        value={addUserId}
-                        onChange={(e) => setAddUserId(e.target.value)}
+                  {canEditTeam && (
+                    availableUsers.length > 0 ? (
+                      <form
+                        onSubmit={handleAddMember}
+                        className="p-3.5 rounded-xl border bg-slate-50/70 grid grid-cols-1 sm:grid-cols-[1fr_130px_auto] gap-2.5 items-center"
+                        style={{ borderColor: 'var(--border)' }}
                       >
-                        <option value="">メンバーを選択して追加...</option>
-                        {availableUsers.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name || u.email} ({u.email})
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="field-input text-xs w-28 shrink-0"
-                        value={addRole}
-                        onChange={(e) => setAddRole(e.target.value as 'LEADER' | 'MEMBER')}
-                      >
-                        <option value="MEMBER">メンバー</option>
-                        <option value="LEADER">リーダー</option>
-                      </select>
-                      <button
-                        type="submit"
-                        disabled={!addUserId || saving}
-                        className="btn-secondary text-xs shrink-0"
-                      >
-                        追加
-                      </button>
-                    </form>
+                        <select
+                          className="field-input text-xs"
+                          value={addUserId}
+                          onChange={(e) => setAddUserId(e.target.value)}
+                        >
+                          <option value="">追加するメンバーを選択...</option>
+                          {availableUsers.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name || u.email} ({u.email})
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="field-input text-xs"
+                          value={addRole}
+                          onChange={(e) => setAddRole(e.target.value as 'LEADER' | 'MEMBER')}
+                        >
+                          <option value="MEMBER">一般メンバー</option>
+                          <option value="LEADER">リーダー</option>
+                        </select>
+                        <button
+                          type="submit"
+                          disabled={!addUserId || saving}
+                          className="btn-primary text-xs px-4 h-[38px] rounded-xl font-medium inline-flex items-center justify-center shrink-0"
+                        >
+                          {saving ? '追加中...' : '追加'}
+                        </button>
+                      </form>
+                    ) : (
+                      <p className="text-xs text-gray-400 py-1 px-2">
+                        ※ 組織内のすべてのユーザーが既にチームに所属しています。
+                      </p>
+                    )
                   )}
 
                   {/* メンバーリスト */}
-                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  <div className="divide-y divide-slate-100">
                     {currentMembers.map((m) => {
                       const displayName = m.user_name || m.user_email || 'ユーザー';
                       const isLeader = m.role === 'LEADER';
                       return (
-                        <div key={m.id} className="py-3 flex items-center justify-between gap-3">
+                        <div key={m.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                           <div className="flex items-center gap-3 min-w-0">
                             {m.user_avatar_url ? (
-                              <img src={m.user_avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                              <img src={m.user_avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-gray-200 shrink-0" />
                             ) : (
-                              <div className="w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-semibold">
+                              <div className="w-8 h-8 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xs font-semibold shrink-0">
                                 {displayName[0].toUpperCase()}
                               </div>
                             )}
@@ -450,7 +460,7 @@ export default function TeamsSettingsPage() {
                               <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-semibold truncate">{displayName}</span>
                                 {isLeader && (
-                                  <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
                                     ⭐ リーダー
                                   </span>
                                 )}
@@ -460,17 +470,19 @@ export default function TeamsSettingsPage() {
                           </div>
 
                           {canEditTeam && (
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                               <button
+                                type="button"
                                 onClick={() => handleToggleMemberRole(m.user_id, m.role)}
-                                className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition-colors text-gray-600"
+                                className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-gray-600 bg-white"
                                 title="リーダー/メンバーを切り替え"
                               >
-                                {isLeader ? 'メンバーへ変更' : 'リーダーへ昇格'}
+                                {isLeader ? 'メンバーへ降格' : 'リーダーへ昇格'}
                               </button>
                               <button
+                                type="button"
                                 onClick={() => handleRemoveMember(m.user_id)}
-                                className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                                className="text-xs text-red-500 hover:text-red-700 px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors border border-transparent hover:border-red-200"
                               >
                                 除外
                               </button>
