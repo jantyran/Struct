@@ -35,6 +35,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '組織に所属していません' }, { status: 400 });
   }
 
+  // チーム作成権限チェック（ロールの manage_teams 権限または組織管理者）
+  const canCreate =
+    user.system_permissions.manage_teams ||
+    user.system_permissions.manage_organization_settings ||
+    user.system_permissions.manage_users ||
+    user.system_role === 'SYSTEM_ADMIN' ||
+    user.system_role === 'MANAGER';
+
+  if (!canCreate) {
+    return NextResponse.json({ error: 'チーム作成権限がありません。管理者にお問い合わせください。' }, { status: 403 });
+  }
+
   let body: { name?: string; description?: string };
   try {
     body = await req.json();

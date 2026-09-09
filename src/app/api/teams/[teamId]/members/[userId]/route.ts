@@ -19,7 +19,9 @@ export async function DELETE(_req: Request, { params: routeParams }: Params) {
     `).get(params.teamId, user.id)
   );
   const isAdmin =
+    user.system_permissions.manage_teams ||
     user.system_permissions.manage_users ||
+    user.system_permissions.manage_organization_settings ||
     user.system_role === 'SYSTEM_ADMIN' ||
     user.system_role === 'MANAGER';
   const isSelf = params.userId === user.id;

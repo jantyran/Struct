@@ -12,6 +12,7 @@ import { usePendingScrollTarget } from '@/hooks/usePendingScrollTarget';
 const PERMISSIONS: Array<{ key: SystemPermissionKey; label: string; description: string }> = [
   { key: 'manage_organization_settings', label: '組織設定管理', description: '組織設定全体と組織基本設定を表示・変更' },
   { key: 'manage_users', label: 'ユーザー管理', description: '全ユーザーの表示名、アバター、システムロールを変更' },
+  { key: 'manage_teams', label: 'チーム管理', description: 'チームの新規作成や全チームの編集・メンバー管理・削除' },
   { key: 'manage_system_roles', label: 'システムロール管理', description: 'システムロールと権限定義を変更' },
   { key: 'manage_project_roles', label: 'プロジェクトロール管理', description: 'プロジェクトメンバーに付与するロールと権限を変更' },
   { key: 'manage_project_settings', label: 'プロジェクト設定管理', description: 'プロジェクト種別、項目、セクション定義を管理' },

@@ -51,6 +51,14 @@ function TeamsProgressContent() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'overdue'>('open');
 
+  const canManageTeams = Boolean(
+    user?.system_permissions?.manage_teams ||
+    user?.system_permissions?.manage_organization_settings ||
+    user?.system_permissions?.manage_users ||
+    user?.system_role === 'SYSTEM_ADMIN' ||
+    user?.system_role === 'MANAGER'
+  );
+
   const loadTeams = useCallback(async () => {
     try {
       const res = await fetch(withBasePath('/api/teams'));
@@ -155,10 +163,18 @@ function TeamsProgressContent() {
       ) : teams.length === 0 ? (
         <div className="card p-12 text-center text-gray-500">
           <p className="text-base font-semibold">参加しているチームがありません</p>
-          <p className="text-xs mt-1">「チーム設定」から新しいチームを作成してください。</p>
-          <Link href={withBasePath('/settings/teams')} className="btn-primary inline-block mt-4 text-xs">
-            チームを作成する
-          </Link>
+          {canManageTeams ? (
+            <>
+              <p className="text-xs mt-1">「チーム設定」から新しいチームを作成してください。</p>
+              <Link href={withBasePath('/settings/teams')} className="btn-primary inline-block mt-4 text-xs">
+                チームを作成する
+              </Link>
+            </>
+          ) : (
+            <p className="text-xs mt-2 text-gray-400">
+              チームへの参加やチーム作成は、チームのリーダーまたは組織の管理者にお問い合わせください。
+            </p>
+          )}
         </div>
       ) : detailLoading || !teamDetail ? (
         <div className="card p-12 text-center text-sm text-gray-400">チーム詳細を読み込み中...</div>

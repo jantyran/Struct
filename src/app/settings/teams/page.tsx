@@ -39,6 +39,7 @@ export default function TeamsSettingsPage() {
   const [addRole, setAddRole] = useState<'LEADER' | 'MEMBER'>('MEMBER');
 
   const isAdmin = Boolean(
+    user?.system_permissions?.manage_teams ||
     user?.system_permissions?.manage_users ||
     user?.system_permissions?.manage_organization_settings ||
     user?.system_role === 'SYSTEM_ADMIN' ||
@@ -49,7 +50,7 @@ export default function TeamsSettingsPage() {
     teamDetail?.members?.some((m) => m.user_id === user?.id && m.role === 'LEADER')
   );
 
-  const canCreate = Boolean(user);
+  const canCreate = isAdmin;
   const canEditTeam = isAdmin || isTeamLeader;
 
   const loadTeams = useCallback(async () => {
@@ -289,11 +290,17 @@ export default function TeamsSettingsPage() {
       ) : teams.length === 0 ? (
         <div className="card p-12 text-center" style={{ color: 'var(--text-muted)' }}>
           <p className="text-base font-semibold">チームはまだ作成されていません</p>
-          <p className="text-xs mt-1">「+ 新規チーム作成」から最初のチームを登録してください。</p>
-          {canCreate && (
-            <button onClick={() => setShowCreateModal(true)} className="btn-primary mt-4">
-              最初のチームを作成
-            </button>
+          {canCreate ? (
+            <>
+              <p className="text-xs mt-1">「+ 新規チーム作成」から最初のチームを登録してください。</p>
+              <button onClick={() => setShowCreateModal(true)} className="btn-primary mt-4">
+                最初のチームを作成
+              </button>
+            </>
+          ) : (
+            <p className="text-xs mt-2 text-gray-500">
+              チームを新規作成するには、システム管理者によるチーム管理権限（manage_teams）の付与が必要です。
+            </p>
           )}
         </div>
       ) : (

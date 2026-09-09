@@ -258,6 +258,7 @@ export interface ProjectContact {
 export type SystemPermissionKey =
   | 'manage_organization_settings'
   | 'manage_users'
+  | 'manage_teams'
   | 'manage_system_roles'
   | 'manage_project_roles'
   | 'manage_project_settings'

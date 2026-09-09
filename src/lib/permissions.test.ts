@@ -181,4 +181,20 @@ describe('Permissions & Project Access', () => {
     expect(requireProjectPermission(db, 'proj-2', 'user-guest', 'view_items')).toBe(true);
     expect(requireProjectPermission(db, 'proj-2', 'user-guest', 'edit_items')).toBe(false);
   });
+
+  it('correctly checks manage_teams system permission', () => {
+    db.prepare('INSERT INTO users (id, email, password_hash, organization_id, system_role) VALUES (?, ?, ?, ?, ?)').run(
+      'admin-teams', 'admin@example.com', 'hash', 'org-1', 'SYSTEM_ADMIN'
+    );
+    db.prepare('INSERT INTO users (id, email, password_hash, organization_id, system_role) VALUES (?, ?, ?, ?, ?)').run(
+      'mgr-teams', 'manager@example.com', 'hash', 'org-1', 'MANAGER'
+    );
+    db.prepare('INSERT INTO users (id, email, password_hash, organization_id, system_role) VALUES (?, ?, ?, ?, ?)').run(
+      'user-teams', 'user@example.com', 'hash', 'org-1', 'USER'
+    );
+
+    expect(hasSystemPermission(db, 'admin-teams', 'manage_teams')).toBe(true);
+    expect(hasSystemPermission(db, 'mgr-teams', 'manage_teams')).toBe(true);
+    expect(hasSystemPermission(db, 'user-teams', 'manage_teams')).toBe(false);
+  });
 });

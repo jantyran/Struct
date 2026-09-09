@@ -5,6 +5,7 @@ type RoleRow = { id: string; key: string; name: string; description: string; per
 export const SYSTEM_PERMISSION_KEYS = [
   'manage_organization_settings',
   'manage_users',
+  'manage_teams',
   'manage_system_roles',
   'manage_project_roles',
   'manage_project_settings',
@@ -37,6 +38,7 @@ export const DEFAULT_SYSTEM_ROLES = [
     permissions: {
       manage_organization_settings: true,
       manage_users: false,
+      manage_teams: true,
       manage_system_roles: false,
       manage_project_roles: true,
       manage_project_settings: true,
@@ -54,6 +56,7 @@ export const DEFAULT_SYSTEM_ROLES = [
     permissions: {
       manage_organization_settings: false,
       manage_users: false,
+      manage_teams: false,
       manage_system_roles: false,
       manage_project_roles: false,
       manage_project_settings: false,
@@ -174,6 +177,24 @@ export function seedSystemRoles(db: Database.Database) {
   if (!firstAdmin) {
     const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get() as { id: string } | undefined;
     if (firstUser) db.prepare("UPDATE users SET system_role = 'SYSTEM_ADMIN' WHERE id = ?").run(firstUser.id);
+  }
+
+  // 既存の SYSTEM_ADMIN / MANAGER ロールに manage_teams が未反映であれば付与
+  const adminRole = db.prepare("SELECT id, permissions FROM system_role_definitions WHERE key = 'SYSTEM_ADMIN'").get() as { id: string; permissions: string } | undefined;
+  if (adminRole) {
+    const perms = parseSystemPermissions(adminRole.permissions);
+    if (!perms.manage_teams) {
+      perms.manage_teams = true;
+      db.prepare("UPDATE system_role_definitions SET permissions = ? WHERE id = ?").run(JSON.stringify(perms), adminRole.id);
+    }
+  }
+  const managerRole = db.prepare("SELECT id, permissions FROM system_role_definitions WHERE key = 'MANAGER'").get() as { id: string; permissions: string } | undefined;
+  if (managerRole) {
+    const perms = parseSystemPermissions(managerRole.permissions);
+    if (!perms.manage_teams) {
+      perms.manage_teams = true;
+      db.prepare("UPDATE system_role_definitions SET permissions = ? WHERE id = ?").run(JSON.stringify(perms), managerRole.id);
+    }
   }
 }
 
