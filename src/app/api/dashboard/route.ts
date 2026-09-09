@@ -40,9 +40,15 @@ export async function GET() {
     : (db.prepare(`
         SELECT DISTINCT p.* FROM projects p
         LEFT JOIN project_members m ON p.id = m.project_id
-        WHERE p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+        LEFT JOIN team_members tm ON p.team_id = tm.team_id AND tm.user_id = ?
+        WHERE p.organization_id = ? AND (
+          p.owner_id = ? OR
+          m.user_id = ? OR
+          (p.visibility = 'team' AND tm.user_id IS NOT NULL) OR
+          (p.visibility = 'public' OR p.visibility IS NULL OR p.visibility = '')
+        )
         ORDER BY p.updated_at DESC
-      `).all(user.organization_id, user.id, user.id) as Project[]);
+      `).all(user.id, user.organization_id, user.id, user.id) as Project[]);
 
   // Todo 集計（プロジェクトごと）
   const projectIds = projects.map(p => p.id);
@@ -78,19 +84,21 @@ export async function GET() {
     FROM todos t
     JOIN projects p ON t.project_id = p.id
     WHERE t.assignee_id = ?
+      AND p.organization_id = ?
       AND t.status != 'done'
     ORDER BY
       CASE WHEN t.due_date = '' THEN 1 ELSE 0 END ASC,
       t.due_date ASC,
       t.sort_order ASC
     LIMIT 8
-  `).all(user.id) as DashboardTodo[];
+  `).all(user.id, user.organization_id) as DashboardTodo[];
 
   // 自分の未完了Todo数（全プロジェクト・件数のみ）
   const myOpenCount = (db.prepare(`
-    SELECT COUNT(*) AS cnt FROM todos
-    WHERE assignee_id = ? AND status != 'done'
-  `).get(user.id) as { cnt: number }).cnt;
+    SELECT COUNT(*) AS cnt FROM todos t
+    JOIN projects p ON t.project_id = p.id
+    WHERE t.assignee_id = ? AND p.organization_id = ? AND t.status != 'done'
+  `).get(user.id, user.organization_id) as { cnt: number }).cnt;
 
   const ownedProjectIds = projects
     .filter(p => p.owner_id === user.id)
@@ -131,12 +139,13 @@ export async function GET() {
     FROM todos t
     JOIN projects p ON t.project_id = p.id
     WHERE t.assignee_id = ?
+      AND p.organization_id = ?
       AND t.status != 'done'
       AND t.due_date != ''
       AND t.due_date <= ?
     ORDER BY t.due_date ASC
     LIMIT 10
-  `).all(user.id, weekEndStr) as DashboardTodo[];
+  `).all(user.id, user.organization_id, weekEndStr) as DashboardTodo[];
 
   // 更新が14日以上止まっているアクティブプロジェクト
   const staleThreshold = new Date();

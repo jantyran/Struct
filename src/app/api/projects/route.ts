@@ -19,9 +19,15 @@ export async function GET() {
       : db.prepare(`
           SELECT DISTINCT p.* FROM projects p
           LEFT JOIN project_members m ON p.id = m.project_id
-          WHERE p.organization_id = ? AND (p.owner_id = ? OR m.user_id = ?)
+          LEFT JOIN team_members tm ON p.team_id = tm.team_id AND tm.user_id = ?
+          WHERE p.organization_id = ? AND (
+            p.owner_id = ? OR
+            m.user_id = ? OR
+            (p.visibility = 'team' AND tm.user_id IS NOT NULL) OR
+            (p.visibility = 'public' OR p.visibility IS NULL OR p.visibility = '')
+          )
           ORDER BY p.updated_at DESC
-        `).all(user.organization_id, user.id, user.id);
+        `).all(user.id, user.organization_id, user.id, user.id);
 
     return NextResponse.json(projects);
   } catch (err) {
@@ -37,6 +43,8 @@ export async function POST(request: Request) {
       name: string;
       type?: string;
       phase_key?: string;
+      visibility?: string;
+      team_id?: string | null;
       custom_fields?: Array<{
         id?: string;
         template_id?: string;
@@ -65,8 +73,8 @@ export async function POST(request: Request) {
       const currentDefinition = definitions.find((definition) => definition.key === (body.type ?? 'campaign'));
 
       db.prepare(`
-        INSERT INTO projects (id, name, type, phase_key, organization_id, owner_id, primary_assignee_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (id, name, type, phase_key, organization_id, owner_id, primary_assignee_id, visibility, team_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         body.name.trim(),
@@ -74,7 +82,9 @@ export async function POST(request: Request) {
         body.phase_key ?? '',
         user.organization_id,
         user.id,
-        user.id
+        user.id,
+        body.visibility || 'public',
+        body.team_id || null
       );
 
       const incomingFields = (body.custom_fields ?? []).map((field, index) => ({

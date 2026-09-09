@@ -307,22 +307,82 @@ export function projectAccessForUser(db: Database.Database, projectId: string, u
   }
 
   const row = db.prepare(`
-    SELECT p.owner_id, p.organization_id, m.role, pr.permissions AS project_role_permissions
+    SELECT p.owner_id, p.organization_id, p.visibility, p.team_id, m.role, pr.permissions AS project_role_permissions
     FROM projects p
     LEFT JOIN project_members m ON p.id = m.project_id AND m.user_id = ?
     LEFT JOIN project_role_definitions pr ON pr.key = m.role
     WHERE p.id = ?
-  `).get(userId, projectId) as { owner_id: string; organization_id?: string | null; role?: string | null; project_role_permissions?: string | null } | undefined;
+  `).get(userId, projectId) as {
+    owner_id: string;
+    organization_id?: string | null;
+    visibility?: string | null;
+    team_id?: string | null;
+    role?: string | null;
+    project_role_permissions?: string | null;
+  } | undefined;
 
   if (!row) return null;
   if (userOrgId && row.organization_id && row.organization_id !== userOrgId) return null;
   const isOwner = row.owner_id === userId;
   const isMember = Boolean(row.role);
   const projectPermissions = parseProjectRolePermissions(row.project_role_permissions);
-  const canView = isOwner || (isMember && projectPermissions.can_view) || systemPermissions.view_all_projects || systemPermissions.edit_all_projects;
+
+  // チームメンバー判定
+  let isTeamMember = false;
+  if (row.team_id) {
+    const tm = db.prepare('SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?').get(row.team_id, userId);
+    isTeamMember = Boolean(tm);
+  }
+
+  // visibility: 'public' | 'team' | 'private'
+  const visibility = row.visibility || 'public';
+  const isPublicAllowed = visibility === 'public';
+  const isTeamAllowed = visibility === 'team' && isTeamMember;
+
+  const canView =
+    isOwner ||
+    (isMember && projectPermissions.can_view) ||
+    systemPermissions.view_all_projects ||
+    systemPermissions.edit_all_projects ||
+    isTeamAllowed ||
+    (visibility !== 'private' && isPublicAllowed);
+
   const canEdit = isOwner || (isMember && projectPermissions.can_edit) || systemPermissions.edit_all_projects;
   const canManageMembers = isOwner || (isMember && projectPermissions.can_manage_members) || systemPermissions.edit_all_projects;
   const canDelete = isOwner || systemPermissions.delete_any_project;
+
+  const canViewItems =
+    isOwner ||
+    systemPermissions.view_all_projects ||
+    systemPermissions.edit_all_projects ||
+    (isMember ? projectPermissions.can_view_items : canView);
+
+  const canEditItems =
+    isOwner ||
+    systemPermissions.edit_all_projects ||
+    (isMember && projectPermissions.can_edit_items);
+
+  const canViewContent =
+    isOwner ||
+    systemPermissions.view_all_projects ||
+    systemPermissions.edit_all_projects ||
+    (isMember ? projectPermissions.can_view_content : canView);
+
+  const canGenerateContent =
+    isOwner ||
+    systemPermissions.edit_all_projects ||
+    (isMember && projectPermissions.can_generate_content);
+
+  const canViewNotes =
+    isOwner ||
+    systemPermissions.view_all_projects ||
+    systemPermissions.edit_all_projects ||
+    (isMember ? projectPermissions.can_view_notes : canView);
+
+  const canEditNotes =
+    isOwner ||
+    systemPermissions.edit_all_projects ||
+    (isMember && projectPermissions.can_edit_notes);
 
   return {
     is_owner: isOwner,
@@ -332,12 +392,12 @@ export function projectAccessForUser(db: Database.Database, projectId: string, u
     can_edit: canEdit,
     can_manage_members: canManageMembers,
     can_delete: canDelete,
-    can_view_items: isOwner || (isMember && projectPermissions.can_view_items) || systemPermissions.view_all_projects || systemPermissions.edit_all_projects,
-    can_edit_items: isOwner || (isMember && projectPermissions.can_edit_items) || systemPermissions.edit_all_projects,
-    can_view_content: isOwner || (isMember && projectPermissions.can_view_content) || systemPermissions.view_all_projects || systemPermissions.edit_all_projects,
-    can_generate_content: isOwner || (isMember && projectPermissions.can_generate_content) || systemPermissions.edit_all_projects,
-    can_view_notes: isOwner || (isMember && projectPermissions.can_view_notes) || systemPermissions.view_all_projects || systemPermissions.edit_all_projects,
-    can_edit_notes: isOwner || (isMember && projectPermissions.can_edit_notes) || systemPermissions.edit_all_projects,
+    can_view_items: canViewItems,
+    can_edit_items: canEditItems,
+    can_view_content: canViewContent,
+    can_generate_content: canGenerateContent,
+    can_view_notes: canViewNotes,
+    can_edit_notes: canEditNotes,
   };
 }
 

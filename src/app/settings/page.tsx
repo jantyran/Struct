@@ -84,6 +84,11 @@ const settingGroups: SettingGroup[] = [
         permission: 'manage_users',
       },
       {
+        href: '/settings/teams',
+        title: 'チーム管理',
+        description: 'グループ単位のチーム編成・メンバーおよびリーダーを管理します。',
+      },
+      {
         href: '/settings/roles',
         title: 'ロール・権限設定',
         description: 'ロールを定義し、表示・編集・管理権限を設定します。',

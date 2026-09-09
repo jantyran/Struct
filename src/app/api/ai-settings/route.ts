@@ -37,8 +37,20 @@ export async function PUT(request: Request) {
   try {
     const db = getDb();
     const body = await request.json() as { settings?: unknown };
-    const settings = normalizeAISettings((body.settings as Partial<import('@/types').AISettings>) || {});
-    getOrganizationSettingsRow(db, user.organization_id);
+    const rawSettings = (body.settings as Partial<import('@/types').AISettings>) || {};
+
+    const currentRow = getOrganizationSettingsRow(db, user.organization_id);
+    const currentSettings = normalizeAISettingsRow(currentRow);
+
+    // 新しい API キーが未入力（空文字やマスク文字列）の場合は既存のキーを維持
+    const newApiKey = typeof rawSettings.api_key === 'string' ? rawSettings.api_key.trim() : '';
+    const shouldKeepExistingKey = !newApiKey || newApiKey.includes('••••');
+    const finalApiKey = shouldKeepExistingKey ? currentSettings.api_key : newApiKey;
+
+    const settings = normalizeAISettings({
+      ...rawSettings,
+      api_key: finalApiKey,
+    });
 
     db.prepare(`
       UPDATE organization_settings SET

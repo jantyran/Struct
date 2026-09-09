@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthContext';
 import { withBasePath } from '@/lib/paths';
 
-type SearchResultType = 'project' | 'todo' | 'note' | 'asset' | 'field';
+type SearchResultType = 'project' | 'todo' | 'note' | 'asset' | 'field' | 'master_data';
 
 interface SearchResult {
   id: string;
@@ -23,6 +23,16 @@ const TYPE_LABELS: Record<SearchResultType, string> = {
   note: 'ノート',
   asset: '生成コンテンツ',
   field: '項目',
+  master_data: 'マスターデータ',
+};
+
+const TYPE_BADGES: Record<SearchResultType, { bg: string; text: string }> = {
+  project: { bg: 'rgba(15,154,177,0.1)', text: 'var(--accent)' },
+  todo: { bg: 'rgba(59,130,246,0.1)', text: '#2563eb' },
+  note: { bg: 'rgba(245,158,11,0.1)', text: '#d97706' },
+  asset: { bg: 'rgba(139,92,246,0.1)', text: '#7c3aed' },
+  field: { bg: 'rgba(107,114,128,0.1)', text: '#4b5563' },
+  master_data: { bg: 'rgba(16,185,129,0.1)', text: '#059669' },
 };
 
 export default function GlobalSearch() {
@@ -160,12 +170,20 @@ export default function GlobalSearch() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="rounded-full px-2 py-0.5 text-[0.625rem] font-semibold" style={{ backgroundColor: 'rgba(15,154,177,0.1)', color: 'var(--accent)' }}>
-                          {TYPE_LABELS[result.type]}
+                        <span
+                          className="rounded-full px-2 py-0.5 text-[0.625rem] font-semibold"
+                          style={{
+                            backgroundColor: TYPE_BADGES[result.type]?.bg || 'rgba(15,154,177,0.1)',
+                            color: TYPE_BADGES[result.type]?.text || 'var(--accent)',
+                          }}
+                        >
+                          {TYPE_LABELS[result.type] || result.type}
                         </span>
-                        <span className="min-w-0 truncate text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
-                          {result.project_name}
-                        </span>
+                        {result.project_name && (
+                          <span className="min-w-0 truncate text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
+                            {result.project_name}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
                         {result.title}

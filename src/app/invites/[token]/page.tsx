@@ -70,10 +70,19 @@ export default function InviteAcceptPage() {
               あなたはプロジェクト <strong>{invitation.project.name}</strong> に招待されました。
             </p>
             {!user ? (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-400">参加するにはログインが必要です。</p>
-                <button onClick={() => router.push(withBasePath(`/login?redirect=${encodeURIComponent(withBasePath(`/invites/${token}`))}`))} className="btn-primary w-full justify-center">
-                  ログインして参加
+              <div className="space-y-3">
+                <p className="text-sm text-gray-400">参加するにはアカウントが必要です。</p>
+                <button
+                  onClick={() => router.push(withBasePath(`/signup?invite_token=${token}&email=${encodeURIComponent(invitation.email)}&redirect=${encodeURIComponent(withBasePath(`/projects/${invitation.project_id}`))}`))}
+                  className="btn-primary w-full justify-center py-2.5"
+                >
+                  アカウントを作成して参加
+                </button>
+                <button
+                  onClick={() => router.push(withBasePath(`/login?redirect=${encodeURIComponent(withBasePath(`/invites/${token}`))}`))}
+                  className="btn-secondary w-full justify-center"
+                >
+                  すでにアカウントをお持ちの方（ログイン）
                 </button>
               </div>
             ) : user.email?.toLowerCase() !== invitation.email.toLowerCase() ? (

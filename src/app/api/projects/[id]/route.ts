@@ -118,6 +118,8 @@ export async function PUT(request: Request, { params: routeParams }: Params) {
       phase_key?: string;
       status?: string;
       primary_assignee_id?: string | null;
+      visibility?: string;
+      team_id?: string | null;
       custom_fields?: Array<{
         id?: string;
         template_id?: string;
@@ -162,6 +164,8 @@ export async function PUT(request: Request, { params: routeParams }: Params) {
           phase_key = COALESCE(?, phase_key),
           status = COALESCE(?, status),
           primary_assignee_id = ?,
+          visibility = COALESCE(?, visibility),
+          team_id = CASE WHEN ? THEN ? ELSE team_id END,
           completed_at = CASE
             WHEN ? THEN datetime('now')
             WHEN ? THEN NULL
@@ -180,6 +184,9 @@ export async function PUT(request: Request, { params: routeParams }: Params) {
         body.phase_key ?? null,
         nextStatus,
         nextPrimaryAssigneeId,
+        body.visibility ?? null,
+        body.team_id !== undefined ? 1 : 0,
+        body.team_id ?? null,
         shouldMarkCompleted ? 1 : 0,
         shouldClearCompleted ? 1 : 0,
         shouldMarkCompleted ? 1 : 0,

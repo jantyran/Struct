@@ -1,4 +1,5 @@
 import type { AIProvider, AISettings } from '@/types';
+import { encryptString, decryptString } from '@/lib/encryption';
 
 const DEFAULT_MODELS: Record<AIProvider, string> = {
   anthropic: 'claude-haiku-4-5-20251001',
@@ -27,10 +28,11 @@ export function normalizeAISettings(data: Partial<AISettings> | null | undefined
     : data?.provider === 'anthropic'
       ? 'anthropic'
       : 'gemini';
+  const rawKey = data?.api_key?.trim() || '';
   return {
     provider,
     model: data?.model?.trim() || DEFAULT_MODELS[provider],
-    api_key: data?.api_key?.trim() || '',
+    api_key: decryptString(rawKey),
     base_url: data?.base_url?.trim() || DEFAULT_BASE_URLS[provider],
   };
 }
@@ -38,14 +40,20 @@ export function normalizeAISettings(data: Partial<AISettings> | null | undefined
 export function normalizeAISettingsRow(row: Record<string, unknown>): AISettings {
   if (!row?.ai_settings) return defaultAISettings();
   try {
-    return normalizeAISettings(JSON.parse(row.ai_settings as string));
+    const parsed = JSON.parse(row.ai_settings as string);
+    return normalizeAISettings(parsed);
   } catch {
     return defaultAISettings();
   }
 }
 
 export function serializeAISettings(settings: AISettings): string {
-  return JSON.stringify(normalizeAISettings(settings));
+  const normalized = normalizeAISettings(settings);
+  const encryptedSettings = {
+    ...normalized,
+    api_key: normalized.api_key ? encryptString(normalized.api_key) : '',
+  };
+  return JSON.stringify(encryptedSettings);
 }
 
 export function maskAISettings(settings: AISettings): AISettings {

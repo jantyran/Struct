@@ -3,10 +3,11 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import type { Project, ProjectType, CloneOptions, ProjectTypeDefinition, CustomField, TodoPriority, TodoStatus } from '@/types';
+import type { Project, ProjectType, CloneOptions, ProjectTypeDefinition, CustomField, TodoPriority, TodoStatus, Team, ProjectVisibility } from '@/types';
 import { TODO_PRIORITY_LABELS, TODO_PRIORITY_COLORS, TODO_STATUS_LABELS } from '@/types';
 import { withBasePath } from '@/lib/paths';
 import { useAuth } from '@/components/AuthContext';
+import { InteractiveTour } from '@/components/InteractiveTour';
 
 // ──────────────────────────────────────────
 // 型
@@ -135,8 +136,18 @@ function NewProjectModal({
 }) {
   const [name, setName] = useState('');
   const [type, setType] = useState<ProjectType>(projectTypes[0]?.key || 'campaign');
+  const [visibility, setVisibility] = useState<ProjectVisibility>('public');
+  const [teamId, setTeamId] = useState<string>('');
+  const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(false);
   const selectedType = projectTypes.find(d => d.key === type) || projectTypes[0];
+
+  useEffect(() => {
+    fetch(withBasePath('/api/teams'))
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setTeams(data))
+      .catch(() => {});
+  }, []);
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -161,7 +172,14 @@ function NewProjectModal({
     const res = await fetch(withBasePath('/api/projects'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, type, phase_key: selectedType?.phases[0]?.key || '', custom_fields: customFields }),
+      body: JSON.stringify({
+        name,
+        type,
+        phase_key: selectedType?.phases[0]?.key || '',
+        visibility,
+        team_id: teamId || null,
+        custom_fields: customFields,
+      }),
     });
     const data = await res.json() as { id: string };
     setLoading(false);
@@ -182,6 +200,27 @@ function NewProjectModal({
             <select className="field-input" value={type} onChange={e => setType(e.target.value as ProjectType)}>
               {projectTypes.map(d => <option key={d.id} value={d.key}>{d.name}</option>)}
             </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="field-label">公開範囲</label>
+              <select className="field-input text-xs" value={visibility} onChange={e => setVisibility(e.target.value as ProjectVisibility)}>
+                <option value="public">🌐 組織全体に公開</option>
+                <option value="team">👥 チーム限定</option>
+                <option value="private">🔒 プライベート</option>
+              </select>
+            </div>
+            {(visibility === 'team' || teams.length > 0) && (
+              <div>
+                <label className="field-label">担当チーム</label>
+                <select className="field-input text-xs" value={teamId} onChange={e => setTeamId(e.target.value)}>
+                  <option value="">（未所属）</option>
+                  {teams.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           {selectedType && (
             <div className="text-xs leading-6" style={{ color: 'var(--text-muted)' }}>
@@ -356,9 +395,21 @@ function ProjectCard({ project, typeLabel, phases, onClone, isOnboarding }: {
       <div className="p-5 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">
           <span className={`text-[0.6875rem] font-semibold uppercase tracking-wide ${typeColors[project.type] ?? 'text-slate-500'}`}>{typeLabel}</span>
-          <span className={`text-[0.6875rem] px-2 py-0.5 rounded-full shrink-0 font-medium ${statusColors[project.status] ?? statusColors.draft}`}>
-            {statusLabels[project.status] ?? project.status}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {project.visibility === 'private' && (
+              <span className="text-[0.625rem] px-1.5 py-0.5 rounded-full font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                🔒 プライベート
+              </span>
+            )}
+            {project.visibility === 'team' && (
+              <span className="text-[0.625rem] px-1.5 py-0.5 rounded-full font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                👥 チーム
+              </span>
+            )}
+            <span className={`text-[0.6875rem] px-2 py-0.5 rounded-full font-medium ${statusColors[project.status] ?? statusColors.draft}`}>
+              {statusLabels[project.status] ?? project.status}
+            </span>
+          </div>
         </div>
         <h3 className="font-semibold text-sm leading-snug">{project.name}</h3>
         {project.target && (
@@ -712,7 +763,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [cloneSource, setCloneSource] = useState<Project | null>(null);
-  const [filter, setFilter] = useState<string>('all');
+  const [filter, setFilter] = useState<string>('active');
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const isWideScreen = () => typeof window !== 'undefined' && window.innerWidth >= 1280;
   const [showAllProjects, setShowAllProjects] = useState(() => isWideScreen());
@@ -720,6 +771,7 @@ export default function Dashboard() {
     if (typeof window === 'undefined') return 'card';
     return (localStorage.getItem('dashboard_view') as 'card' | 'table') || 'card';
   });
+  const [tourOpen, setTourOpen] = useState(false);
 
   function switchView(mode: 'card' | 'table') {
     setViewMode(mode);
@@ -755,6 +807,20 @@ export default function Dashboard() {
     })();
   }, [authLoading, user, load, redirectToAuth, checkSession]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tour') === 'start' || urlParams.get('tour') === 'true') {
+      setTourOpen(true);
+      return;
+    }
+    const seen = localStorage.getItem('struct_tour_seen');
+    if (!seen && data) {
+      setTourOpen(true);
+      localStorage.setItem('struct_tour_seen', 'true');
+    }
+  }, [data]);
+
   if (authLoading || !data) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
@@ -776,10 +842,10 @@ export default function Dashboard() {
   const archivedCount = projects.filter(p => p.status === 'archived').length;
   const selectedTypeDef = project_type_definitions.find(d => d.key === filter);
   const filterChips = [
-    { v: 'all', l: 'すべて' },
     { v: 'active', l: 'アクティブ' },
     { v: 'draft', l: '下書き' },
     { v: 'completed', l: '完了' },
+    { v: 'all', l: '全プロジェクト' },
     ...(archivedCount > 0 ? [{ v: 'archived', l: `アーカイブ (${archivedCount})` }] : []),
   ];
 
@@ -798,7 +864,24 @@ export default function Dashboard() {
             <h1 className="text-xl font-bold tracking-tight">ダッシュボード</h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>プロジェクトと施策の情報を構造化して管理する</p>
           </div>
-          <button onClick={() => setShowNew(true)} className="btn-primary w-full sm:w-auto">+ 新規プロジェクト</button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setTourOpen(true)}
+              className="btn-secondary text-xs flex items-center gap-1.5"
+              title="Structの使い方を体験型ツアーで確認"
+            >
+              <span>🚀</span>
+              <span>使い方ツアー</span>
+            </button>
+            <button
+              onClick={() => setShowNew(true)}
+              className="btn-primary flex-1 sm:flex-none"
+              data-tour="new-project-btn"
+            >
+              + 新規プロジェクト
+            </button>
+          </div>
         </div>
 
         {/* サマリー統計 — 4列1行 */}
@@ -856,7 +939,11 @@ export default function Dashboard() {
       </div>
 
       {/* オンボーディングバナー */}
-      {onboarding && <OnboardingBanner onboarding={onboarding} />}
+      {onboarding && (
+        <div data-tour="onboarding-section">
+          <OnboardingBanner onboarding={onboarding} />
+        </div>
+      )}
 
       {/* メインコンテンツ: プロジェクト一覧 + サイドバー */}
       <div className="flex flex-col lg:flex-row gap-5 items-stretch lg:items-start">
@@ -864,7 +951,7 @@ export default function Dashboard() {
         <div className="flex-1 min-w-0">
           {/* フィルター + ビュー切り替え */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <div className="flex flex-wrap gap-2 flex-1">
+            <div className="flex flex-wrap gap-2 flex-1" data-tour="status-tabs">
               {filterChips.map(f => (
                 <button key={f.v} onClick={() => { setFilter(f.v); setTypeDropdownOpen(false); setShowAllProjects(isWideScreen()); }} className={`tab-btn${filter === f.v ? ' active' : ''}`}>
                   {f.l}
@@ -888,7 +975,7 @@ export default function Dashboard() {
                           <button
                             className="w-full text-left px-4 py-2 text-sm hover:bg-[rgba(15,154,177,0.06)] transition-colors"
                             style={{ color: 'var(--text-muted)' }}
-                            onClick={() => { setFilter('all'); setTypeDropdownOpen(false); setShowAllProjects(isWideScreen()); }}
+                            onClick={() => { setFilter('active'); setTypeDropdownOpen(false); setShowAllProjects(isWideScreen()); }}
                           >
                             絞り込みを解除
                           </button>
@@ -1022,6 +1109,18 @@ export default function Dashboard() {
           onCloned={id => { setCloneSource(null); router.push(withBasePath(`/projects/${id}`)); }}
         />
       )}
+
+      <InteractiveTour
+        isOpen={tourOpen}
+        onClose={() => {
+          setTourOpen(false);
+          try { localStorage.setItem('struct_tour_seen', 'true'); } catch {}
+        }}
+        onComplete={() => {
+          try { localStorage.setItem('struct_tour_seen', 'true'); } catch {}
+        }}
+        primaryProjectId={onboarding?.primary_project_id}
+      />
     </div>
   );
 }

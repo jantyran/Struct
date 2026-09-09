@@ -28,7 +28,8 @@ export interface ShortcutBinding {
 export type ShortcutSettings = Record<ShortcutActionKey, ShortcutBinding>;
 
 export type UserTextSize = 'xsmall' | 'small' | 'medium' | 'large' | 'xlarge';
-export type UserDefaultProjectTab = 'fields' | 'structure' | 'tasks' | 'members' | 'notes' | 'sheets' | 'assets';
+export type ProjectDetailTabKey = 'fields' | 'assets' | 'notes' | 'members' | 'tasks' | 'sheets' | 'structure';
+export type UserDefaultProjectTab = ProjectDetailTabKey;
 export type UserDefaultTaskView = 'list' | 'kanban' | 'gantt';
 export type UserDefaultTaskAssigneeFilter = '' | 'me' | 'unassigned';
 
@@ -217,6 +218,8 @@ export interface Project {
   completed_by?: string | null;
   updated_at: string;
   owner_id: string;
+  visibility?: ProjectVisibility;
+  team_id?: string | null;
   is_onboarding?: number;
   owner?: ProjectUser;
   members?: ProjectMember[];
@@ -448,3 +451,43 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   group_list: '繰り返しグループ',
   list: '繰り返し',
 };
+
+export type CommentTargetType = 'todo' | 'note' | 'generated_asset' | 'custom_field';
+
+export interface Comment {
+  id: string;
+  project_id: string;
+  target_type: CommentTargetType;
+  target_id: string;
+  user_id: string;
+  user_name?: string | null;
+  user_avatar_url?: string | null;
+  user_email?: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ProjectVisibility = 'public' | 'team' | 'private';
+
+export interface Team {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  member_count?: number;
+  members?: TeamMember[];
+}
+
+export interface TeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  role: 'LEADER' | 'MEMBER';
+  user_name?: string | null;
+  user_email?: string | null;
+  user_avatar_url?: string | null;
+  created_at: string;
+}
