@@ -351,6 +351,39 @@ export function projectAccessForUser(db: Database.Database, projectId: string, u
   const canManageMembers = isOwner || (isMember && projectPermissions.can_manage_members) || systemPermissions.edit_all_projects;
   const canDelete = isOwner || systemPermissions.delete_any_project;
 
+  const canViewItems =
+    isOwner ||
+    systemPermissions.view_all_projects ||
+    systemPermissions.edit_all_projects ||
+    (isMember ? projectPermissions.can_view_items : canView);
+
+  const canEditItems =
+    isOwner ||
+    systemPermissions.edit_all_projects ||
+    (isMember && projectPermissions.can_edit_items);
+
+  const canViewContent =
+    isOwner ||
+    systemPermissions.view_all_projects ||
+    systemPermissions.edit_all_projects ||
+    (isMember ? projectPermissions.can_view_content : canView);
+
+  const canGenerateContent =
+    isOwner ||
+    systemPermissions.edit_all_projects ||
+    (isMember && projectPermissions.can_generate_content);
+
+  const canViewNotes =
+    isOwner ||
+    systemPermissions.view_all_projects ||
+    systemPermissions.edit_all_projects ||
+    (isMember ? projectPermissions.can_view_notes : canView);
+
+  const canEditNotes =
+    isOwner ||
+    systemPermissions.edit_all_projects ||
+    (isMember && projectPermissions.can_edit_notes);
+
   return {
     is_owner: isOwner,
     project_role: isOwner ? 'OWNER' : row.role ?? null,
@@ -359,12 +392,12 @@ export function projectAccessForUser(db: Database.Database, projectId: string, u
     can_edit: canEdit,
     can_manage_members: canManageMembers,
     can_delete: canDelete,
-    can_view_items: canView,
-    can_edit_items: canEdit,
-    can_view_content: canView,
-    can_generate_content: isOwner || (isMember && projectPermissions.can_generate_content) || systemPermissions.edit_all_projects,
-    can_view_notes: canView,
-    can_edit_notes: canEdit,
+    can_view_items: canViewItems,
+    can_edit_items: canEditItems,
+    can_view_content: canViewContent,
+    can_generate_content: canGenerateContent,
+    can_view_notes: canViewNotes,
+    can_edit_notes: canEditNotes,
   };
 }
 

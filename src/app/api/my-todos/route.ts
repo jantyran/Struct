@@ -21,9 +21,9 @@ export async function GET(request: Request) {
     SELECT t.*, p.name AS project_name
     FROM todos t
     JOIN projects p ON t.project_id = p.id
-    WHERE t.assignee_id = ?
+    WHERE t.assignee_id = ? AND p.organization_id = ?
   `;
-  const args: unknown[] = [user.id];
+  const args: unknown[] = [user.id, user.organization_id];
 
   if (status) {
     sql += ' AND t.status = ?';
