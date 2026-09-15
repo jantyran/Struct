@@ -33,14 +33,14 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
   - React 18
   - Tailwind CSS
 - 永続化
-  - SQLite
-  - `better-sqlite3`
+  - SQLite (`better-sqlite3`, WAL モード)
 - 認証
-  - JWT
-  - `jose`
-  - `httpOnly` Cookie
-- パスワードハッシュ
-  - `bcryptjs`
+  - JWT (`jose`, `httpOnly` Cookie)
+  - パスワードハッシュ (`bcryptjs`)
+- 暗号化
+  - Node.js `crypto` (AES-256-GCM, 機密 API キーの暗号化保存)
+- テスト
+  - Vitest
 - AI
   - Google Gemini
   - OpenAI API
@@ -55,23 +55,24 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 実装上、重要なのは以下です。
 
 - `JWT_SECRET`
-  - セッション署名用
+  - セッション署名用秘密鍵（必須）
+- `APP_ENCRYPTION_KEY`
+  - AI API キー等の暗号化保存用キー（未設定時は `JWT_SECRET` から SHA-256 派生）
 - `NEXT_PUBLIC_BASE_URL`
-  - 招待 URL 生成に使用
-  - 外部アクセス URL に合わせる
+  - 招待 URL や外部公開リンク生成に使用
 - `NEXT_PUBLIC_BASE_PATH`
-  - 既定は空
-  - サブパス配備時のみ使用
+  - 既定は空。サブパス配備時のみ使用（例: `/struct`）
 - `ALLOW_PUBLIC_SIGNUP`
-  - `true` のときだけ `/api/auth/signup` を有効化
-  - 既定運用は `false`
+  - `true` のときだけ `/api/auth/signup` を有効化（既定は `false`）
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+  - パスワードリセットや通知メール配信用 SMTP 設定（未設定時はメール機能無効）
 
 補足:
 
-- AI API キーとモデル設定は `.env` ではなく `設定 > AI設定` に保存する
+- AI API キーとモデル設定は `.env` ではなく `設定 > AI設定` に保存され、DB 上には AES-256-GCM で暗号化されて保持される
 - `JWT_SECRET` は本番では必ず十分長いランダム文字列を設定する
 
-## 3.1 起動ポリシー
+## 3.1 起動・運用ポリシー
 
 - `3002` 以降
   - 開発確認用ポート（3002 が使用中なら 3003, 3004...）
@@ -81,6 +82,11 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
   - 本番確認用ポート
   - `npm run build && npm run start` で起動
   - ビルド済み成果物で安定動作を確認する
+- テスト実行
+  - `npm test`（Vitest ユニットテストスイートを実行）
+- バックアップ実行
+  - `node scripts/backup.mjs`
+  - SQLite の `VACUUM INTO` を使い、WAL モード下でも整合性を保ったままオンラインバックアップを生成
 
 補足:
 
@@ -98,48 +104,64 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 │   ├── README.md
 │   └── architecture.md
 ├── data/
-│   └── struct.db
+│   ├── struct.db
+│   └── backups/
+├── scripts/
+│   ├── backup.mjs
+│   └── dev.mjs
 └── src/
     ├── app/
     │   ├── about/page.tsx
-    │   ├── api/
-    │   │   ├── ai-settings/route.ts
-│   │   ├── auth/
-│   │   ├── content-templates/route.ts
-│   │   ├── master-data/route.ts
-│   │   ├── invites/[token]/
-│   │   ├── project-roles/route.ts
-│   │   ├── project-types/route.ts
-│   │   ├── roles/route.ts
-│   │   ├── users/route.ts
-│   │   └── projects/
-    │   ├── master-data/page.tsx
-    │   ├── master-data/[objectId]/page.tsx
     │   ├── guide/page.tsx
     │   ├── layout.tsx
     │   ├── login/page.tsx
-    │   ├── page.tsx
+    │   ├── signup/page.tsx
+    │   ├── page.tsx                       # メインダッシュボード
+    │   ├── my-todos/page.tsx               # 全プロジェクト横断タスク
+    │   ├── teams/page.tsx                  # チーム別進捗ダッシュボード
+    │   ├── master-data/
     │   ├── project-types/page.tsx
-    │   ├── projects/[id]/page.tsx
-    │   ├── settings/page.tsx
-    │   ├── settings/ai/page.tsx
-    │   ├── settings/content-templates/page.tsx
-    │   ├── settings/project-roles/page.tsx
-    │   ├── settings/roles/page.tsx
-    │   ├── settings/users/page.tsx
-    │   └── signup/page.tsx
+    │   ├── projects/[id]/page.tsx          # プロジェクト詳細
+    │   ├── settings/
+    │   │   ├── page.tsx
+    │   │   ├── ai/page.tsx
+    │   │   ├── content-templates/page.tsx
+    │   │   ├── organization/page.tsx
+    │   │   ├── project-roles/page.tsx
+    │   │   ├── roles/page.tsx
+    │   │   ├── teams/page.tsx              # チーム管理設定
+    │   │   └── users/page.tsx
+    │   └── api/
+    │       ├── ai-settings/route.ts
+    │       ├── auth/
+    │       ├── dashboard/route.ts
+    │       ├── my-todos/route.ts
+    │       ├── teams/                      # チーム管理 API
+    │       │   ├── route.ts
+    │       │   └── [teamId]/
+    │       │       ├── route.ts
+    │       │       └── members/
+    │       ├── projects/
+    │       │   ├── route.ts
+    │       │   └── [id]/
+    │       │       ├── todos/
+    │       │       ├── relations/
+    │       │       ├── members/
+    │       │       └── ...
+    │       └── users/route.ts
     ├── components/
-    │   └── AuthContext.tsx
+    │   ├── GanttView.tsx
+    │   ├── ProjectRelationsWidget.tsx
+    │   ├── ProjectStructureTab.tsx
+    │   ├── TabSettingsModal.tsx
+    │   └── TodoTab.tsx
     ├── lib/
     │   ├── ai/
     │   ├── auth.ts
-    │   ├── content-templates.ts
     │   ├── crawler.ts
     │   ├── db/index.ts
-    │   ├── global-assets.ts
-    │   ├── project-field-sync.ts
-    │   ├── permissions.ts
-    │   └── project-types.ts
+    │   ├── encryption.ts                  # AES-256-GCM 暗号化
+    │   └── permissions.ts                 # システム・プロジェクト・チーム権限判定
     └── types/index.ts
 ```
 
@@ -198,9 +220,12 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 - AI 設定
 - 生成コンテンツ設定
 - プロジェクト設定
+- チーム管理（`/settings/teams`）
 - ユーザー管理
 - システムロール設定
 - プロジェクトロール設定
+- ショートカット設定
+- 組織基本情報設定
 
 ### 5.8 AI 設定
 
@@ -209,7 +234,7 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 - プロバイダ選択
 - モデル入力
 - Base URL 入力
-- API キー入力
+- API キー入力（保存時に AES-256-GCM 暗号化）
 
 ### 5.9 生成コンテンツ設定
 
@@ -242,12 +267,19 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 
 `src/app/projects/[id]/page.tsx`
 
-- 基本情報編集
+- 基本情報編集（名称、種別、期間、公開範囲 `public` / `team` / `private`、所属チーム `team_id`）
 - フェーズ Path UI
+- タブバー DnD 並び替え
+  - タブヘッダーを直接ドラッグ&ドロップして並び替え
+  - 「タブ設定」モーダル（`TabSettingsModal.tsx`）による並び替え・表示/非表示切り替え
+  - 並び順・表示設定はユーザーごとに `localStorage` に即時保存
 - メンバータブ
   - 主担当者の変更
   - 登録済みユーザーからプロジェクトメンバーを追加
   - プロジェクトロールの付与・変更
+- プロジェクト構造・関係タブ
+  - 親プロジェクト・子プロジェクトの階層表示（`ProjectStructureTab.tsx`）
+  - 依存・ブロック・関連施策のリンク（`ProjectRelationsWidget.tsx`）
 - 設定由来フィールドの値入力
 - マスターデータ 参照
 - `group` / `group_list` 入力
@@ -264,6 +296,37 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 - 現在のプロジェクト詳細 UI では、メール入力招待ではなく登録済みユーザー選択でメンバー追加する
 - 招待 API / 画面はレガシー互換として残っている
 
+### 5.13 チーム別進捗ダッシュボード
+
+`src/app/teams/page.tsx`
+
+- 所属チーム（または管理可能なチーム）の進捗状況を俯瞰
+- チーム選択ドロップダウン
+- サマリー統計: チーム所属プロジェクト数、未完了タスク数、遅延タスク数
+- メンバー別タスク進捗カード: 各メンバーの総タスク数、完了数、遅延タスク数、進捗率プログレスバー
+- チーム関連プロジェクト一覧: フェーズ進行状況、主担当者、未完了タスク数
+
+### 5.14 チーム管理
+
+`src/app/settings/teams/page.tsx`
+
+- `manage_teams` 権限ユーザーまたはチームリーダー（`LEADER`）が利用可能
+- チーム一覧表示・新規チーム作成モーダル
+- チーム基本情報（チーム名、説明、カラーテーマ）の編集・チーム削除
+- チームメンバー管理:
+  - 組織内の登録済みユーザーからメンバーを追加
+  - メンバーのロール（`LEADER` / `MEMBER`）の切り替え
+  - メンバーの除外（最後のリーダーは保護）
+
+### 5.15 全プロジェクト横断タスク一覧（My Todos）
+
+`src/app/my-todos/page.tsx`
+
+- 全プロジェクト横断で自分にアサインされたタスクを一覧表示
+- フィルター: ステータス、優先度、プロジェクト
+- 期日別 / プロジェクト別のグループ切り替え
+- インラインでのステータス更新・期日確認
+
 ## 6. 認証と権限制御
 
 ### 6.1 セッション
@@ -278,17 +341,40 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 
 ### 6.2 権限モデル
 
-- 権限は `システムロール` と `プロジェクトロール` の2段構成
+- 権限は `システムロール`、`チームロール`、`プロジェクトロール` の構成
 - システムロール
   - ユーザーに直接付与する
-  - ユーザー管理、システムロール管理、プロジェクトロール管理、全プロジェクト表示/編集などを制御する
+  - ユーザー管理、チーム管理、システムロール管理、プロジェクトロール管理、全プロジェクト表示/編集などを制御する
   - 定義は `system_role_definitions`
   - ユーザー側の付与状態は `users.system_role`
+  - システム権限キー一覧:
+    - `manage_organization_settings`: 組織基本設定の変更
+    - `manage_users`: ユーザーの追加・編集・削除
+    - `manage_teams`: チームの作成・編集・削除・全チーム管理
+    - `manage_system_roles`: システムロールの定義・ユーザーへの付与
+    - `manage_project_roles`: プロジェクトロール定義の編集
+    - `manage_project_settings`: プロジェクト種別・フェーズ・項目の編集
+    - `manage_master_data`: マスターデータオブジェクト・項目の編集
+    - `manage_ai_settings`: AI プロバイダ・API キー設定の編集
+    - `view_all_projects`: 公開範囲や参加有無に関わらず全プロジェクトの閲覧
+    - `edit_all_projects`: 全プロジェクトの編集
+    - `delete_any_project`: 全プロジェクトの削除
+- チームロール
+  - チームメンバーに付与する（`team_members.role`）
+  - ロール種別:
+    - `LEADER`: チーム情報の変更、チームメンバーの追加・削除・ロール変更が可能
+    - `MEMBER`: チーム所属メンバー（チーム限定プロジェクトへのアクセス権を保持）
+  - システム権限 `manage_teams` を持つユーザーは、所属に関わらず全チームのリーダー権限と同等の操作が可能
 - プロジェクトロール
   - プロジェクトメンバーに付与する
   - プロジェクト内の表示、編集、項目表示/編集、生成、ノート、メンバー管理などを制御する
   - 定義は `project_role_definitions`
   - 付与状態は `project_members.role`
+- プロジェクト公開範囲（`visibility`）と可視性
+  - `public`: 組織内の全ユーザーが閲覧可能
+  - `team`: プロジェクトの `team_id` に属するチームメンバー、およびプロジェクト参加者が閲覧可能
+  - `private`: プロジェクトオーナーおよび明示的に追加されたプロジェクトメンバーのみ閲覧可能
+  - ※ システム権限 `view_all_projects` を持つユーザーは `visibility` に関わらず組織内の全プロジェクトを閲覧可能
 - プロジェクトオーナーは対象プロジェクトに対して強い権限を持つ
 - `edit_all_projects` や `delete_any_project` などのシステム権限はプロジェクトロールを上書きできる
 - 権限判定の共通処理は `src/lib/permissions.ts`
@@ -410,6 +496,9 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 - `owner_id`
 - `organization_id`
 - `primary_assignee_id`
+- `parent_project_id`
+- `visibility`
+- `team_id`
 - `cloned_from`
 - `target`
 - `start_date`
@@ -417,6 +506,9 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 - `budget`
 - `channels`
 - `description`
+- `completed_at`
+- `completed_by`
+- `is_onboarding`
 - `created_at`
 - `updated_at`
 
@@ -425,6 +517,9 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 - `channels` は JSON 文字列で保存
 - `phase_key` は現在フェーズを表す
 - `primary_assignee_id` はプロジェクト全体の代表担当者
+- `parent_project_id` は親プロジェクト ID（階層管理用）
+- `visibility` は公開範囲（`public`: 全体公開, `team`: チーム限定, `private`: 非公開）
+- `team_id` は所属チーム ID（`teams.id` への外部キー）
 - 主担当者はプロジェクトオーナーまたはプロジェクトメンバーから選択する
 
 ### 7.7 project_members
@@ -553,6 +648,96 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
   - `MEMBER`: メンバー
   - `GUEST`: ゲスト
 
+### 7.14 teams
+
+- `id`
+- `organization_id`
+- `name`
+- `description`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- 組織（`organizations`）配下の部署・チームグループ
+- `teams.id` は `projects.team_id` および `team_members.team_id` から参照される
+
+### 7.15 team_members
+
+- `id`
+- `team_id`
+- `user_id`
+- `role` (`LEADER` | `MEMBER`)
+- `created_at`
+
+補足:
+
+- `(team_id, user_id)` のユニーク制約
+- `LEADER` はチーム情報の編集やメンバー追加・除外が可能
+
+### 7.16 project_relations
+
+- `id`
+- `project_a_id`
+- `project_b_id`
+- `relation_type` (`related` | `depends_on` | `blocks`)
+- `note`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- 任意のプロジェクト間の相互関連・依存関係を管理
+
+### 7.17 todos
+
+- `id`
+- `project_id`
+- `title`
+- `description`
+- `assignee_id`
+- `status` (`todo` | `in_progress` | `done`)
+- `priority` (`low` | `medium` | `high` | `urgent`)
+- `phase_key`
+- `parent_id`
+- `tags`
+- `start_date`
+- `due_date`
+- `sort_order`
+- `completed_at`
+- `completed_by`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- `parent_id` によるサブタスク（親子構造）対応
+- `tags` は JSON 文字列で保存
+
+### 7.18 project_notes
+
+- `id`
+- `project_id`
+- `title`
+- `content`
+- `pinned`
+- `created_at`
+- `updated_at`
+
+補足:
+
+- Markdown / Milkdown リッチテキストでノートを保持
+- `pinned = 1` のノートは上部に固定表示
+
+### 7.19 project_sheets
+
+- `id`
+- `project_id`
+- `title`
+- `data`
+- `created_at`
+- `updated_at`
+
 ## 8. 設計方針
 
 ### 8.1 マスターデータ とプロジェクト項目の役割分担
@@ -651,13 +836,45 @@ Struct は、チームのプロジェクト・施策を構造化して管理す�
 - `POST /api/projects/[id]/contacts`
 - `PATCH /api/projects/[id]/contacts`
 - `DELETE /api/projects/[id]/contacts`
+- `GET /api/projects/[id]/todos`
+- `POST /api/projects/[id]/todos`
+- `PUT /api/projects/[id]/todos/[todoId]`
+- `DELETE /api/projects/[id]/todos/[todoId]`
+- `GET /api/projects/[id]/notes`
+- `POST /api/projects/[id]/notes`
+- `PUT /api/projects/[id]/notes/[noteId]`
+- `DELETE /api/projects/[id]/notes/[noteId]`
+- `GET /api/projects/[id]/relations`
+- `POST /api/projects/[id]/relations`
+- `DELETE /api/projects/[id]/relations/[relationId]`
+- `GET /api/projects/[id]/children`
+- `PUT /api/projects/[id]/relations/parent`
 - `GET /api/projects/[id]/sheets`
 - `POST /api/projects/[id]/sheets`
 - `PUT /api/projects/[id]/sheets/[sheetId]`
 - `DELETE /api/projects/[id]/sheets/[sheetId]`
 - `POST /api/projects/[id]/invite`
 
-### 9.4 招待
+### 9.4 チーム管理
+
+- `GET /api/teams`
+- `POST /api/teams`
+- `GET /api/teams/[teamId]`
+- `PUT /api/teams/[teamId]`
+- `DELETE /api/teams/[teamId]`
+- `GET /api/teams/[teamId]/members`
+- `POST /api/teams/[teamId]/members`
+- `PUT /api/teams/[teamId]/members/[userId]`
+- `DELETE /api/teams/[teamId]/members/[userId]`
+
+### 9.5 ダッシュボード・横断機能
+
+- `GET /api/dashboard`
+- `GET /api/my-todos`
+- `GET /api/my-report`
+- `GET /api/search`
+
+### 9.6 招待
 
 - `GET /api/invites/[token]`
 - `POST /api/invites/[token]/accept`
@@ -887,12 +1104,50 @@ AI には次の情報を渡します。
   - 右メインエリア（`flex-1`）: ガントチャート（縦横スクロール対応）
 - フィルター・スケール状態は通常ビューと共有
 
-### 11.9 残っている主な作業
+### 11.10 プロジェクト階層 & 関連プロジェクト
+
+実装状況: **実装済み**（`src/components/ProjectStructureTab.tsx`、`src/components/ProjectRelationsWidget.tsx`、`src/app/api/projects/[id]/relations/`）
+
+- 親プロジェクト指定によるプロジェクト階層化（`parent_project_id`）
+- プロジェクト詳細の「構造」タブで子プロジェクト一覧や進捗をツリー表示
+- 任意プロジェクト間の相互リンク管理（`depends_on`、`blocks`、`related`）
+- 関連プロジェクトウィジェットによる直接リンク遷移
+
+### 11.11 プロジェクトタブのドラッグ＆ドロップ並び替え
+
+実装状況: **実装済み**（`src/app/projects/[id]/page.tsx`、`src/components/TabSettingsModal.tsx`）
+
+- プロジェクト詳細上部のメインタブバーで、タブを直接ドラッグ＆ドロップして並び替え可能
+- タブバー右端の「タブ設定」歯車アイコンから `TabSettingsModal` を開き、ドラッグ並び替えおよびタブの表示/非表示切り替えが可能
+- タブの順序と表示/非表示設定はユーザー・プロジェクトごとに `localStorage` に即時保存され、次回以降のアクセスでも維持される
+
+### 11.12 チーム制 & チーム別進捗ダッシュボード
+
+実装状況: **実装済み**（`src/app/teams/page.tsx`、`src/app/settings/teams/page.tsx`、`src/app/api/teams/`）
+
+- 組織内でのチーム（部署・グループ）作成・編集・削除
+- チームメンバー管理（追加、除外、`LEADER` / `MEMBER` ロール切り替え）
+- システム権限 `manage_teams` によるシステムロール連動のチーム管理アクセス制御
+- チーム別進捗ダッシュボード（`/teams`）:
+  - チーム全体のタスク進捗率、期限超過タスク件数、未完了タスク件数
+  - チームメンバー別の担当タスク消化状況カード
+  - チーム所属プロジェクト一覧とフェーズ進行状況
+- プロジェクト公開範囲（`visibility`: `public` / `team` / `private`）とチーム連動
+
+### 11.13 機密データ暗号化 & テスト基盤 & オンラインバックアップ
+
+実装状況: **実装済み**（`src/lib/encryption.ts`、`scripts/backup.mjs`、`*.test.ts`）
+
+- **AI APIキー暗号化**: Node.js 標準 `crypto` の **AES-256-GCM** を使用し、組織設定保存時に API キーを自動暗号化（`enc:v1:...`）。環境変数 `APP_ENCRYPTION_KEY` または `JWT_SECRET` より鍵を導出。
+- **テスト自動化**: `vitest` によるユニットテストスイート（`npm test`）。権限判定、暗号化/復号、SSRF対策クローラーの検証を自動化。
+- **オンライン安全バックアップ**: SQLite の `VACUUM INTO` コマンドを使用したバックアップスクリプト（`node scripts/backup.mjs`）。WAL モード下でもロック競合や不整合を起こさず即座にバックアップファイルを生成。
+
+### 11.14 残っている主な作業
 
 - レポート機能
+  - キャンペーン成果や施策結果のレポーティング、PDF出力
 - 権限の細粒度化
-  - 現状は主にプロジェクト単位・項目単位・ノート単位・生成単位
-  - 将来的に個別フィールドやセクション単位の制御が必要なら追加する
+  - 個別フィールドやセクション単位の閲覧/編集権限制御が必要になった場合の拡張
 - 招待機能の扱い整理
   - 現在はレガシー互換で残している
   - 登録済みユーザー選択方式に一本化するなら削除または非表示化する
@@ -901,6 +1156,9 @@ AI には次の情報を渡します。
 
 - `channels`、`options`、`warnings` は JSON 文字列で保存される
 - `group` / `group_list` の `value` も JSON 文字列で保持する
+- AI 設定の API キーは保存時に `encryptString`（AES-256-GCM）で暗号化され、AI 呼び出し時に `decryptString` で復号される（平文保存禁止）
+- プロジェクトタブの順序と表示設定はブラウザの `localStorage` に保持される
+- DB バックアップは WAL モード下でのファイル直接コピーを避け、`scripts/backup.mjs`（`VACUUM INTO`）を使用する
 - 招待 URL はレガシー招待機能でのみ `NEXT_PUBLIC_BASE_URL` に依存する
 - `JWT_SECRET` は本番では必ず明示設定する
 - 公開 signup を許可する場合だけ `ALLOW_PUBLIC_SIGNUP=true` にする
